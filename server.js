@@ -5,17 +5,28 @@ import { readFile, readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { createBackdrop } from './lib/backdrop.js';
 import { createCache } from './lib/cache.js';
+import { catalogueProblems, catalogueSources, publicCatalogue } from './lib/catalogue.js';
 import { createCustomFeeds } from './lib/custom.js';
+import { createImageFinder } from './lib/images.js';
 import { renderPage } from './lib/render.js';
+import { createSources } from './lib/sources.js';
 import { createThumbnailer } from './lib/thumbs.js';
 import { createWeather } from './lib/weather.js';
 
 const PORT = Number(process.env.PORT ?? 3060);
 const ROOT = import.meta.dirname;
 const config = JSON.parse(await readFile(join(ROOT, 'config', 'feeds.json'), 'utf8'));
-const thumbs = createThumbnailer();
+const catalogue = JSON.parse(await readFile(join(ROOT, 'config', 'catalogue.json'), 'utf8'));
+for (const problem of catalogueProblems(catalogue, config.widgets)) console.warn(`Catalogue: ${problem}`);
+// Room for the catalogue's feeds as well as the default page's.
+const thumbs = createThumbnailer({ maxEntries: 3000 });
+const images = createImageFinder({ maxEntries: 5000 });
 const customFeeds = createCustomFeeds({ ttlMinutes: config.refreshMinutes });
-const cache = createCache(config, { thumbs });
+const cache = createCache(config, { thumbs, images });
+const sources = createSources(catalogueSources(catalogue), { refreshMinutes: config.refreshMinutes }, { thumbs, images });
+sources.start();
+const catalogueBody = JSON.stringify(publicCatalogue(catalogue));
+const catalogueEtag = `"${createHash('sha256').update(catalogueBody).digest('hex').slice(0, 16)}"`;
 const weather = createWeather(config.weather);
 const weatherReady = weather.refresh();
 setInterval(weather.refresh, (config.weather.refreshMinutes ?? 15) * 60_000).unref();
@@ -128,6 +139,34 @@ const server = createServer(async (req, res) => {
       const status = error.status ?? 502;
       res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify({ error: error.status ? error.message : 'Couldn\'t load that feed.' }));
+    }
+  }
+
+  // The outlets and topics readers choose from when setting up their page.
+  if (pathname === '/api/catalogue.json') {
+    if (notModified(req, res, catalogueEtag, 'public, max-age=3600')) return;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(catalogueBody);
+  }
+
+  // Catalogue feeds by id (`?ids=bbc.politics,guardian.politics`), for the topic and outlet
+  // cards a reader chose. Ids are sorted so pages asking for the same feeds share a cached
+  // copy; any other order is redirected to that one.
+  if (pathname === '/api/sources') {
+    const asked = (searchParams.get('ids') ?? '').split(',');
+    try {
+      const ids = sources.canonical(asked).join(',');
+      if (ids !== asked.join(',')) {
+        res.writeHead(301, { Location: `/api/sources?ids=${ids}`, 'Cache-Control': 'public, max-age=86400' });
+        return res.end();
+      }
+      const { body, etag } = await sources.get(asked);
+      if (notModified(req, res, etag, 'public, max-age=60, stale-while-revalidate=600')) return;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(body);
+    } catch (error) {
+      res.writeHead(error.status ?? 500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ error: error.status ? error.message : 'Couldn\'t load those sources.' }));
     }
   }
 

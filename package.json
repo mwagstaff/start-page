@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch-path=server.js --watch-path=lib --watch-path=config --watch-path=public server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "check-feeds": "node scripts/check-feeds.js"
   },
   "engines": {
     "node": ">=20.11"

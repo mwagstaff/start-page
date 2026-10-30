@@ -1,0 +1,536 @@
+{
+  "outlets": {
+    "bbc": {
+      "name": "BBC News",
+      "region": "uk",
+      "sections": {
+        "top": "https://feeds.bbci.co.uk/news/rss.xml",
+        "politics": "https://feeds.bbci.co.uk/news/politics/rss.xml",
+        "world": "https://feeds.bbci.co.uk/news/world/rss.xml",
+        "business": "https://feeds.bbci.co.uk/news/business/rss.xml",
+        "science": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+        "health": "https://feeds.bbci.co.uk/news/health/rss.xml",
+        "sport": "https://feeds.bbci.co.uk/sport/rss.xml",
+        "culture": "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"
+      }
+    },
+    "guardian": {
+      "name": "The Guardian",
+      "region": "uk",
+      "sections": {
+        "top": "https://www.theguardian.com/uk/rss",
+        "politics": "https://www.theguardian.com/politics/rss",
+        "world": "https://www.theguardian.com/world/rss",
+        "business": "https://www.theguardian.com/uk/business/rss",
+        "science": "https://www.theguardian.com/science/rss",
+        "health": "https://www.theguardian.com/society/health/rss",
+        "sport": "https://www.theguardian.com/uk/sport/rss",
+        "culture": "https://www.theguardian.com/uk/culture/rss"
+      }
+    },
+    "sky": {
+      "name": "Sky News",
+      "region": "uk",
+      "sections": {
+        "top": "https://feeds.skynews.com/feeds/rss/home.xml",
+        "politics": "https://feeds.skynews.com/feeds/rss/politics.xml",
+        "world": "https://feeds.skynews.com/feeds/rss/world.xml",
+        "business": "https://feeds.skynews.com/feeds/rss/business.xml",
+        "culture": "https://feeds.skynews.com/feeds/rss/entertainment.xml"
+      }
+    },
+    "inews": {
+      "name": "The i",
+      "region": "uk",
+      "sections": {
+        "top": "https://inews.co.uk/feed",
+        "politics": "https://inews.co.uk/news/politics/feed",
+        "world": "https://inews.co.uk/news/world/feed",
+        "science": "https://inews.co.uk/news/environment/feed",
+        "health": "https://inews.co.uk/news/health/feed",
+        "sport": "https://inews.co.uk/sport/feed",
+        "culture": "https://inews.co.uk/culture/feed"
+      }
+    },
+    "independent": {
+      "name": "The Independent",
+      "region": "uk",
+      "sections": {
+        "top": "https://www.independent.co.uk/rss",
+        "politics": "https://www.independent.co.uk/news/uk/politics/rss",
+        "world": "https://www.independent.co.uk/news/world/rss",
+        "business": "https://www.independent.co.uk/news/business/rss",
+        "science": "https://www.independent.co.uk/climate-change/rss",
+        "health": "https://www.independent.co.uk/news/health/rss",
+        "sport": "https://www.independent.co.uk/sport/rss",
+        "culture": "https://www.independent.co.uk/arts-entertainment/rss"
+      }
+    },
+    "dailymail": {
+      "name": "Daily Mail",
+      "region": "uk",
+      "sections": {
+        "top": "https://www.dailymail.co.uk/news/index.rss",
+        "world": "https://www.dailymail.co.uk/news/worldnews/index.rss",
+        "business": "https://www.dailymail.co.uk/money/index.rss",
+        "health": "https://www.dailymail.co.uk/health/index.rss",
+        "sport": "https://www.dailymail.co.uk/sport/index.rss",
+        "culture": "https://www.dailymail.co.uk/tvshowbiz/index.rss"
+      }
+    },
+    "standard": {
+      "name": "Evening Standard",
+      "region": "uk",
+      "sections": {
+        "top": "https://www.standard.co.uk/rss",
+        "politics": "https://www.standard.co.uk/news/politics/rss",
+        "business": "https://www.standard.co.uk/business/rss",
+        "sport": "https://www.standard.co.uk/sport/rss",
+        "culture": "https://www.standard.co.uk/culture/rss"
+      }
+    },
+    "ft": {
+      "name": "Financial Times",
+      "region": "uk",
+      "paywall": "hard",
+      "sections": {
+        "top": "https://www.ft.com/rss/home/uk",
+        "politics": "https://www.ft.com/world/uk/politics?format=rss",
+        "world": "https://www.ft.com/world?format=rss",
+        "business": "https://www.ft.com/companies?format=rss"
+      }
+    },
+    "economist": {
+      "name": "The Economist",
+      "region": "uk",
+      "paywall": "hard",
+      "sections": {
+        "top": "https://www.economist.com/latest/rss.xml",
+        "politics": "https://www.economist.com/britain/rss.xml",
+        "world": "https://www.economist.com/international/rss.xml",
+        "business": "https://www.economist.com/business/rss.xml",
+        "culture": "https://www.economist.com/culture/rss.xml"
+      }
+    },
+    "nyt": {
+      "name": "The New York Times",
+      "region": "us",
+      "paywall": "metered",
+      "sections": {
+        "top": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+        "politics": "https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml",
+        "world": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+        "business": "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+        "science": "https://rss.nytimes.com/services/xml/rss/nyt/Climate.xml",
+        "health": "https://rss.nytimes.com/services/xml/rss/nyt/Health.xml",
+        "culture": "https://rss.nytimes.com/services/xml/rss/nyt/Arts.xml"
+      }
+    },
+    "npr": {
+      "name": "NPR",
+      "region": "us",
+      "sections": {
+        "top": "https://feeds.npr.org/1001/rss.xml",
+        "politics": "https://feeds.npr.org/1014/rss.xml",
+        "world": "https://feeds.npr.org/1004/rss.xml",
+        "business": "https://feeds.npr.org/1006/rss.xml",
+        "science": "https://feeds.npr.org/1167/rss.xml",
+        "health": "https://feeds.npr.org/1128/rss.xml",
+        "sport": "https://feeds.npr.org/1055/rss.xml",
+        "culture": "https://feeds.npr.org/1008/rss.xml"
+      }
+    },
+    "cbs": {
+      "name": "CBS News",
+      "region": "us",
+      "sections": {
+        "top": "https://www.cbsnews.com/latest/rss/main",
+        "politics": "https://www.cbsnews.com/latest/rss/politics",
+        "world": "https://www.cbsnews.com/latest/rss/world",
+        "business": "https://www.cbsnews.com/latest/rss/moneywatch",
+        "health": "https://www.cbsnews.com/latest/rss/health",
+        "culture": "https://www.cbsnews.com/latest/rss/entertainment"
+      }
+    },
+    "abc": {
+      "name": "ABC News",
+      "region": "us",
+      "sections": {
+        "top": "https://abcnews.go.com/abcnews/topstories",
+        "politics": "https://abcnews.go.com/abcnews/politicsheadlines",
+        "world": "https://abcnews.go.com/abcnews/internationalheadlines",
+        "business": "https://abcnews.go.com/abcnews/moneyheadlines",
+        "health": "https://abcnews.go.com/abcnews/healthheadlines",
+        "sport": "https://abcnews.go.com/abcnews/sportsheadlines",
+        "culture": "https://abcnews.go.com/abcnews/entertainmentheadlines"
+      }
+    },
+    "nbc": {
+      "name": "NBC News",
+      "region": "us",
+      "sections": {
+        "top": "https://feeds.nbcnews.com/nbcnews/public/news",
+        "politics": "https://feeds.nbcnews.com/nbcnews/public/politics",
+        "world": "https://feeds.nbcnews.com/nbcnews/public/world",
+        "business": "https://feeds.nbcnews.com/nbcnews/public/business",
+        "science": "https://feeds.nbcnews.com/nbcnews/public/science",
+        "health": "https://feeds.nbcnews.com/nbcnews/public/health",
+        "culture": "https://feeds.nbcnews.com/nbcnews/public/pop-culture"
+      }
+    },
+    "fox": {
+      "name": "Fox News",
+      "region": "us",
+      "sections": {
+        "top": "https://moxie.foxnews.com/google-publisher/latest.xml",
+        "politics": "https://moxie.foxnews.com/google-publisher/politics.xml",
+        "world": "https://moxie.foxnews.com/google-publisher/world.xml",
+        "health": "https://moxie.foxnews.com/google-publisher/health.xml",
+        "sport": "https://moxie.foxnews.com/google-publisher/sports.xml",
+        "culture": "https://moxie.foxnews.com/google-publisher/entertainment.xml"
+      }
+    },
+    "cnbc": {
+      "name": "CNBC",
+      "region": "us",
+      "sections": {
+        "top": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        "politics": "https://www.cnbc.com/id/10000113/device/rss/rss.html",
+        "world": "https://www.cnbc.com/id/100727362/device/rss/rss.html",
+        "business": "https://www.cnbc.com/id/10001147/device/rss/rss.html",
+        "health": "https://www.cnbc.com/id/10000108/device/rss/rss.html"
+      }
+    },
+    "politico": {
+      "name": "Politico",
+      "region": "us",
+      "sections": {
+        "top": "https://rss.politico.com/politics-news.xml",
+        "politics": "https://rss.politico.com/congress.xml"
+      }
+    },
+    "the-hill": {
+      "name": "The Hill",
+      "region": "us",
+      "sections": {
+        "top": "https://thehill.com/feed/",
+        "politics": "https://thehill.com/homenews/feed/",
+        "business": "https://thehill.com/business/feed/",
+        "science": "https://thehill.com/policy/energy-environment/feed/",
+        "health": "https://thehill.com/policy/healthcare/feed/"
+      }
+    },
+    "latimes": {
+      "name": "Los Angeles Times",
+      "region": "us",
+      "paywall": "metered",
+      "sections": {
+        "top": "https://www.latimes.com/world-nation/rss2.0.xml",
+        "politics": "https://www.latimes.com/politics/rss2.0.xml",
+        "world": "https://www.latimes.com/world/rss2.0.xml",
+        "business": "https://www.latimes.com/business/rss2.0.xml",
+        "science": "https://www.latimes.com/environment/rss2.0.xml",
+        "sport": "https://www.latimes.com/sports/rss2.0.xml",
+        "culture": "https://www.latimes.com/entertainment-arts/rss2.0.xml"
+      }
+    },
+    "pbs": {
+      "name": "PBS News",
+      "region": "us",
+      "sections": {
+        "top": "https://www.pbs.org/newshour/feeds/rss/headlines",
+        "politics": "https://www.pbs.org/newshour/feeds/rss/politics",
+        "world": "https://www.pbs.org/newshour/feeds/rss/world",
+        "business": "https://www.pbs.org/newshour/feeds/rss/economy",
+        "science": "https://www.pbs.org/newshour/feeds/rss/science",
+        "health": "https://www.pbs.org/newshour/feeds/rss/health"
+      }
+    },
+    "axios": {
+      "name": "Axios",
+      "region": "us",
+      "sections": {
+        "top": "https://api.axios.com/feed/"
+      }
+    }
+  },
+  "topics": {
+    "top": {
+      "label": "Top stories",
+      "section": "top"
+    },
+    "politics": {
+      "label": "Politics",
+      "section": "politics"
+    },
+    "world": {
+      "label": "World",
+      "section": "world"
+    },
+    "business": {
+      "label": "Business",
+      "section": "business"
+    },
+    "science": {
+      "label": "Science & environment",
+      "section": "science"
+    },
+    "health": {
+      "label": "Health",
+      "section": "health"
+    },
+    "sport": {
+      "label": "Sport",
+      "section": "sport"
+    },
+    "culture": {
+      "label": "Culture",
+      "section": "culture"
+    },
+    "football": {
+      "label": "Football",
+      "sources": [
+        {
+          "name": "BBC Sport",
+          "url": "https://feeds.bbci.co.uk/sport/football/rss.xml"
+        },
+        {
+          "name": "Sky Sports",
+          "url": "https://www.skysports.com/rss/12040"
+        },
+        {
+          "name": "Guardian",
+          "url": "https://www.theguardian.com/football/rss"
+        }
+      ]
+    },
+    "nfl": {
+      "label": "NFL",
+      "region": "us",
+      "sources": [
+        {
+          "name": "ESPN",
+          "url": "https://www.espn.com/espn/rss/nfl/news"
+        },
+        {
+          "name": "CBS Sports",
+          "url": "https://www.cbssports.com/rss/headlines/nfl/"
+        },
+        {
+          "name": "Yahoo Sports",
+          "url": "https://sports.yahoo.com/nfl/rss/"
+        }
+      ]
+    },
+    "nba": {
+      "label": "NBA",
+      "region": "us",
+      "sources": [
+        {
+          "name": "ESPN",
+          "url": "https://www.espn.com/espn/rss/nba/news"
+        },
+        {
+          "name": "CBS Sports",
+          "url": "https://www.cbssports.com/rss/headlines/nba/"
+        }
+      ]
+    },
+    "mlb": {
+      "label": "MLB",
+      "region": "us",
+      "sources": [
+        {
+          "name": "ESPN",
+          "url": "https://www.espn.com/espn/rss/mlb/news"
+        },
+        {
+          "name": "CBS Sports",
+          "url": "https://www.cbssports.com/rss/headlines/mlb/"
+        }
+      ]
+    },
+    "cricket": {
+      "label": "Cricket",
+      "region": "uk",
+      "sources": [
+        {
+          "name": "BBC Sport",
+          "url": "https://feeds.bbci.co.uk/sport/cricket/rss.xml"
+        },
+        {
+          "name": "ESPNcricinfo",
+          "url": "https://www.espncricinfo.com/rss/content/story/feeds/0.xml"
+        }
+      ]
+    },
+    "rugby": {
+      "label": "Rugby",
+      "region": "uk",
+      "sources": [
+        {
+          "name": "BBC Sport",
+          "url": "https://feeds.bbci.co.uk/sport/rugby-union/rss.xml"
+        },
+        {
+          "name": "Guardian",
+          "url": "https://www.theguardian.com/sport/rugby-union/rss"
+        }
+      ]
+    },
+    "f1": {
+      "label": "Formula 1",
+      "sources": [
+        {
+          "name": "BBC Sport",
+          "url": "https://feeds.bbci.co.uk/sport/formula1/rss.xml"
+        },
+        {
+          "name": "Autosport",
+          "url": "https://www.autosport.com/rss/f1/news/"
+        }
+      ]
+    },
+    "tech": {
+      "label": "Tech",
+      "widget": "tech"
+    },
+    "ai": {
+      "label": "AI",
+      "widget": "ai"
+    },
+    "apple": {
+      "label": "Apple",
+      "sources": [
+        {
+          "name": "9to5Mac",
+          "url": "https://9to5mac.com/feed/"
+        },
+        {
+          "name": "MacRumors",
+          "url": "https://feeds.macrumors.com/MacRumors-All"
+        },
+        {
+          "name": "Six Colors",
+          "url": "https://sixcolors.com/feed/"
+        },
+        {
+          "name": "Daring Fireball",
+          "url": "https://daringfireball.net/feeds/main"
+        }
+      ]
+    },
+    "gaming": {
+      "label": "Gaming",
+      "sources": [
+        {
+          "name": "Eurogamer",
+          "url": "https://www.eurogamer.net/feed"
+        },
+        {
+          "name": "Polygon",
+          "url": "https://www.polygon.com/rss/index.xml"
+        },
+        {
+          "name": "IGN",
+          "url": "https://feeds.feedburner.com/ign/all"
+        }
+      ]
+    },
+    "space": {
+      "label": "Space",
+      "widget": "space"
+    },
+    "hacker-news": {
+      "label": "Hacker News",
+      "widget": "hacker-news"
+    },
+    "film-tv": {
+      "label": "Film & TV",
+      "sources": [
+        {
+          "name": "Variety",
+          "url": "https://variety.com/feed/"
+        },
+        {
+          "name": "Guardian Film",
+          "url": "https://www.theguardian.com/uk/film/rss"
+        },
+        {
+          "name": "Deadline",
+          "url": "https://deadline.com/feed/"
+        }
+      ]
+    },
+    "food": {
+      "label": "Food",
+      "sources": [
+        {
+          "name": "Guardian Food",
+          "url": "https://www.theguardian.com/food/rss"
+        },
+        {
+          "name": "NYT Cooking",
+          "url": "https://rss.nytimes.com/services/xml/rss/nyt/DiningandWine.xml"
+        }
+      ]
+    },
+    "travel": {
+      "label": "Travel",
+      "sources": [
+        {
+          "name": "Guardian Travel",
+          "url": "https://www.theguardian.com/uk/travel/rss"
+        },
+        {
+          "name": "NYT Travel",
+          "url": "https://rss.nytimes.com/services/xml/rss/nyt/Travel.xml"
+        }
+      ]
+    },
+    "money": {
+      "label": "Personal finance",
+      "region": "uk",
+      "sources": [
+        {
+          "name": "Guardian Money",
+          "url": "https://www.theguardian.com/uk/money/rss"
+        },
+        {
+          "name": "This is Money",
+          "url": "https://www.thisismoney.co.uk/money/index.rss"
+        }
+      ]
+    }
+  },
+  "defaults": {
+    "uk": {
+      "outlets": [
+        "bbc",
+        "guardian",
+        "sky"
+      ],
+      "topics": [
+        "top",
+        "politics",
+        "world",
+        "football",
+        "tech"
+      ]
+    },
+    "us": {
+      "outlets": [
+        "nyt",
+        "npr",
+        "cbs"
+      ],
+      "topics": [
+        "top",
+        "politics",
+        "world",
+        "business",
+        "tech"
+      ]
+    }
+  }
+}

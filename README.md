@@ -88,5 +88,21 @@ npm test
 - Modules in `public/` import each other by plain path; the page's import map adds each file's
   content hash, so browsers never mix old and new versions after a deploy. The server works the
   hashes out again whenever a file in `public/` changes.
-- Endpoints: `/` (page), `/api/feeds.json` (snapshot), `/api/feed?url=` (a feed someone added), `/api/widgets` (JSON, default layout), `POST /api/refresh`, `/healthcheck` (503 until the first refresh finishes).
+- Endpoints: `/` (page), `/api/feeds.json` (snapshot), `/api/feed?url=` (a feed someone added), `/api/catalogue.json` (outlets and topics to choose from), `/api/sources?ids=` (catalogue feeds by id), `/api/widgets` (JSON, default layout), `POST /api/refresh`, `/healthcheck` (503 until the first refresh finishes).
 - `PORT` defaults to 3060.
+- `config/catalogue.json` lists the outlets and topics readers will pick from when they set up
+  their page (see [ONBOARDING-PLAN.md](ONBOARDING-PLAN.md); not used by the page yet). Each
+  outlet has one feed per section (`top`, `politics`, `world`, `business`, `science`, `health`,
+  `sport`, `culture`); a topic either merges the chosen outlets' feeds for a section, lists its
+  own `sources`, or borrows a card from `feeds.json` (`widget`). `npm run check-feeds` fetches
+  every feed in it as the server would and fails if any is broken or has nothing newer than a
+  week; `npm test` checks the catalogue's structure.
+- Catalogue feeds aren't fetched until a page asks for them at `/api/sources?ids=bbc.politics,guardian.politics`
+  (ids from `/api/catalogue.json`, which leaves out the feed addresses). The first request for a
+  feed fetches it on the spot; after that it's refreshed every `refreshMinutes` for as long as
+  someone has asked for it in the last 24 hours, then left alone until it's next wanted
+  (`lib/sources.js`). Only catalogue ids are accepted, never URLs. Ids are sorted, and any other
+  order gets a 301 to the sorted form, so pages asking for the same feeds share one response.
+  Responses carry an ETag and `Cache-Control: public, max-age=60, stale-while-revalidate=600`;
+  Cloudflare will only cache them at the edge once the feeds-snapshot Cache Rule also covers
+  `/api/sources`.
