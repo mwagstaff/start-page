@@ -35,7 +35,8 @@ npm test
   swapped for the initial.
 - `public/layout.js` measures the cards and sorts them into the columns that make the
   tallest column as short as possible, using an exact search. Each column keeps the config
-  order. Without JavaScript the page falls back to plain CSS columns.
+  order. Without JavaScript the page falls back to plain CSS columns. Once you've placed
+  cards yourself (below), it keeps each card in the column you chose instead.
 - The background photo changes daily. The server picks one from the sources in
   `config.backdrop`: Bing's homepage photos for landscapes, nature and cities, and ESA's
   Webb and Hubble feeds for space. `weight` sets how often each source comes up, and the
@@ -64,9 +65,13 @@ npm test
 - The sliders button in the masthead opens Customise: show or hide cards (including any card
   in `config.widgets` that isn't on the tab), change their order (arrows, or drag a row by its
   ⠿ handle, which works with touch too) and number of items (up to 15), add your own RSS or
-  Atom feeds (up to 20), and export or import the settings as `start-page-settings.json`. On
-  the page itself you can also drag a card by its title onto another card to move it before or
-  after that card (mouse only); the cards are then packed into columns again. Settings are kept in
+  Atom feeds (up to 20), choose whether cards are fitted to the screen, and export or import
+  the settings as `start-page-settings.json`. On the page itself you can drag any card (press
+  and move with a mouse; press and hold, then move, on a touch screen; Escape cancels): it
+  lifts and follows the pointer, a dashed outline shows where it will land, and the other
+  cards slide out of the way. Dropping a card keeps every card in the column it's in, with no
+  limit per column (`public/reorder.js`); "Fit cards to the screen" in Customise packs them
+  to fit again. Settings are kept in
   the browser's localStorage under `start-page:settings`, with no account. With a saved
   layout, the browser draws the cards from the snapshot; a small script in the page's `<head>`
   hides the default cards until then, and starts fetching the snapshot early. Without saved

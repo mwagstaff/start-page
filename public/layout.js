@@ -1,5 +1,7 @@
-// Rearranges the cards into balanced columns so the page is as short as possible.
-// Without JavaScript the CSS multi-column layout still works; this only improves on it.
+// Rearranges the cards into columns: balanced so the page is as short as possible, or,
+// once the reader has placed cards themselves (page.js marks the grid `data-arrange=manual`
+// and each card `data-col`), in the columns they chose. Without JavaScript the CSS
+// multi-column layout still works; this only improves on it.
 
 const MIN_COLUMN_WIDTH = 300; // keep in step with `columns: 300px` in style.css
 const EXACT_LIMIT = 16; // above this many cards, use the greedy result alone
@@ -56,6 +58,20 @@ export function packColumns(heights, columnCount) {
   return columns.filter((column) => column.length).sort((a, b) => a[0] - b[0]);
 }
 
+// Cards in the columns the reader chose (`cols`, null for a card not placed yet), each
+// column in page order. A column beyond what fits moves into the last one; a card not
+// placed yet goes into whichever column is shortest. Empty columns are kept, as somewhere
+// to drop a card.
+export function placeColumns(cols, heights, columnCount) {
+  const count = Math.max(1, columnCount);
+  const columns = Array.from({ length: count }, () => []);
+  const loads = new Array(count).fill(0);
+  const put = (i, c) => { columns[c].push(i); loads[c] += heights[i]; };
+  cols.forEach((col, i) => { if (col !== null) put(i, Math.min(col, count - 1)); });
+  cols.forEach((col, i) => { if (col === null) put(i, loads.indexOf(Math.min(...loads))); });
+  return columns.map((column) => column.sort((a, b) => a - b));
+}
+
 function columnCountFor(grid) {
   const style = getComputedStyle(grid);
   const width = grid.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
@@ -77,7 +93,10 @@ function initGrid(grid) {
     const count = columnCountFor(grid);
     if (count === 1) return;
     const heights = cards.map((card) => card.getBoundingClientRect().height + parseFloat(getComputedStyle(card).marginBottom));
-    const groups = packColumns(heights, count);
+    const manual = grid.dataset.arrange === 'manual';
+    const groups = manual
+      ? placeColumns(cards.map((card) => (card.dataset.col ? Number(card.dataset.col) : null)), heights, count)
+      : packColumns(heights, count);
     while (groups.length < count) groups.push([]); // keep every column the same width
     grid.replaceChildren(...groups.map((group) => {
       const column = document.createElement('div');

@@ -1,11 +1,12 @@
 // The Customise dialog: show or hide cards, change their order (arrows, or drag the
-// handle) and number of items, add your own RSS or Atom feeds, and export or import the
+// handle) and number of items, choose whether cards are fitted to the screen or stay in the
+// columns they were put in, add your own RSS or Atom feeds, and export or import the
 // settings as a file. Changes apply straight away and are saved in
 // this browser (see settings.js); no account needed.
 
 import { escapeHtml } from './cards.js';
-import { addCustomFeed, currentFeeds, currentSettings, fetchFeeds, removeCustomFeed, replaceSettings, setTabCards, tabCards, widgetFor } from './page.js';
-import { MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, validSettings } from './settings.js';
+import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setTabCards, tabCards, widgetFor } from './page.js';
+import { MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, moveCard, stepCard, validSettings } from './settings.js';
 
 const opener = document.querySelector('.customise-open');
 let dialog = null;
@@ -18,8 +19,12 @@ function build() {
   dialog.innerHTML = `
     <div class="customise-head">
       <h2 id="customise-title">Customise</h2>
-      <p>Pick the cards you want, in the order you want them. Cards higher up get first claim on a story that's in more than one. Changes are saved in this browser.</p>
+      <p>Pick the cards you want, in the order you want them. Cards higher up get first claim on a story that's in more than one. You can also drag cards around the page itself. Changes are saved in this browser.</p>
     </div>
+    <label class="arrange-toggle">
+      <input type="checkbox" data-field="arrange">
+      <span>Fit cards to the screen<small>Arranges the columns so the page is as short as it can be. Turn off to keep cards in the columns you drag them to; moving a card turns it off.</small></span>
+    </label>
     <ol class="card-list"></ol>
     <form class="add-feed">
       <label for="add-feed-url">Add a feed</label>
@@ -53,13 +58,14 @@ function status(message) {
 
 function renderList(focus) {
   const { defaultLimit } = currentFeeds();
+  dialog.querySelector('[data-field="arrange"]').checked = arrangement() === 'auto';
   dialog.querySelector('.card-list').innerHTML = cards.map((card, i) => {
     const widget = widgetFor(card.id);
     const title = escapeHtml(widget.title);
     const remove = widget.custom ? `<button type="button" class="card-remove" data-action="remove" aria-label="Remove ${title}" title="Remove this feed">×</button>` : '';
     return `<li class="${card.hidden ? 'is-hidden' : ''}" data-index="${i}">
         <span class="drag-handle" aria-hidden="true" title="Drag to reorder">⠿</span>
-        <label class="card-toggle"><input type="checkbox" data-field="shown"${card.hidden ? '' : ' checked'}> ${title}</label>
+        <label class="card-toggle"><input type="checkbox" data-field="shown"${card.hidden ? '' : ' checked'}> ${title}${card.col !== undefined && !card.hidden ? ` <small class="card-column">column ${card.col + 1}</small>` : ''}</label>
         <label class="card-limit">Items <input type="number" data-field="limit" min="1" max="${MAX_CARD_ITEMS}" value="${card.limit ?? widget.limit ?? defaultLimit}"></label>
         <span class="card-move">
           <button type="button" data-action="up" aria-label="Move ${title} up"${i === 0 ? ' disabled' : ''}>↑</button>
@@ -75,10 +81,11 @@ function renderList(focus) {
 
 // Only what differs from the card's config is saved, so later config changes still apply.
 function save() {
-  setTabCards(cards.map(({ id, hidden, limit }) => ({
+  setTabCards(cards.map(({ id, hidden, limit, col }) => ({
     id,
     ...(hidden && { hidden: true }),
     ...(limit && limit !== widgetFor(id).limit && { limit }),
+    ...(col !== undefined && { col }),
   })));
   status('');
 }
@@ -90,10 +97,11 @@ function onClick(event) {
   switch (button.dataset.action) {
     case 'up':
     case 'down': {
-      const to = button.dataset.action === 'up' ? index - 1 : index + 1;
-      [cards[index], cards[to]] = [cards[to], cards[index]];
+      const step = button.dataset.action === 'up' ? -1 : 1;
+      const { id } = cards[index];
+      cards = stepCard(cards, index, step);
       save();
-      renderList({ index: to, action: button.dataset.action });
+      renderList({ index: cards.findIndex((card) => card.id === id), action: button.dataset.action });
       break;
     }
     case 'remove': {
@@ -125,6 +133,13 @@ function onClick(event) {
 function onChange(event) {
   const field = event.target.dataset.field;
   if (!field) return;
+  if (field === 'arrange') {
+    setArrange(event.target.checked ? 'auto' : 'manual');
+    cards = tabCards();
+    renderList();
+    status(event.target.checked ? 'Cards are fitted to the screen.' : 'Cards stay in the columns they\'re in now.');
+    return;
+  }
   const index = Number(event.target.closest('li').dataset.index);
   if (field === 'shown') {
     cards[index] = { ...cards[index], hidden: !event.target.checked };
@@ -172,9 +187,9 @@ function startDrag(event) {
     handle.removeEventListener('lostpointercapture', end);
     if (e.type !== 'pointercancel') move(e); // the browser may report losing the capture just before the drop
     row.classList.remove('is-dragging');
-    const order = [...list.children].map((li) => Number(li.dataset.index));
-    if (order.indexOf(from) !== from) {
-      cards = order.map((i) => cards[i]);
+    const to = [...list.children].indexOf(row);
+    if (to !== from) {
+      cards = moveCard(cards, from, to);
       save();
     }
     renderList();

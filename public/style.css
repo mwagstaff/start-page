@@ -396,6 +396,7 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 
 /* Multi-column flow packs cards of different heights without row gaps. */
 .grid {
+  position: relative; /* reorder.js measures cards from here */
   columns: 300px;
   column-gap: 12px;
   padding-block: 12px;
@@ -586,12 +587,52 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
   .card-limit { font-size: 0; gap: 0; } /* the number box is enough on narrow screens */
 }
 
-/* Dragging cards by their titles (reorder.js) */
-.card > h2[draggable="true"] { cursor: grab; }
-.card > h2[draggable="true"] a { cursor: pointer; }
-.card.is-dragging { opacity: 0.4; }
-.card.drop-before { box-shadow: 0 -3px 0 var(--accent); }
-.card.drop-after { box-shadow: 0 3px 0 var(--accent); }
+/* Dragging cards around the page (reorder.js) */
+.card { -webkit-touch-callout: none; } /* a long press picks the card up instead */
+.card > h2 { cursor: grab; }
+
+.card.is-lifted {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  margin: 0;
+  pointer-events: none;
+  box-shadow: 0 18px 40px rgb(0 0 0 / 0.35);
+  opacity: 0.96;
+}
+
+/* Where the card will land. */
+.card-placeholder {
+  margin: 0 0 12px;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.is-reordering, .is-reordering * { cursor: grabbing !important; user-select: none; }
+/* Every column is somewhere to drop a card, even an empty one. */
+.is-reordering .grid.packed { align-items: stretch; }
+.is-reordering .grid.packed .column {
+  min-height: 120px;
+  border-radius: 10px;
+  outline: 1px dashed color-mix(in srgb, var(--muted) 55%, transparent);
+  outline-offset: 4px;
+}
+
+/* Customise: fitting cards to the screen, and the column each card is in */
+.arrange-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.arrange-toggle input { margin-top: 3px; }
+.arrange-toggle small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.card-column { color: var(--muted); font-size: 12px; font-weight: 400; white-space: nowrap; }
 
 /* Customise: drag handles, removing a feed, adding one */
 .drag-handle {

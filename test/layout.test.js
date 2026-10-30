@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { packColumns } from '../public/layout.js';
+import { packColumns, placeColumns } from '../public/layout.js';
 
 const tallest = (heights, columns) => Math.max(...columns.map((column) => column.reduce((sum, i) => sum + heights[i], 0)));
 
@@ -41,4 +41,16 @@ test('packColumns keeps config order within and across columns', () => {
 
 test('packColumns stacks everything in one column when only one fits', () => {
   assert.deepEqual(packColumns([10, 20, 30], 1), [[0, 1, 2]]);
+});
+
+test('placeColumns keeps cards in their chosen columns, however many each has', () => {
+  // Everything in the first column stays there; nothing is moved to balance the page.
+  assert.deepEqual(placeColumns([0, 0, 0, 0], [100, 100, 100, 100], 3), [[0, 1, 2, 3], [], []]);
+  assert.deepEqual(placeColumns([1, 0, 2, 0], [10, 10, 10, 10], 3), [[1, 3], [0], [2]]);
+});
+
+test('placeColumns folds extra columns into the last and puts new cards in the shortest', () => {
+  assert.deepEqual(placeColumns([0, 3, 2], [10, 10, 10], 2), [[0], [1, 2]]);
+  assert.deepEqual(placeColumns([null, 0, 0, 1], [50, 100, 100, 80], 2), [[1, 2], [0, 3]]);
+  assert.deepEqual(placeColumns([0, 1], [10, 10], 1), [[0, 1]]);
 });

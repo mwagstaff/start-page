@@ -68,12 +68,30 @@ export function tabCards() {
   return cardList(settings?.tabs[tab]?.cards, defaults, Object.keys(allWidgets()));
 }
 
+// 'manual' once the reader has put cards in columns themselves, else 'auto' (packed to fit).
+export const arrangement = () => settings?.tabs[tab]?.arrange ?? 'auto';
+
+// The cards on screen, as the ids in each column (left to right), or null when they're in a
+// single column.
+export function shownColumns() {
+  if (!grid?.classList.contains('packed')) return null;
+  return [...grid.children].map((column) => [...column.children].filter((el) => el.matches('.card')).map((card) => card.id));
+}
+
 function drawCards() {
   if (!grid || !feeds) return;
   const layout = tabCards().filter((card) => !card.hidden);
   const html = buildCards(allWidgets(), layout, feeds.defaultLimit).map((card) => renderWidget(card)).join('');
   grid.classList.remove('packed');
   grid.innerHTML = html;
+  // layout.js reads these to keep each card in the reader's column.
+  const manual = arrangement() === 'manual';
+  if (manual) grid.dataset.arrange = 'manual';
+  else delete grid.dataset.arrange;
+  for (const card of manual ? layout : []) {
+    const element = document.getElementById(card.id);
+    if (element && card.col !== undefined) element.dataset.col = card.col;
+  }
   grid.dispatchEvent(new Event('cards:change'));
   document.documentElement.classList.remove('customised');
 }
@@ -112,11 +130,29 @@ function save(next) {
 }
 
 // Saves this tab's cards (null goes back to the default layout) and redraws.
-export function setTabCards(cards) {
+export function setTabCards(cards, arrange = arrangement()) {
   const tabs = { ...settings?.tabs };
-  if (cards) tabs[tab] = { cards };
+  if (cards) tabs[tab] = { cards, ...(arrange === 'manual' && { arrange }) };
   else delete tabs[tab];
   save({ v: 1, custom: [], ...settings, tabs });
+}
+
+// Keeps the cards in the columns shown (see shownColumns): from now on each card stays in
+// its column, and page order runs down each column in turn. Cards not on screen keep their
+// settings and follow.
+export function placeCards(columns) {
+  const saved = new Map(tabCards().map((card) => [card.id, card]));
+  const placed = columns.flatMap((ids, col) => ids.filter((id) => saved.has(id)).map((id) => ({ ...saved.get(id), col })));
+  const ids = new Set(placed.map((card) => card.id));
+  setTabCards([...placed, ...[...saved.values()].filter((card) => !ids.has(card.id))], 'manual');
+}
+
+// 'auto' packs the cards to fit the screen again; 'manual' keeps them where they are now.
+export function setArrange(mode) {
+  const columns = mode === 'manual' && shownColumns();
+  if (columns) placeCards(columns);
+  else if (mode === 'manual') setTabCards(tabCards(), 'manual'); // one column on screen: places come later
+  else setTabCards(tabCards().map(({ col, ...card }) => card), 'auto');
 }
 
 export function replaceSettings(value) {
@@ -138,7 +174,7 @@ export async function addCustomFeed(url) {
 }
 
 export function removeCustomFeed(id) {
-  const tabs = Object.fromEntries(Object.entries(settings?.tabs ?? {}).map(([name, page]) => [name, { cards: page.cards.filter((card) => card.id !== id) }]));
+  const tabs = Object.fromEntries(Object.entries(settings?.tabs ?? {}).map(([name, page]) => [name, { ...page, cards: page.cards.filter((card) => card.id !== id) }]));
   custom.delete(id);
   save({ ...settings, tabs, custom: (settings?.custom ?? []).filter((feed) => feed.id !== id) });
 }

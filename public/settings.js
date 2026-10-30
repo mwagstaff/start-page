@@ -1,12 +1,16 @@
 // The reader's own layout, kept in this browser's localStorage (no account needed) and
 // exported or imported as a JSON file. Shape:
-//   { v: 1, tabs: { home: { cards: [...] } }, custom: [...] }
-// where cards are in page order, { id, hidden?: true, limit?: number }, and custom lists
-// the feeds the reader added, { id: 'custom-…', url, title }.
+//   { v: 1, tabs: { home: { cards: [...], arrange?: 'manual' } }, custom: [...] }
+// where cards are in page order, { id, hidden?: true, limit?: number, col?: number }, and
+// custom lists the feeds the reader added, { id: 'custom-…', url, title }. Without
+// `arrange`, cards are packed into columns to fit the screen; with 'manual', each card stays
+// in the column it was put in (`col`, counted from the left) and page order runs down each
+// column in turn.
 
 export const SETTINGS_KEY = 'start-page:settings'; // the early script in lib/render.js reads it too
 export const MAX_CARD_ITEMS = 15; // keep in step with lib/cache.js
 export const MAX_CUSTOM_FEEDS = 20;
+export const MAX_COLUMNS = 12;
 const MAX_TITLE_LENGTH = 80;
 
 // A short, stable id for a feed address, so the same feed added twice is one card.
@@ -40,7 +44,9 @@ export function validSettings(value) {
           id: card.id,
           ...(card.hidden === true && { hidden: true }),
           ...(Number.isInteger(card.limit) && card.limit >= 1 && card.limit <= MAX_CARD_ITEMS && { limit: card.limit }),
+          ...(Number.isInteger(card.col) && card.col >= 0 && card.col < MAX_COLUMNS && { col: card.col }),
         })),
+      ...(page.arrange === 'manual' && { arrange: 'manual' }),
     };
   }
   const ids = new Set();
@@ -64,6 +70,32 @@ export function cardList(saved, defaults, allIds) {
     listed.add(id);
   }
   for (const id of allIds) if (!listed.has(id)) list.push({ id, hidden: true });
+  return list;
+}
+
+// Moves a card one step up or down the list. With cards placed in columns, a card at the
+// top or bottom of its column steps into the next column along instead, so it always moves
+// one place in reading order.
+export function stepCard(cards, index, step) {
+  const list = cards.slice();
+  const card = list[index];
+  const neighbour = list[index + step];
+  if (!neighbour) return list;
+  if (card.col !== undefined && neighbour.col !== undefined && neighbour.col !== card.col) {
+    list[index] = { ...card, col: neighbour.col };
+  } else {
+    [list[index], list[index + step]] = [neighbour, card];
+  }
+  return list;
+}
+
+// Moves a card to a new place in the list. A card placed in a column joins the column of
+// the card now before it (or after it, at the top).
+export function moveCard(cards, from, to) {
+  const list = cards.slice();
+  const [card] = list.splice(from, 1);
+  const neighbour = list[to - 1] ?? list[to];
+  list.splice(to, 0, card.col !== undefined && neighbour?.col !== undefined ? { ...card, col: neighbour.col } : card);
   return list;
 }
 
