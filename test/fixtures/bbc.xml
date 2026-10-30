@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title><![CDATA[BBC News]]></title>
+    <link>https://www.bbc.co.uk/news</link>
+    <item>
+      <title><![CDATA[Council approves new library & café]]></title>
+      <description><![CDATA[A short summary.]]></description>
+      <link>https://www.bbc.co.uk/news/articles/abc123?at_medium=RSS&amp;at_campaign=rss</link>
+      <guid isPermaLink="false">https://www.bbc.co.uk/news/articles/abc123#1</guid>
+      <pubDate>Thu, 29 Oct 2026 10:41:50 GMT</pubDate>
+      <media:thumbnail width="240" height="135" url="https://ichef.bbci.co.uk/ace/standard/240/example.jpg"/>
+    </item>
+    <item>
+      <title><![CDATA[Second story without a picture]]></title>
+      <link>https://www.bbc.co.uk/news/articles/def456</link>
+      <pubDate>Thu, 29 Oct 2026 09:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title><![CDATA[Item with an unsafe link is dropped]]></title>
+      <link>javascript:alert(1)</link>
+    </item>
+  </channel>
+</rss>

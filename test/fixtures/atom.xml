@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-US">
+  <title type="text">Example Tech</title>
+  <entry>
+    <author><name>A Writer</name></author>
+    <title type="html"><![CDATA[Apple&#8217;s new chip, explained]]></title>
+    <link rel="replies" type="text/html" href="https://example.com/chip#comments" />
+    <link rel="alternate" type="text/html" href="https://example.com/chip" />
+    <id>https://example.com/?p=1</id>
+    <updated>2026-10-29T07:43:00-04:00</updated>
+    <published>2026-10-29T06:00:04-04:00</published>
+    <summary type="html"><![CDATA[Summary text]]></summary>
+    <content type="html"><![CDATA[<figure><img alt="" src="https://example.com/chip.jpg?quality=90&#038;strip=all"></figure><p>Body</p>]]></content>
+  </entry>
+  <entry>
+    <title>Plain title</title>
+    <link href="https://example.com/plain"/>
+    <updated>2026-10-28T12:00:00Z</updated>
+  </entry>
+</feed>

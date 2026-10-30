@@ -1,0 +1,6 @@
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Hacker News: Front Page</title><link>https://news.ycombinator.com/</link><item><title><![CDATA[Show HN: A tiny static site generator]]></title><description><![CDATA[
+<p>Article URL: <a href="https://example.com/ssg">https://example.com/ssg</a></p>
+<p>Comments URL: <a href="https://news.ycombinator.com/item?id=111">https://news.ycombinator.com/item?id=111</a></p>
+<p>Points: 142</p>
+<p># Comments: 57</p>
+]]></description><pubDate>Thu, 29 Oct 2026 10:44:49 +0000</pubDate><link>https://example.com/ssg</link><dc:creator>someone</dc:creator><comments>https://news.ycombinator.com/item?id=111</comments><guid isPermaLink="false">https://news.ycombinator.com/item?id=111</guid></item></channel></rss>

@@ -1,0 +1,587 @@
+:root {
+  --bg: #f4f2ee;
+  --surface: #ffffff;
+  --border: #e4e0d8;
+  --text: #1d1c1a;
+  --muted: #6d6a64;
+  --accent: #c2410c;
+  --visited: #7b7770;
+  --masthead-bg: #1d1c1a;
+  --masthead-text: #f4f2ee;
+  --masthead-muted: #b5b0a6;
+  --masthead-border: #3a3834;
+  --shadow: 0 1px 2px rgb(29 28 26 / 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141413;
+    --surface: #1e1d1b;
+    --border: #2f2d2a;
+    --text: #ebe8e2;
+    --muted: #9a958c;
+    --accent: #f08a4b;
+    --visited: #86827a;
+    --masthead-bg: #0c0c0b;
+    --masthead-text: #ebe8e2;
+    --masthead-muted: #9a958c;
+    --masthead-border: #2f2d2a;
+    --shadow: none;
+  }
+}
+
+/* With a daily photo behind the page, surfaces turn translucent and blur what's under them. */
+.has-backdrop {
+  --surface: rgb(255 255 255 / 0.86);
+  --border: rgb(29 28 26 / 0.12);
+  --masthead-bg: rgb(12 12 11 / 0.55);
+  --masthead-border: rgb(255 255 255 / 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  .has-backdrop {
+    --surface: rgb(24 23 21 / 0.82);
+    --border: rgb(255 255 255 / 0.1);
+    --masthead-bg: rgb(0 0 0 / 0.55);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+a { color: inherit; text-decoration: none; }
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.has-backdrop .masthead,
+.has-backdrop .card {
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  backdrop-filter: blur(16px) saturate(1.3);
+}
+
+/* Bottom-right hotspot: hover or focus it to fade the page and see the photo in full.
+   It's small so it doesn't cover the cards, but a screen corner is easy to hit.
+   The short delay stops a pass of the pointer through the corner from triggering it. */
+.masthead, .tabs, .grid { transition: opacity 0.3s ease; }
+
+body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
+  opacity: 0;
+  pointer-events: none;
+  transition-delay: 0.2s;
+}
+
+.peek {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  width: 40px;
+  height: 40px;
+  outline: none;
+}
+
+/* A translucent quarter-circle tab tucked into the corner shows where the hotspot is. */
+.peek-marker {
+  position: absolute;
+  bottom: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: flex-end;
+  padding: 8px;
+  color: rgb(255 255 255 / 0.92);
+  background: rgb(0 0 0 / 0.5);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: opacity 0.3s ease;
+}
+
+.peek-marker { right: 0; justify-content: flex-end; border-top-left-radius: 100%; opacity: 0.5; }
+
+.peek-marker svg { display: block; }
+
+.peek:is(:hover, :focus-within) .peek-marker { opacity: 0; }
+
+.peek-caption {
+  position: absolute;
+  bottom: 12px;
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  max-width: min(440px, calc(100vw - 24px));
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #fff;
+  background: rgb(0 0 0 / 0.55);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.peek-caption { right: 12px; text-align: right; }
+
+.peek:is(:hover, :focus-within) .peek-caption {
+  opacity: 1;
+  pointer-events: auto;
+  transition-delay: 0.2s;
+}
+
+.peek:focus-visible .peek-caption { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.peek-credit { color: rgb(255 255 255 / 0.75); font-size: 12px; }
+
+.peek-caption a { margin-top: 3px; font-weight: 600; }
+.peek-caption a:hover { text-decoration: underline; }
+
+.wrap { padding: 0 16px; }
+
+@media (min-width: 1200px) {
+  .wrap { padding: 0 20px; }
+}
+
+.masthead {
+  background: var(--masthead-bg);
+  color: var(--masthead-text);
+}
+
+.masthead .wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 8px;
+  min-height: 52px;
+}
+
+.title {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.brand::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.date { color: var(--masthead-muted); font-size: 13px; white-space: nowrap; }
+
+/* Compact search box between the title and the weather; it takes the spare width. */
+.search { flex: 1 1 200px; max-width: 420px; min-width: 0; }
+
+.search input {
+  width: 100%;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--masthead-border);
+  border-radius: 15px;
+  color: var(--masthead-text);
+  background: rgb(255 255 255 / 0.1);
+  font: inherit;
+  font-size: 13px;
+}
+
+.search input::placeholder { color: var(--masthead-muted); }
+.search input:focus { outline: none; border-color: var(--accent); background: rgb(255 255 255 / 0.16); }
+
+.refresh,
+.icon-button {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--masthead-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.refresh:hover,
+.icon-button:hover { color: var(--masthead-text); background: rgb(255 255 255 / 0.1); }
+.icon-button[hidden] { display: none; }
+.refresh:disabled { cursor: progress; }
+.refresh svg,
+.icon-button svg { display: block; }
+
+/* The title row puts these two buttons close together. */
+.title .icon-button { margin-left: -10px; }
+.refresh.is-spinning svg { animation: spin 0.9s linear infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .refresh.is-spinning svg { animation-duration: 3s; }
+}
+
+.weather {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.weather.is-stale { opacity: 0.6; }
+
+.weather .now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weather .icon { font-size: 22px; line-height: 1; }
+
+.weather .temp {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.weather .summary { font-size: 13px; line-height: 1.25; }
+
+.weather .detail {
+  display: block;
+  color: var(--masthead-muted);
+  font-size: 12px;
+}
+
+.weather .hours {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: none;
+  border-left: 1px solid var(--masthead-border);
+}
+
+.weather .hours li {
+  display: grid;
+  justify-items: center;
+  min-width: 40px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.weather .hour { color: var(--masthead-muted); }
+
+/* Rain chart: one blue, brighter for heavier rain (validated against the dark masthead). */
+.rain {
+  --rain-light: #3987e5;
+  --rain-moderate: #86b6ef;
+  --rain-heavy: #cde2fb;
+  display: grid;
+  grid-template: "bars caption" auto "axis caption" auto / auto auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+  margin: 0;
+  padding-left: 18px;
+  border-left: 1px solid var(--masthead-border);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+/* The summary sits beside the bars, so the chart doesn't make the masthead taller. */
+.rain figcaption {
+  grid-area: caption;
+  max-width: 13em;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.rain-bars {
+  display: flex;
+  align-items: flex-end;
+  grid-area: bars;
+  gap: 2px;
+  height: 18px;
+  border-bottom: 1px solid var(--masthead-muted);
+}
+
+/* Each slot spans the full height so its tooltip is easy to hover. */
+.rain .slot {
+  display: flex;
+  align-items: flex-end;
+  width: 4px;
+  height: 100%;
+}
+
+.rain .bar {
+  width: 100%;
+  min-height: 3px; /* drizzle stays visible */
+  border-radius: 2px 2px 0 0;
+}
+
+.rain .is-light { background: var(--rain-light); }
+.rain .is-moderate { background: var(--rain-moderate); }
+.rain .is-heavy { background: var(--rain-heavy); }
+
+.rain-axis {
+  grid-area: axis;
+  display: flex;
+  justify-content: space-between;
+  color: var(--masthead-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1000px) {
+  .rain { display: none; }
+}
+
+@media (max-width: 900px) {
+  .weather .hours { display: none; }
+}
+
+@media (max-width: 700px) {
+  .masthead .wrap { flex-wrap: wrap; }
+  .search { order: 3; flex-basis: 100%; max-width: none; }
+}
+
+@media (max-width: 560px) {
+  .date { display: none; }
+  .weather .detail { display: none; }
+}
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.tabs a {
+  padding: 12px 14px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.tabs a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
+
+/* Multi-column flow packs cards of different heights without row gaps. */
+.grid {
+  columns: 300px;
+  column-gap: 12px;
+  padding-block: 12px;
+}
+
+/* layout.js swaps the flow for balanced flex columns once it has measured the cards. */
+.grid.packed {
+  display: flex;
+  align-items: flex-start;
+  columns: auto;
+}
+
+.grid.packed .column { flex: 1 1 0; min-width: 0; }
+
+.card {
+  break-inside: avoid;
+  margin: 0 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px 4px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+
+.card h2 {
+  margin: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.card h2 a:hover { color: var(--accent); }
+
+.items { list-style: none; margin: 0; padding: 0; }
+
+.item {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.item:last-child { border-bottom: 0; }
+
+.thumb {
+  flex: none;
+  width: 54px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--border);
+}
+
+.thumb-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.body { min-width: 0; }
+
+.headline {
+  display: block;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.headline:hover { color: var(--accent); }
+.headline:visited { color: var(--visited); }
+
+.meta {
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.meta a:hover { color: var(--accent); text-decoration: underline; }
+
+.source { font-weight: 600; }
+
+.empty { color: var(--muted); margin: 14px 0; }
+
+.stale {
+  margin: 4px 0 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* With a customised layout saved, page.js draws the reader's cards; hide the default ones until then. */
+.customised .grid { visibility: hidden; }
+
+/* Customise dialog */
+.customise {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  padding: 18px 18px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--bg);
+  box-shadow: 0 20px 50px rgb(0 0 0 / 0.3);
+}
+
+.customise::backdrop { background: rgb(0 0 0 / 0.45); }
+
+.customise h2 { margin: 0 0 4px; font-size: 17px; }
+
+.customise-head p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+
+.card-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.card-list li.is-hidden { opacity: 0.6; }
+
+.card-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.card-limit { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+
+.card-limit input { width: 3.2em; }
+
+.card-move { display: flex; gap: 2px; }
+
+.customise button,
+.customise input[type=number] {
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+}
+
+.customise input[type=number] { padding-inline: 6px; }
+
+.customise input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+
+.card-move button { width: 30px; padding: 0; }
+
+.customise button:not(:disabled) { cursor: pointer; }
+.customise button:not(:disabled):hover { border-color: var(--muted); }
+.customise button:disabled { opacity: 0.35; }
+
+.customise .primary { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+.customise-status { min-height: 1.35em; margin: 10px 0 0; color: var(--muted); font-size: 12px; }
+
+.customise-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.customise-actions .primary { margin-left: auto; }
+
+@media (max-width: 480px) {
+  .card-limit { font-size: 0; gap: 0; } /* the number box is enough on narrow screens */
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Example Mac Site</title>
+    <item>
+      <title>Media content image</title>
+      <link>https://example.com/one</link>
+      <pubDate>Wed, 28 Oct 2026 18:00:00 +0000</pubDate>
+      <media:content url="https://example.com/video.mp4" medium="video"/>
+      <media:content url="https://example.com/one.jpg" medium="image"/>
+    </item>
+    <item>
+      <title>Enclosure image</title>
+      <link>https://example.com/two</link>
+      <pubDate>Wed, 28 Oct 2026 17:00:00 +0000</pubDate>
+      <enclosure url="https://example.com/two.png" type="image/png" length="1000"/>
+    </item>
+    <item>
+      <title>Image inside content</title>
+      <link>https://example.com/three</link>
+      <pubDate>Wed, 28 Oct 2026 16:00:00 +0000</pubDate>
+      <content:encoded><![CDATA[<p><img src="https://example.com/three.webp" /></p>]]></content:encoded>
+    </item>
+  </channel>
+</rss>

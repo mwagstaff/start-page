@@ -1,0 +1,185 @@
+{
+  "refreshMinutes": 10,
+  "defaultLimit": 6,
+  "weather": {
+    "name": "Beckenham",
+    "latitude": 51.4083,
+    "longitude": -0.0253,
+    "refreshMinutes": 15
+  },
+  "backdrop": {
+    "sources": [
+      {
+        "type": "bing",
+        "name": "Bing",
+        "market": "en-GB",
+        "weight": 4
+      },
+      {
+        "type": "rss",
+        "name": "ESA/Webb",
+        "url": "https://esawebb.org/images/potm/feed/",
+        "weight": 1
+      },
+      {
+        "type": "rss",
+        "name": "ESA/Hubble",
+        "url": "https://esahubble.org/images/potw/feed/",
+        "weight": 1
+      }
+    ]
+  },
+  "tabs": [
+    {
+      "id": "home",
+      "label": "Home",
+      "widgets": [
+        "bbc-news",
+        "bbc-football",
+        "hacker-news",
+        "ai",
+        "tech",
+        "science",
+        "space"
+      ]
+    }
+  ],
+  "widgets": {
+    "bbc-news": {
+      "title": "BBC News",
+      "link": "https://www.bbc.co.uk/news",
+      "limit": 6,
+      "thumbnails": true,
+      "sources": [
+        {
+          "name": "BBC News",
+          "url": "https://feeds.bbci.co.uk/news/rss.xml"
+        }
+      ]
+    },
+    "bbc-football": {
+      "title": "BBC Football",
+      "link": "https://www.bbc.co.uk/sport/football",
+      "limit": 6,
+      "thumbnails": true,
+      "sources": [
+        {
+          "name": "BBC Sport",
+          "url": "https://feeds.bbci.co.uk/sport/football/rss.xml"
+        }
+      ]
+    },
+    "hacker-news": {
+      "title": "Hacker News",
+      "link": "https://news.ycombinator.com/",
+      "limit": 12,
+      "sources": [
+        {
+          "name": "Hacker News",
+          "url": "https://hnrss.org/frontpage"
+        }
+      ],
+      "thumbnails": true
+    },
+    "ai": {
+      "title": "AI",
+      "limit": 5,
+      "maxPerSource": 3,
+      "sources": [
+        {
+          "name": "Simon Willison",
+          "url": "https://simonwillison.net/atom/everything/"
+        },
+        {
+          "name": "TechCrunch",
+          "url": "https://techcrunch.com/category/artificial-intelligence/feed/"
+        },
+        {
+          "name": "The Verge",
+          "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+        }
+      ],
+      "thumbnails": true
+    },
+    "tech": {
+      "title": "Tech",
+      "limit": 8,
+      "maxPerSource": 2,
+      "sources": [
+        {
+          "name": "Ars Technica",
+          "url": "https://feeds.arstechnica.com/arstechnica/index"
+        },
+        {
+          "name": "The Verge",
+          "url": "https://www.theverge.com/rss/index.xml"
+        },
+        {
+          "name": "The Register",
+          "url": "https://www.theregister.com/headlines.atom"
+        },
+        {
+          "name": "Tom's Hardware",
+          "url": "https://www.tomshardware.com/feeds/all"
+        },
+        {
+          "name": "Six Colors",
+          "url": "https://sixcolors.com/feed/"
+        }
+      ],
+      "thumbnails": true
+    },
+    "science": {
+      "title": "Science",
+      "limit": 6,
+      "maxPerSource": 2,
+      "sources": [
+        {
+          "name": "BBC Science",
+          "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"
+        },
+        {
+          "name": "New Scientist",
+          "url": "https://www.newscientist.com/feed/home/"
+        },
+        {
+          "name": "Quanta",
+          "url": "https://www.quantamagazine.org/feed/"
+        },
+        {
+          "name": "Ars Technica",
+          "url": "https://feeds.arstechnica.com/arstechnica/science"
+        }
+      ],
+      "thumbnails": true
+    },
+    "space": {
+      "title": "Space",
+      "limit": 7,
+      "maxPerSource": 2,
+      "sources": [
+        {
+          "name": "Space.com",
+          "url": "https://www.space.com/feeds/all"
+        },
+        {
+          "name": "SpaceNews",
+          "url": "https://spacenews.com/feed/"
+        },
+        {
+          "name": "NASA",
+          "url": "https://www.nasa.gov/news-release/feed/"
+        },
+        {
+          "name": "ESA",
+          "url": "https://www.esa.int/rssfeed/Our_Activities/Space_News"
+        },
+        {
+          "name": "Spaceflight Now",
+          "url": "https://spaceflightnow.com/feed/"
+        }
+      ],
+      "thumbnails": true
+    }
+  }
+}
