@@ -3,7 +3,7 @@
 // 304 when nothing changed) and, when it has changed, redraws the cards in place — but
 // only while visible and not in the middle of use.
 
-import { currentVersion, fetchFeeds, show } from './page.js';
+import { currentVersion, fetchFeeds, refreshCustomFeeds, show } from './page.js';
 
 const CHECK_EVERY_MS = 60_000;
 const IDLE_BEFORE_UPDATE_MS = 30_000; // don't move stories from under someone reading them
@@ -22,6 +22,7 @@ async function check({ evenIfBusy = false } = {}) {
   if (document.visibilityState !== 'visible' || (!evenIfBusy && busy())) return;
   const data = await fetchFeeds();
   if (data && data.version !== currentVersion()) show(data);
+  await refreshCustomFeeds(); // the reader's own feeds; redraws only if one changed
 }
 
 setInterval(check, CHECK_EVERY_MS);
@@ -39,8 +40,12 @@ button?.addEventListener('click', async () => {
     // Fall through: the server still has whatever it last fetched.
   }
   const data = await fetchFeeds({ fresh: true });
-  if (data) show(data);
-  else location.reload();
+  if (data) {
+    show(data);
+    await refreshCustomFeeds();
+  } else {
+    location.reload();
+  }
   button.disabled = false;
   button.classList.remove('is-spinning');
 });

@@ -1,10 +1,11 @@
-// The Customise dialog: show or hide cards, change their order and number of items, and
-// export or import the settings as a file. Changes apply straight away and are saved in
+// The Customise dialog: show or hide cards, change their order (arrows, or drag the
+// handle) and number of items, add your own RSS or Atom feeds, and export or import the
+// settings as a file. Changes apply straight away and are saved in
 // this browser (see settings.js); no account needed.
 
 import { escapeHtml } from './cards.js';
-import { currentFeeds, currentSettings, fetchFeeds, replaceSettings, setTabCards, tabCards } from './page.js';
-import { MAX_CARD_ITEMS, validSettings } from './settings.js';
+import { addCustomFeed, currentFeeds, currentSettings, fetchFeeds, removeCustomFeed, replaceSettings, setTabCards, tabCards, widgetFor } from './page.js';
+import { MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, validSettings } from './settings.js';
 
 const opener = document.querySelector('.customise-open');
 let dialog = null;
@@ -20,6 +21,13 @@ function build() {
       <p>Pick the cards you want, in the order you want them. Cards higher up get first claim on a story that's in more than one. Changes are saved in this browser.</p>
     </div>
     <ol class="card-list"></ol>
+    <form class="add-feed">
+      <label for="add-feed-url">Add a feed</label>
+      <div class="add-feed-row">
+        <input id="add-feed-url" type="text" inputmode="url" spellcheck="false" placeholder="https://example.com/feed.xml" autocomplete="off" required>
+        <button type="submit">Add</button>
+      </div>
+    </form>
     <p class="customise-status" role="status"></p>
     <div class="customise-actions">
       <button type="button" data-action="export">Export</button>
@@ -35,6 +43,8 @@ function build() {
   // Clicking the backdrop outside the panel closes it.
   dialog.addEventListener('pointerdown', (event) => { if (event.target === dialog) dialog.close(); });
   dialog.querySelector('input[type=file]').addEventListener('change', onImport);
+  dialog.querySelector('.add-feed').addEventListener('submit', onAddFeed);
+  dialog.querySelector('.card-list').addEventListener('pointerdown', startDrag);
 }
 
 function status(message) {
@@ -42,17 +52,20 @@ function status(message) {
 }
 
 function renderList(focus) {
-  const { widgets, defaultLimit } = currentFeeds();
+  const { defaultLimit } = currentFeeds();
   dialog.querySelector('.card-list').innerHTML = cards.map((card, i) => {
-    const widget = widgets[card.id];
+    const widget = widgetFor(card.id);
     const title = escapeHtml(widget.title);
+    const remove = widget.custom ? `<button type="button" class="card-remove" data-action="remove" aria-label="Remove ${title}" title="Remove this feed">×</button>` : '';
     return `<li class="${card.hidden ? 'is-hidden' : ''}" data-index="${i}">
+        <span class="drag-handle" aria-hidden="true" title="Drag to reorder">⠿</span>
         <label class="card-toggle"><input type="checkbox" data-field="shown"${card.hidden ? '' : ' checked'}> ${title}</label>
         <label class="card-limit">Items <input type="number" data-field="limit" min="1" max="${MAX_CARD_ITEMS}" value="${card.limit ?? widget.limit ?? defaultLimit}"></label>
         <span class="card-move">
           <button type="button" data-action="up" aria-label="Move ${title} up"${i === 0 ? ' disabled' : ''}>↑</button>
           <button type="button" data-action="down" aria-label="Move ${title} down"${i === cards.length - 1 ? ' disabled' : ''}>↓</button>
         </span>
+        ${remove}
       </li>`;
   }).join('');
   // Keep keyboard focus on the control that was used, now in its new row.
@@ -62,11 +75,10 @@ function renderList(focus) {
 
 // Only what differs from the card's config is saved, so later config changes still apply.
 function save() {
-  const { widgets } = currentFeeds();
   setTabCards(cards.map(({ id, hidden, limit }) => ({
     id,
     ...(hidden && { hidden: true }),
-    ...(limit && limit !== widgets[id].limit && { limit }),
+    ...(limit && limit !== widgetFor(id).limit && { limit }),
   })));
   status('');
 }
@@ -82,6 +94,14 @@ function onClick(event) {
       [cards[index], cards[to]] = [cards[to], cards[index]];
       save();
       renderList({ index: to, action: button.dataset.action });
+      break;
+    }
+    case 'remove': {
+      const { title } = widgetFor(cards[index].id);
+      removeCustomFeed(cards[index].id);
+      cards = tabCards();
+      renderList();
+      status(`Removed ${title}.`);
       break;
     }
     case 'export':
@@ -118,6 +138,77 @@ function onChange(event) {
     cards[index] = { ...cards[index], limit };
   }
   save();
+}
+
+// Drag a row by its handle (mouse or touch): the row follows the pointer through the list,
+// and the new order is saved when it's dropped.
+function startDrag(event) {
+  const handle = event.target.closest('.drag-handle');
+  if (!handle || event.button > 0) return;
+  event.preventDefault();
+  const list = dialog.querySelector('.card-list');
+  const row = handle.closest('li');
+  const from = Number(row.dataset.index);
+  row.classList.add('is-dragging');
+  handle.setPointerCapture(event.pointerId);
+
+  const move = (e) => {
+    if (e.pointerId !== event.pointerId) return;
+    const before = [...list.children].find((li) => {
+      if (li === row) return false;
+      const box = li.getBoundingClientRect();
+      return e.clientY < box.top + box.height / 2;
+    });
+    if (before !== row.nextElementSibling) list.insertBefore(row, before ?? null);
+  };
+  // Listened for on the whole document (and on losing the capture), so a drop anywhere ends the drag.
+  let ended = false;
+  const end = (e) => {
+    if (ended || e.pointerId !== event.pointerId) return;
+    ended = true;
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', end);
+    document.removeEventListener('pointercancel', end);
+    handle.removeEventListener('lostpointercapture', end);
+    if (e.type !== 'pointercancel') move(e); // the browser may report losing the capture just before the drop
+    row.classList.remove('is-dragging');
+    const order = [...list.children].map((li) => Number(li.dataset.index));
+    if (order.indexOf(from) !== from) {
+      cards = order.map((i) => cards[i]);
+      save();
+    }
+    renderList();
+  };
+  document.addEventListener('pointermove', move);
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+  handle.addEventListener('lostpointercapture', end);
+}
+
+async function onAddFeed(event) {
+  event.preventDefault();
+  const input = event.target.querySelector('input');
+  const button = event.target.querySelector('button');
+  let url = input.value.trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  if ((currentSettings()?.custom?.length ?? 0) >= MAX_CUSTOM_FEEDS) {
+    status(`You can add up to ${MAX_CUSTOM_FEEDS} feeds.`);
+    return;
+  }
+  button.disabled = true;
+  status('Loading the feed…');
+  const error = await addCustomFeed(url);
+  button.disabled = false;
+  if (error) {
+    status(error);
+    input.focus();
+    return;
+  }
+  input.value = '';
+  cards = tabCards();
+  renderList();
+  status(`Added ${widgetFor(cards[0].id).title} at the top.`);
 }
 
 function exportSettings() {

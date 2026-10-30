@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
+import { watch } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { createBackdrop } from './lib/backdrop.js';
 import { createCache } from './lib/cache.js';
+import { createCustomFeeds } from './lib/custom.js';
 import { renderPage } from './lib/render.js';
 import { createThumbnailer } from './lib/thumbs.js';
 import { createWeather } from './lib/weather.js';
@@ -12,6 +14,7 @@ const PORT = Number(process.env.PORT ?? 3060);
 const ROOT = import.meta.dirname;
 const config = JSON.parse(await readFile(join(ROOT, 'config', 'feeds.json'), 'utf8'));
 const thumbs = createThumbnailer();
+const customFeeds = createCustomFeeds({ ttlMinutes: config.refreshMinutes });
 const cache = createCache(config, { thumbs });
 const weather = createWeather(config.weather);
 const weatherReady = weather.refresh();
@@ -23,8 +26,15 @@ setInterval(backdrop.refresh, 60 * 60_000).unref();
 
 // Static files are cached by browsers, so their URLs carry a content hash.
 const assetVersion = async (name) => createHash('sha256').update(await readFile(join(ROOT, 'public', name))).digest('hex').slice(0, 10);
-const assetNames = (await readdir(join(ROOT, 'public'))).filter((name) => ['.css', '.js'].includes(extname(name)));
-const versions = Object.fromEntries(await Promise.all(assetNames.map(async (name) => [name, await assetVersion(name)])));
+const assetVersions = async () => {
+  const names = (await readdir(join(ROOT, 'public'))).filter((name) => ['.css', '.js'].includes(extname(name)));
+  return Object.fromEntries(await Promise.all(names.map(async (name) => [name, await assetVersion(name)])));
+};
+// Worked out again whenever a file in public/ changes, so pages never point at old copies.
+let versions = await assetVersions();
+watch(join(ROOT, 'public'), () => {
+  assetVersions().then((latest) => { versions = latest; }, () => {});
+}).unref();
 
 // Manual refreshes come from a public page, so at most one a minute reaches the feeds.
 const MANUAL_REFRESH_GAP_MS = 60_000;
@@ -105,6 +115,20 @@ const server = createServer(async (req, res) => {
     if (notModified(req, res, `"${version}"`, 'public, max-age=60, stale-while-revalidate=600')) return;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(body);
+  }
+
+  // A feed someone added in Customise, fetched (safely) and kept for a few minutes. The
+  // browser draws its card; the same feed is shared by everyone who adds it.
+  if (pathname === '/api/feed') {
+    try {
+      const feed = await customFeeds(searchParams.get('url'));
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${(config.refreshMinutes ?? 10) * 60}` });
+      return res.end(JSON.stringify(feed));
+    } catch (error) {
+      const status = error.status ?? 502;
+      res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ error: error.status ? error.message : 'Couldn\'t load that feed.' }));
+    }
   }
 
   if (pathname === '/api/refresh' && req.method === 'POST') {

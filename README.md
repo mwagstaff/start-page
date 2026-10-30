@@ -50,9 +50,11 @@ npm test
   (more than a card shows, so cards can fill up after duplicates are dropped), plus the default
   weather and the photo. It's the same for every reader and carries a version used as its
   ETag, with `Cache-Control: public, max-age=60, stale-while-revalidate=600`; a request with a
-  matching `If-None-Match` gets a 304. The page itself also has an ETag. To have Cloudflare
-  serve the snapshot from its edge, add a Cache Rule making `/api/feeds.json` eligible for
-  cache (Cloudflare doesn't cache JSON by default); it then respects the headers above.
+  matching `If-None-Match` gets a 304. The page itself also has an ETag. Cloudflare serves the
+  snapshot from its edge through the skynolimit.dev Cache Rule "Start page: cache feeds
+  snapshot (origin Cache-Control)": it makes `/api/feeds.json` on start.skynolimit.dev eligible
+  for cache, with Browser TTL set to respect the origin (otherwise the zone's 4-hour Browser
+  Cache TTL would replace `max-age=60`).
 - Open pages re-request the snapshot every minute while visible, and when you switch back to
   the tab (usually a 304). If it has changed, they redraw the cards in place, but only after
   30 seconds without scrolling, typing or moving the pointer, and not while a search is
@@ -60,13 +62,26 @@ npm test
   in the masthead fetches every feed and the weather straight away (`POST /api/refresh`, at
   most once a minute), then redraws.
 - The sliders button in the masthead opens Customise: show or hide cards (including any card
-  in `config.widgets` that isn't on the tab), change their order and number of items (up to
-  15), and export or import the settings as `start-page-settings.json`. Settings are kept in
+  in `config.widgets` that isn't on the tab), change their order (arrows, or drag a row by its
+  ⠿ handle, which works with touch too) and number of items (up to 15), add your own RSS or
+  Atom feeds (up to 20), and export or import the settings as `start-page-settings.json`. On
+  the page itself you can also drag a card by its title onto another card to move it before or
+  after that card (mouse only); the cards are then packed into columns again. Settings are kept in
   the browser's localStorage under `start-page:settings`, with no account. With a saved
   layout, the browser draws the cards from the snapshot; a small script in the page's `<head>`
   hides the default cards until then, and starts fetching the snapshot early. Without saved
   settings or without JavaScript, the server-rendered default layout shows as before.
+- Feeds you add are fetched through `GET /api/feed?url=`, since most sites don't let browsers
+  read their feeds directly. Anyone can ask for any URL, and the server sits on a home network,
+  so `lib/custom.js` only fetches http(s) on the default ports, without credentials, and only
+  connects to public addresses: private, loopback, Tailscale (100.64/10), link-local and other
+  reserved ranges are refused. That's checked on the address actually connected to (so DNS
+  can't point it somewhere private) and again after each redirect (at most 3). It reads at most
+  2MB, gives up after 10 seconds, and fetches at most 30 new feeds a minute. Each feed is kept
+  for `refreshMinutes` and shared by everyone who adds it; its stories use the feed's own
+  images, loaded by the browser.
 - Modules in `public/` import each other by plain path; the page's import map adds each file's
-  content hash, so browsers never mix old and new versions after a deploy.
-- Endpoints: `/` (page), `/api/feeds.json` (snapshot), `/api/widgets` (JSON, default layout), `POST /api/refresh`, `/healthcheck` (503 until the first refresh finishes).
+  content hash, so browsers never mix old and new versions after a deploy. The server works the
+  hashes out again whenever a file in `public/` changes.
+- Endpoints: `/` (page), `/api/feeds.json` (snapshot), `/api/feed?url=` (a feed someone added), `/api/widgets` (JSON, default layout), `POST /api/refresh`, `/healthcheck` (503 until the first refresh finishes).
 - `PORT` defaults to 3060.

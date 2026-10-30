@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { parseFeed } from '../lib/feeds.js';
+import { parseFeed, readFeed } from '../lib/feeds.js';
 
 const fixture = (name) => readFile(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
 
@@ -43,4 +43,11 @@ test('finds images in media:content, enclosures and content HTML', async () => {
 
 test('rejects documents that are not feeds', () => {
   assert.throws(() => parseFeed('<html><body>Not a feed</body></html>'), /Unrecognised feed format/);
+});
+
+test('readFeed gives the feed title as well as its items', async () => {
+  const { title, items } = readFeed(await fixture('bbc.xml'));
+  assert.ok(title.length > 0);
+  assert.equal(items.length, 2);
+  assert.equal(readFeed('<rss><channel><item><title>A</title><link>https://a</link></item></channel></rss>').title, '');
 });

@@ -585,3 +585,52 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 @media (max-width: 480px) {
   .card-limit { font-size: 0; gap: 0; } /* the number box is enough on narrow screens */
 }
+
+/* Dragging cards by their titles (reorder.js) */
+.card > h2[draggable="true"] { cursor: grab; }
+.card > h2[draggable="true"] a { cursor: pointer; }
+.card.is-dragging { opacity: 0.4; }
+.card.drop-before { box-shadow: 0 -3px 0 var(--accent); }
+.card.drop-after { box-shadow: 0 3px 0 var(--accent); }
+
+/* Customise: drag handles, removing a feed, adding one */
+.drag-handle {
+  flex: none;
+  margin-right: -4px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none; /* lets a finger drag the row instead of scrolling */
+  user-select: none;
+}
+
+.card-list li.is-dragging {
+  position: relative;
+  z-index: 1;
+  border-color: var(--accent);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+  cursor: grabbing;
+}
+
+.customise .card-remove { width: 28px; padding: 0; color: var(--muted); font-size: 16px; }
+.customise .card-remove:hover { color: var(--accent); }
+
+.add-feed { display: grid; gap: 6px; margin-top: 14px; }
+.add-feed label { font-weight: 600; font-size: 13px; }
+.add-feed-row { display: flex; gap: 8px; }
+
+.add-feed input {
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+}
+
+.add-feed input:focus { outline: none; border-color: var(--accent); }
