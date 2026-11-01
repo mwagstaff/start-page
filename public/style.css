@@ -11,6 +11,9 @@
   --masthead-muted: #b5b0a6;
   --masthead-border: #3a3834;
   --shadow: 0 1px 2px rgb(29 28 26 / 0.04);
+  --popover-bg: #ffffff;
+  --popover-rain: #2a6fc4;
+  --popover-shadow: 0 12px 32px rgb(29 28 26 / 0.18), 0 2px 6px rgb(29 28 26 / 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -27,6 +30,9 @@
     --masthead-muted: #9a958c;
     --masthead-border: #2f2d2a;
     --shadow: none;
+    --popover-bg: #1e1d1b;
+    --popover-rain: #6aa8f0;
+    --popover-shadow: 0 12px 32px rgb(0 0 0 / 0.5);
   }
 }
 
@@ -178,6 +184,8 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 }
 
 .masthead {
+  position: relative;
+  z-index: 15; /* the forecast popover opens over the cards */
   background: var(--masthead-bg);
   color: var(--masthead-text);
 }
@@ -380,6 +388,136 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 
 @media (max-width: 1000px) {
   .rain { display: none; }
+}
+
+/* Forecast popover: hovering (or focusing) the weather opens today in detail and the week
+   ahead. It stays solid even over the photo: the masthead's blur can't reach below it. */
+.weather.has-outlook { position: relative; cursor: default; border-radius: 8px; outline-offset: 4px; }
+
+.forecast {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: min(580px, calc(100vw - 24px));
+  padding-top: 10px; /* a bridge, so the pointer can move onto the popover without it closing */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
+}
+
+.weather:is(:hover, :focus-within) .forecast {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0.12s; /* passing the pointer over the weather doesn't flash it */
+}
+
+.forecast-panel {
+  max-height: calc(100dvh - 96px);
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--popover-bg);
+  box-shadow: var(--popover-shadow);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.forecast h3 { margin: 0; font-size: 15px; font-weight: 700; }
+
+.forecast-today header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.forecast-today header p { margin: 2px 0 0; color: var(--muted); }
+.forecast-big { font-size: 36px; line-height: 1; }
+.forecast-now { margin-left: auto; font-size: 34px; font-weight: 300; }
+
+.forecast-facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.forecast-facts div {
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.forecast-facts dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.forecast-facts dd { margin: 2px 0 0; font-weight: 600; }
+.forecast-facts small { color: var(--muted); font-weight: 400; }
+
+.forecast ol { list-style: none; margin: 0; padding: 0; }
+
+.forecast-hours {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(40px, 1fr);
+  overflow-x: auto;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
+}
+
+.forecast-hours li {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.forecast-time { color: var(--muted); font-size: 11px; }
+.forecast-hours .forecast-icon { font-size: 18px; line-height: 1.2; }
+.forecast-temp { font-weight: 600; }
+.forecast-rain { color: var(--popover-rain); font-size: 11px; min-height: 1.3em; }
+
+.forecast-week h3 { margin: 14px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.forecast-week li {
+  display: grid;
+  grid-template-columns: 74px 24px 1fr auto 30px minmax(70px, 120px) 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+}
+
+.forecast-week li:first-child { border-top: 0; }
+.forecast-day { font-weight: 600; }
+.forecast-week .forecast-icon { font-size: 17px; text-align: center; }
+.forecast-label { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.forecast-week .forecast-rain { min-height: 0; text-align: right; }
+.forecast-low { color: var(--muted); text-align: right; }
+.forecast-high { font-weight: 600; }
+
+/* Each day's low to high, on one scale for the whole week: cool to warm. */
+.forecast-range {
+  position: relative;
+  height: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.forecast-range span {
+  position: absolute;
+  inset-block: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #5aa9e6, #f2b84b);
+}
+
+@media (max-width: 560px) {
+  .forecast-facts { grid-template-columns: repeat(2, 1fr); }
+  .forecast-week li { grid-template-columns: 70px 22px 1fr 28px minmax(40px, 1fr) 28px; }
+  .forecast-week .forecast-rain { display: none; }
 }
 
 @media (max-width: 900px) {

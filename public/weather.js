@@ -45,7 +45,8 @@ async function placeName(spot, coords) {
 async function forecastFor(coords) {
   const spot = `${coords.latitude},${coords.longitude}`;
   const cached = stored(FORECAST_KEY);
-  if (cached?.spot === spot && Date.now() - cached.fetchedAt < REFRESH_MS) return cached.weather;
+  // A forecast cached before the popover existed has no week ahead: fetch it again.
+  if (cached?.spot === spot && cached.weather.days && Date.now() - cached.fetchedAt < REFRESH_MS) return cached.weather;
   try {
     const [response, name] = await Promise.all([fetch(forecastUrl(coords)), placeName(spot, coords)]);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);

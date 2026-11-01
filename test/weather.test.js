@@ -87,3 +87,28 @@ test('the masthead shows the rain chart with a tooltip per slot', () => {
   assert.match(html, /title="15:15–15:30 · Light rain, 2 mm\/h · 80% chance"><span class="bar is-light" style="height:25%">/);
   assert.equal(html.match(/class="slot"/g).length, 24);
 });
+
+test('parses today in detail and the week ahead for the popover', () => {
+  const weather = parseWeather(json, 'Beckenham');
+  assert.deepEqual(weather.today.hours.map((h) => h.time), ['Now', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00']);
+  assert.deepEqual(weather.today.hours[2], { time: '14:00', temperature: 16, rainChance: 60, rain: 0.6, wind: 12, label: 'Rain', icon: '🌧️' });
+  assert.deepEqual([weather.today.sunrise, weather.today.sunset, weather.today.uv, weather.today.rain, weather.today.humidity, weather.today.wind], ['07:52', '17:41', 2, 3.2, 72, 9]);
+  assert.equal(weather.days.length, 7);
+  assert.deepEqual(weather.days[0], { date: '2026-10-30', day: 'Tomorrow', high: 15, low: 8, rainChance: 0, rain: 0, label: 'Mostly clear', icon: '🌤️' });
+  assert.deepEqual(weather.days.slice(1).map((d) => d.day), ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu']);
+});
+
+test('the masthead weather opens a popover with today and the week ahead', () => {
+  const html = renderPage({ tabs: [{ id: 'home' }], activeTab: { id: 'home' }, widgets: [], weather: parseWeather(json, 'Beckenham') });
+  assert.match(html, /class="weather has-outlook" aria-label="Weather in Beckenham" tabindex="0" aria-describedby="forecast-detail"/);
+  assert.match(html, /Today in Beckenham/);
+  assert.match(html, /Next 7 days/);
+  assert.match(html, /<dt>UV<\/dt><dd>2 <small>low<\/small><\/dd>/);
+  assert.match(html, /60% · 0.6 mm/);
+});
+
+test('a forecast cached without the week ahead shows no popover', () => {
+  const { today, days, ...older } = parseWeather(json, 'Beckenham');
+  const html = renderPage({ tabs: [{ id: 'home' }], activeTab: { id: 'home' }, widgets: [], weather: older });
+  assert.doesNotMatch(html, /forecast-detail/);
+});
