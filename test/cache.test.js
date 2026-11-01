@@ -119,7 +119,8 @@ test('the snapshot sends spare items per source and keeps its version until some
   assert.equal(first.widgets.hn.sources[0].items.length, 15 + 6);
   assert.equal(first.widgets.tech.sources[0].items.length, 2 + 6);
   assert.equal(first.widgets.tech.maxPerSource, 2);
-  assert.equal(cache.widget('hn').items.length, 12);
+  assert.equal(cache.widget('hn').items.filter((i) => !i.extra).length, 12);
+  assert.equal(cache.widget('hn').items.length, 15); // with spares, for filling the screen
   await cache.refresh();
   assert.equal(cache.snapshot().version, first.version);
 });
@@ -133,4 +134,19 @@ test('source() shares a config feed\'s latest result and ignores other URLs', as
   assert.equal(cache.source('https://elsewhere'), undefined);
   await cache.refresh();
   assert.equal(cache.source('https://s').items[0].link, 'https://s/1');
+});
+
+test('buildCards adds spare stories after every card has its own', async () => {
+  const { buildCards } = await import('../public/stories.js');
+  const story = (link) => ({ title: `A long enough headline about ${link}`, link, date: '2026-10-30T10:00:00Z', image: null });
+  const widgets = {
+    ai: { title: 'AI', link: null, thumbnails: false, limit: 1, maxPerSource: null, sources: [{ name: 'A', error: null, items: [story('https://v/1'), story('https://v/2'), story('https://v/3')] }] },
+    tech: { title: 'Tech', link: null, thumbnails: false, limit: 1, maxPerSource: null, sources: [{ name: 'B', error: null, items: [story('https://v/2'), story('https://v/4')] }] },
+  };
+  const cards = buildCards(widgets, [{ id: 'ai' }, { id: 'tech' }], 6, 3);
+  // Tech keeps v/2 as its own story, so AI's spares skip it.
+  assert.deepEqual(cards.map((card) => card.items.map((i) => [i.link, Boolean(i.extra)])), [
+    [['https://v/1', false], ['https://v/3', true]],
+    [['https://v/2', false], ['https://v/4', true]],
+  ]);
 });

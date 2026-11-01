@@ -54,3 +54,26 @@ test('placeColumns folds extra columns into the last and puts new cards in the s
   assert.deepEqual(placeColumns([null, 0, 0, 1], [50, 100, 100, 80], 2), [[1, 2], [0, 3]]);
   assert.deepEqual(placeColumns([0, 1], [10, 10], 1), [[0, 1]]);
 });
+
+// A card of `n` stories, `item` tall each, under a heading `head` tall, starting at `start`.
+const card = (start, n, item = 40, head = 30) => ({ start, sizes: Array.from({ length: n + 1 }, (_, k) => head + k * item) });
+
+test('fillColumn adds stories evenly until the column is full', async () => {
+  const { fillColumn } = await import('../public/layout.js');
+  // 2 × (30 + 6×40) = 540; 200 more fits five stories, fewest first.
+  assert.deepEqual(fillColumn([card(6, 15), card(6, 15)], 740), [9, 8]);
+});
+
+test('fillColumn cuts stories from the fullest card when the column is too tall', async () => {
+  const { fillColumn } = await import('../public/layout.js');
+  // 30+8×40 + 30+4×40 = 540; 400 needs four stories cut, all from the bigger card.
+  assert.deepEqual(fillColumn([card(8, 15), card(4, 15)], 400), [4, 4]);
+});
+
+test('fillColumn keeps a few stories in each card and leaves cards without any alone', async () => {
+  const { fillColumn } = await import('../public/layout.js');
+  assert.deepEqual(fillColumn([card(6, 6), card(0, 0)], 50), [2, 0]);
+  assert.deepEqual(fillColumn([card(1, 1)], 10), [1]);
+  // Nothing more to show: stays at what it has.
+  assert.deepEqual(fillColumn([card(3, 3)], 1000), [3]);
+});

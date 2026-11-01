@@ -48,9 +48,12 @@ export function mergeItems(widget, results, defaultLimit = DEFAULT_LIMIT, seen =
 
 // Cards ready to render, from the feeds snapshot (`/api/feeds.json`) and a page layout:
 // [{ id, limit? }] in page order. A story in several cards only shows in the first.
-export function buildCards(widgets, layout, defaultLimit = DEFAULT_LIMIT) {
+// With `maxItems`, each card also gets spare stories (marked `extra`) up to that many in
+// all, for layout.js to show when there's room on screen. Spares are picked only once
+// every card has its own stories, so they never take one another card would show.
+export function buildCards(widgets, layout, defaultLimit = DEFAULT_LIMIT, maxItems = 0) {
   const seen = new Set();
-  return layout.filter(({ id }) => widgets[id]).map(({ id, limit }) => {
+  const cards = layout.filter(({ id }) => widgets[id]).map(({ id, limit }) => {
     const widget = widgets[id];
     return {
       id,
@@ -62,4 +65,12 @@ export function buildCards(widgets, layout, defaultLimit = DEFAULT_LIMIT) {
       failedSources: widget.sources.filter((source) => source.error).map((source) => source.name),
     };
   });
+  for (const card of cards) {
+    const spare = maxItems - card.items.length;
+    if (spare <= 0 || !card.items.length) continue;
+    const { maxPerSource, sources } = widgets[card.id];
+    const extra = mergeItems({ limit: spare, maxPerSource }, sources, defaultLimit, seen);
+    card.items.push(...extra.map((item) => ({ ...item, extra: true })));
+  }
+  return cards;
 }

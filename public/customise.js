@@ -6,7 +6,7 @@
 // screen (setup.js). Every change can be undone, or rewound in History (undo.js).
 
 import { escapeHtml } from './cards.js';
-import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setTabCards, tabCards, widgetFor } from './page.js';
+import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setFill, setSolid, setTabCards, tabCards, widgetFor } from './page.js';
 import { openSetup } from './setup.js';
 import { openHistory } from './undo.js';
 import { MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, moveCard, stepCard, validSettings } from './settings.js';
@@ -28,6 +28,14 @@ function build() {
     <label class="arrange-toggle">
       <input type="checkbox" data-field="arrange">
       <span>Fit cards to the screen<small>Arranges the columns so the page is as short as it can be. Turn off to keep cards in the columns you drag them to; moving a card turns it off.</small></span>
+    </label>
+    <label class="arrange-toggle">
+      <input type="checkbox" data-field="fill">
+      <span>Fill the screen with stories<small>Shows more or fewer stories in each card so every column reaches the bottom of the window. Each card's Items number is where it starts.</small></span>
+    </label>
+    <label class="arrange-toggle">
+      <input type="checkbox" data-field="solid">
+      <span>Solid cards<small>Makes the cards opaque, so the background photo doesn't show through them.</small></span>
     </label>
     <ol class="card-list"></ol>
     <form class="add-feed">
@@ -64,6 +72,8 @@ function status(message) {
 function renderList(focus) {
   const { defaultLimit } = currentFeeds();
   dialog.querySelector('[data-field="arrange"]').checked = arrangement() === 'auto';
+  dialog.querySelector('[data-field="fill"]').checked = currentSettings()?.fill !== false;
+  dialog.querySelector('[data-field="solid"]').checked = currentSettings()?.solid === true;
   dialog.querySelector('.card-list').innerHTML = cards.map((card, i) => {
     const widget = widgetFor(card.id);
     const title = escapeHtml(widget.title);
@@ -153,6 +163,16 @@ function onChange(event) {
     cards = tabCards();
     renderList();
     status(event.target.checked ? 'Cards are fitted to the screen.' : 'Cards stay in the columns they\'re in now.');
+    return;
+  }
+  if (field === 'fill') {
+    setFill(event.target.checked);
+    status(event.target.checked ? 'Cards show as many stories as fit the screen.' : 'Cards show their set number of stories.');
+    return;
+  }
+  if (field === 'solid') {
+    setSolid(event.target.checked);
+    status(event.target.checked ? 'Cards are solid.' : 'The photo shows through the cards.');
     return;
   }
   const index = Number(event.target.closest('li').dataset.index);

@@ -1,10 +1,37 @@
 // Rearranges the cards into columns: balanced so the page is as short as possible, or,
 // once the reader has placed cards themselves (page.js marks the grid `data-arrange=manual`
-// and each card `data-col`), in the columns they chose. Without JavaScript the CSS
-// multi-column layout still works; this only improves on it.
+// and each card `data-col`), in the columns they chose. Then, unless the reader turned it
+// off (the `no-fill` class on the page), each card shows more or fewer stories, from the
+// spares it was drawn with, so every column reaches the bottom of the window. Without
+// JavaScript the CSS multi-column layout still works; this only improves on it.
 
 const MIN_COLUMN_WIDTH = 300; // keep in step with `columns: 300px` in style.css
 const EXACT_LIMIT = 16; // above this many cards, use the greedy result alone
+const MIN_ITEMS = 2; // filling never cuts a card below this many stories (or its own number, if fewer)
+
+// How many stories each card in a column shows so the column fills `space`. Each card is
+// { start, sizes }, where sizes[k] is its height showing k stories and `start` is its own
+// number. A column too tall loses stories from whichever card has most; then, while any
+// story still fits, the card with fewest gains one, so the column fills evenly.
+export function fillColumn(cards, space) {
+  const counts = cards.map((card) => card.start);
+  let height = cards.reduce((sum, card, i) => sum + card.sizes[counts[i]], 0);
+  const pick = (allowed, better) => counts.reduce((best, k, i) => (allowed(k, i) && (best < 0 || better(k, counts[best])) ? i : best), -1);
+  while (height > space) {
+    const i = pick((k, i) => k > Math.min(MIN_ITEMS, cards[i].start), (k, best) => k >= best);
+    if (i < 0) break;
+    height -= cards[i].sizes[counts[i]] - cards[i].sizes[counts[i] - 1];
+    counts[i]--;
+  }
+  const growth = (i) => cards[i].sizes[counts[i] + 1] - cards[i].sizes[counts[i]];
+  for (;;) {
+    const i = pick((k, i) => k + 1 < cards[i].sizes.length && height + growth(i) <= space, (k, best) => k < best);
+    if (i < 0) break;
+    height += growth(i);
+    counts[i]++;
+  }
+  return counts;
+}
 
 // Splits cards (given by height) into `columnCount` columns so the tallest column is as
 // short as possible. Returns arrays of card indices, each column in its original order,
@@ -80,19 +107,50 @@ function columnCountFor(grid) {
   return Math.max(1, Math.floor((width + gap) / (MIN_COLUMN_WIDTH + gap)));
 }
 
+// A card's height (with its margin) showing each number of its stories, measured with all
+// of them showing. Hiding stories from the end takes away exactly the space down to the
+// last one left; `start` is how many it shows unfilled (the ones that aren't spares).
+function measureCard(card) {
+  const items = [...card.querySelectorAll('.item')];
+  const full = card.getBoundingClientRect().height + parseFloat(getComputedStyle(card).marginBottom);
+  if (!items.length) return { items, start: 0, sizes: [full] };
+  const bottoms = items.map((item) => item.getBoundingClientRect().bottom);
+  const last = bottoms.at(-1);
+  const sizes = [full - (last - items[0].getBoundingClientRect().top), ...bottoms.map((bottom) => full - (last - bottom))];
+  return { items, start: items.filter((item) => !item.classList.contains('extra')).length, sizes };
+}
+
+function showStories(items, count) {
+  items.forEach((item, i) => {
+    item.classList.toggle('show', i < count);
+    item.classList.toggle('cut', i >= count);
+  });
+}
+
+const resetStories = (grid) => grid.querySelectorAll('.item').forEach((item) => item.classList.remove('show', 'cut'));
+
 function initGrid(grid) {
   let cards = [...grid.children];
   let laidOutWidth = 0;
+  let laidOutHeight = 0;
+  const filling = () => !document.documentElement.classList.contains('no-fill');
 
   const layout = () => {
-    if (grid.clientWidth === laidOutWidth) return;
+    // The window's height only matters when filling it.
+    if (grid.clientWidth === laidOutWidth && (!filling() || window.innerHeight === laidOutHeight)) return;
     laidOutWidth = grid.clientWidth;
+    laidOutHeight = window.innerHeight;
     // Measure in the CSS column layout, where each card already has the column width.
     grid.classList.remove('packed');
     grid.replaceChildren(...cards);
     const count = columnCountFor(grid);
+    const fill = filling() && count > 1;
+    resetStories(grid);
     if (count === 1) return;
-    const heights = cards.map((card) => card.getBoundingClientRect().height + parseFloat(getComputedStyle(card).marginBottom));
+    if (fill) grid.querySelectorAll('.item.extra').forEach((item) => item.classList.add('show'));
+    const measured = cards.map(measureCard);
+    // Packed by the height each card has at its own number of stories.
+    const heights = measured.map(({ start, sizes }) => sizes[start]);
     const manual = grid.dataset.arrange === 'manual';
     const groups = manual
       ? placeColumns(cards.map((card) => (card.dataset.col ? Number(card.dataset.col) : null)), heights, count)
@@ -105,6 +163,13 @@ function initGrid(grid) {
       return column;
     }));
     grid.classList.add('packed');
+    if (!fill) return;
+    const style = getComputedStyle(grid);
+    const space = grid.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    for (const group of groups) {
+      const counts = fillColumn(group.map((i) => measured[i]), space);
+      group.forEach((i, j) => showStories(measured[i].items, counts[j]));
+    }
   };
 
   layout();
@@ -114,7 +179,13 @@ function initGrid(grid) {
     laidOutWidth = 0;
     layout();
   });
-  // Re-pack when the grid's width changes; height changes from packing itself are ignored.
+  // page.js fires this when filling the screen is turned on or off.
+  grid.addEventListener('layout:refresh', () => {
+    laidOutWidth = 0;
+    layout();
+  });
+  // Re-pack when the grid's width (or, when filling, the window's height) changes; height
+  // changes from packing itself are ignored.
   let timer;
   new ResizeObserver(() => { clearTimeout(timer); timer = setTimeout(layout, 100); }).observe(grid);
 }

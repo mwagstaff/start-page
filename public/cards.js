@@ -47,7 +47,7 @@ function renderItem(item, widget, now) {
     // Keeps headlines lined up when a story has no picture: the site's initial instead.
     thumb = `<span class="thumb thumb-empty" aria-hidden="true">${escapeHtml(siteInitial(item))}</span>`;
   }
-  return `<li class="item${thumb ? ' has-thumb' : ''}">
+  return `<li class="item${thumb ? ' has-thumb' : ''}${item.extra ? ' extra' : ''}">
       ${thumb}
       <div class="body">
         <a class="headline" href="${escapeHtml(item.link)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a>
@@ -65,6 +65,7 @@ export function renderWidget(widget, now) {
     : escapeHtml(widget.title);
   let body;
   if (widget.items.length) {
+    // Spare stories (see buildCards) stay hidden unless layout.js has room for them.
     body = `<ul class="items">${widget.items.map((item) => renderItem(item, widget, now)).join('')}</ul>`;
   } else if (widget.failedSources.length) {
     body = `<p class="empty">Couldn't load this feed. It will try again in a few minutes.</p>`;

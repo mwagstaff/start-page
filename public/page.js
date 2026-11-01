@@ -8,7 +8,7 @@ import { buildCards } from './stories.js';
 import { renderWidget } from './cards.js';
 import { renderWeather } from './forecast.js';
 import { canRedo, canUndo, describeChange, loadHistory, moveTo, recordChange, saveHistory } from './history.js';
-import { cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
+import { MAX_CARD_ITEMS, cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
 import { layoutForProfile, profileCards, profileSourceIds, profileWidgets } from './topics.js';
 
 const grid = document.querySelector('.grid');
@@ -111,7 +111,7 @@ export function shownColumns() {
 function drawCards() {
   if (!grid || !feeds) return;
   const layout = tabCards().filter((card) => !card.hidden);
-  const html = buildCards(allWidgets(), layout, feeds.defaultLimit).map((card) => renderWidget(card)).join('');
+  const html = buildCards(allWidgets(), layout, feeds.defaultLimit, MAX_CARD_ITEMS).map((card) => renderWidget(card)).join('');
   grid.classList.remove('packed');
   grid.innerHTML = html;
   // layout.js reads these to keep each card in the reader's column.
@@ -157,11 +157,16 @@ export async function refreshProfileFeeds() {
   drawCards();
 }
 
-// The weather and photo can be turned off on the setup screen. The early script in the page
-// sets the same classes before it paints; this keeps them in step after a change.
+// The weather and photo can be turned off on the setup screen, and filling the screen with
+// stories and see-through cards in Customise. The early script in the page sets the same classes before it
+// paints; this keeps them in step after a change.
 function applyPageOptions() {
   const { profile } = settings ?? {};
   const root = document.documentElement;
+  const filled = !root.classList.contains('no-fill');
+  root.classList.toggle('no-fill', settings?.fill === false);
+  if (filled !== (settings?.fill !== false)) grid?.dispatchEvent(new Event('layout:refresh'));
+  root.classList.toggle('solid-cards', settings?.solid === true);
   root.classList.toggle('no-weather', profile?.weather === false);
   root.classList.toggle('no-backdrop', profile?.backdrop === false);
   document.body.classList.toggle('has-backdrop', profile?.backdrop !== false && Boolean(document.querySelector('.backdrop')));
@@ -252,6 +257,20 @@ export function placeCards(columns, label) {
   const placed = columns.flatMap((ids, col) => ids.filter((id) => saved.has(id)).map((id) => ({ ...saved.get(id), col })));
   const ids = new Set(placed.map((card) => card.id));
   setTabCards([...placed, ...[...saved.values()].filter((card) => !ids.has(card.id))], 'manual', label);
+}
+
+// Whether cards show more or fewer stories so the columns reach the bottom of the window.
+export function setFill(on) {
+  const { fill, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  save(on ? rest : { ...rest, fill: false }, on ? 'Filled the screen with stories' : 'Stopped filling the screen with stories');
+  applyPageOptions();
+}
+
+// Whether cards are opaque, or let the background photo show through (the default).
+export function setSolid(on) {
+  const { solid, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  save(on ? { ...rest, solid: true } : rest, on ? 'Made the cards solid' : 'Made the cards see-through');
+  applyPageOptions();
 }
 
 // 'auto' packs the cards to fit the screen again; 'manual' keeps them where they are now.

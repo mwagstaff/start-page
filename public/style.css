@@ -30,9 +30,11 @@
   }
 }
 
-/* With a daily photo behind the page, surfaces turn translucent and blur what's under them. */
+/* With a daily photo behind the page, surfaces turn translucent and blur what's under them.
+   Cards let more of the photo through (--card-bg), unless the reader chose solid cards. */
 .has-backdrop {
   --surface: rgb(255 255 255 / 0.86);
+  --card-bg: rgb(255 255 255 / 0.68);
   --border: rgb(29 28 26 / 0.12);
   --masthead-bg: rgb(12 12 11 / 0.55);
   --masthead-border: rgb(255 255 255 / 0.18);
@@ -41,6 +43,7 @@
 @media (prefers-color-scheme: dark) {
   .has-backdrop {
     --surface: rgb(24 23 21 / 0.82);
+    --card-bg: rgb(24 23 21 / 0.62);
     --border: rgb(255 255 255 / 0.1);
     --masthead-bg: rgb(0 0 0 / 0.55);
   }
@@ -68,10 +71,26 @@ a { color: inherit; text-decoration: none; }
   object-fit: cover;
 }
 
-.has-backdrop .masthead,
-.has-backdrop .card {
+.has-backdrop .masthead {
   -webkit-backdrop-filter: blur(16px) saturate(1.3);
   backdrop-filter: blur(16px) saturate(1.3);
+}
+
+.has-backdrop .card {
+  background: var(--card-bg);
+  -webkit-backdrop-filter: blur(6px) saturate(1.2);
+  backdrop-filter: blur(6px) saturate(1.2);
+}
+
+/* "Solid cards" in Customise: no photo behind the cards. */
+.solid-cards .has-backdrop .card {
+  background: #ffffff;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .solid-cards .has-backdrop .card { background: #1e1d1b; }
 }
 
 /* Bottom-right hotspot: hover or focus it to fade the page and see the photo in full.
@@ -480,6 +499,11 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 }
 
 .item:last-child { border-bottom: 0; }
+
+/* Spare stories (buildCards) show only where layout.js finds room to fill the screen, and it
+   cuts stories that don't fit. The last one showing loses its rule like a last child. */
+.item.extra:not(.show), .item.cut { display: none; }
+.item:has(+ .item:is(.cut, .extra:not(.show))) { border-bottom: 0; }
 
 .thumb {
   flex: none;
