@@ -195,7 +195,9 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
   background: var(--accent);
 }
 
-.date { color: var(--masthead-muted); font-size: 13px; white-space: nowrap; }
+.date { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--masthead-muted); font-size: 13px; white-space: nowrap; }
+/* When space is short the date gives way, so the buttons never slide under the search box. */
+.brand, .title .refresh, .title .icon-button { flex: none; }
 
 /* Compact search box between the title and the weather; it takes the spare width. */
 .search { flex: 1 1 200px; max-width: 420px; min-width: 0; }
@@ -890,3 +892,211 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 }
 
 .customise .setup-open { margin: -4px 0 12px; }
+
+/* Removing a card: the × in its corner (remove.js), shown on hover or focus */
+.card { position: relative; }
+
+.card-close {
+  display: none;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s, color 0.15s, background-color 0.15s;
+}
+
+.can-remove .card-close { display: grid; }
+.can-remove .card > h2 { padding-right: 26px; }
+.card:hover .card-close,
+.card:focus-within .card-close { opacity: 0.75; }
+.card-close:hover,
+.card-close:focus-visible { opacity: 1; color: var(--text); background: color-mix(in srgb, var(--text) 9%, transparent); }
+.card-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.card-close svg { display: block; }
+/* No hover on touch screens, so keep it faintly there. */
+@media (hover: none) { .card-close { opacity: 0.45; } }
+.is-reordering .card-close,
+.card.is-lifted .card-close { opacity: 0; }
+
+/* Asking before a card is removed */
+.remove-dialog { width: min(440px, calc(100vw - 32px)); }
+.remove-dialog h2 { margin-bottom: 12px; overflow-wrap: anywhere; }
+
+.remove-preview {
+  margin: 0 0 14px;
+  padding: 10px 12px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+  /* Fades out at the bottom, like a card about to go. */
+  mask-image: linear-gradient(to bottom, #000 60%, transparent);
+}
+
+.remove-preview strong { display: block; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.remove-preview ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.remove-preview li,
+.remove-preview p { margin: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.remove-lead { margin: 0 0 8px; font-size: 13px; }
+
+.remove-ways { display: grid; gap: 8px; margin: 0 0 16px; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+.remove-ways li { display: grid; grid-template-columns: 44px 1fr; align-items: start; gap: 10px; }
+.remove-ways strong { color: var(--text); }
+
+.remove-icon,
+.remove-dialog kbd {
+  display: grid;
+  place-items: center;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.remove-dialog .primary { background: #b42318; border-color: #b42318; }
+
+kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface);
+  font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+}
+
+/* The undo message (undo.js) */
+.undo-toast {
+  inset: auto 0 20px;
+  margin: 0 auto;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 6px 6px 6px 14px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--masthead-text);
+  background: #1d1c1a;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.3);
+  font-size: 13px;
+  animation: toast-in 0.2s ease-out;
+}
+
+.undo-toast:popover-open { display: flex; }
+.undo-toast.is-leaving { opacity: 0; transform: translateY(8px); transition: opacity 0.18s, transform 0.18s; }
+.undo-toast-text { flex: 1; min-width: 0; margin-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.undo-toast em { font-style: normal; color: #b5b0a6; }
+
+.undo-toast button {
+  flex: none;
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: #f08a4b;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.undo-toast button:hover,
+.undo-toast button:focus-visible { background: rgb(255 255 255 / 0.1); }
+.undo-toast .undo-toast-close { width: 28px; padding: 0; color: #b5b0a6; font-size: 16px; font-weight: 400; }
+
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+
+/* The History dialog (undo.js) */
+.history-open.has-history { color: var(--masthead-text); }
+.history-dialog .customise-head p { line-height: 1.5; }
+
+.history-list {
+  position: relative;
+  max-height: min(420px, calc(100vh - 280px));
+  margin: 0 0 6px;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.history-list li { position: relative; }
+
+/* The timeline running down the left. */
+.history-list li:not(.history-empty)::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+
+.history-list li:first-child::before { top: 50%; }
+.history-list li:last-child::before { bottom: 50%; }
+
+.history-dialog .history-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+}
+
+.history-dialog .history-item:hover { border-color: var(--border); background: var(--surface); }
+.history-dialog .is-current .history-item { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); cursor: default; }
+
+.history-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.is-current .history-dot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.is-undone .history-dot { border-style: dashed; }
+.is-undone .history-label { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+
+.history-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.history-item time { flex: none; color: var(--muted); font-size: 12px; }
+
+.history-badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.is-current .history-badge { color: #fff; background: var(--accent); }
+.history-empty { padding: 16px 4px; color: var(--muted); font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .undo-toast { animation: none; }
+  .card-close, .undo-toast.is-leaving { transition: none; }
+}

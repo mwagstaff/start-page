@@ -3,11 +3,12 @@
 // columns they were put in, add your own RSS or Atom feeds, and export or import the
 // settings as a file. Changes apply straight away and are saved in
 // this browser (see settings.js); no account needed. "Topics & sources" reopens the setup
-// screen (setup.js).
+// screen (setup.js). Every change can be undone, or rewound in History (undo.js).
 
 import { escapeHtml } from './cards.js';
 import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setTabCards, tabCards, widgetFor } from './page.js';
 import { openSetup } from './setup.js';
+import { openHistory } from './undo.js';
 import { MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, moveCard, stepCard, validSettings } from './settings.js';
 
 const opener = document.querySelector('.customise-open');
@@ -42,6 +43,7 @@ function build() {
       <button type="button" data-action="import">Import</button>
       <input type="file" accept="application/json,.json" hidden>
       <button type="button" data-action="reset">Reset to default</button>
+      <button type="button" data-action="history">History…</button>
       <button type="button" data-action="close" class="primary">Done</button>
     </div>`;
   document.body.append(dialog);
@@ -124,7 +126,7 @@ async function onClick(event) {
     case 'reset': {
       // Back to the default page, without asking about topics again.
       const { profile, tabs, ...rest } = currentSettings() ?? {};
-      await replaceSettings({ v: 1, custom: [], ...rest, tabs: {}, onboarded: true });
+      await replaceSettings({ v: 1, custom: [], ...rest, tabs: {}, onboarded: true }, 'Reset to the default cards');
       cards = tabCards();
       renderList();
       status('Back to the default cards.');
@@ -133,6 +135,9 @@ async function onClick(event) {
     case 'setup':
       dialog.close();
       openSetup();
+      break;
+    case 'history':
+      openHistory();
       break;
     case 'close':
       dialog.close();
@@ -259,7 +264,7 @@ async function onImport(event) {
     status("That file isn't a Start settings export.");
     return;
   }
-  await replaceSettings(settings);
+  await replaceSettings(settings, `Imported ${file.name}`);
   cards = tabCards();
   renderList();
   status(`Imported ${file.name}.`);
@@ -274,6 +279,13 @@ async function open() {
   renderList();
   dialog.showModal();
 }
+
+// Undo, redo or rewind while the dialog is open: show the page as it is now.
+document.addEventListener('history:change', ({ detail: { type } }) => {
+  if (!dialog?.open || type === 'change' || type === 'clear') return;
+  cards = tabCards();
+  renderList();
+});
 
 if (opener) {
   opener.hidden = false;

@@ -2,10 +2,12 @@
 // they've customised it, and in place when the feeds change. The server's first render
 // (the default layout) stays for anyone who hasn't customised, or without JavaScript.
 // Cards from the setup screen's choices (topics.js) are filled from /api/sources.
+// Every change to the settings is recorded (history.js), so it can be undone.
 
 import { buildCards } from './stories.js';
 import { renderWidget } from './cards.js';
 import { renderWeather } from './forecast.js';
+import { canRedo, canUndo, describeChange, loadHistory, moveTo, recordChange, saveHistory } from './history.js';
 import { cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
 import { layoutForProfile, profileCards, profileSourceIds, profileWidgets } from './topics.js';
 
@@ -17,6 +19,8 @@ let settings = loadSettings(); // kept here too, in case storage is blocked
 const custom = new Map(); // custom feed id → { title, items } or { error }, once loaded
 let catalogue = null; // /api/catalogue.json, once a profile needs it
 let profileLoaded = {}; // catalogue feed id → { name, error, items }, from /api/sources
+let history = loadHistory(); // kept here too, in case storage is blocked
+let pending = null; // a change not yet in the history: { before, beforeCards, label }
 
 export const currentVersion = () => shownVersion;
 export const currentFeeds = () => feeds;
@@ -89,9 +93,9 @@ function allWidgets() {
 export const widgetFor = (id) => allWidgets()[id];
 
 // This tab's cards in page order, with hidden ones included (for the Customise dialog).
-export function tabCards() {
+export function tabCards(from = settings) {
   const defaults = feeds.tabs.find((t) => t.id === tab)?.widgets ?? [];
-  return cardList(settings?.tabs[tab]?.cards, defaults, Object.keys(allWidgets()));
+  return cardList(from?.tabs[tab]?.cards, defaults, Object.keys(allWidgets()));
 }
 
 // 'manual' once the reader has put cards in columns themselves, else 'auto' (packed to fit).
@@ -167,6 +171,7 @@ function applyPageOptions() {
 // page keep their place, new ones go after them, and ones no longer wanted are hidden.
 export async function setProfile(profile) {
   await Promise.all([fetchCatalogue(), feeds || fetchFeeds()]);
+  record('Changed topics & sources');
   const next = { v: 1, tabs: {}, custom: [], ...settings, profile, onboarded: true };
   settings = next;
   const allIds = Object.keys(allWidgets());
@@ -198,28 +203,55 @@ export function show(data) {
   if (weather && data.weather && !document.body.dataset.localWeather) weather.outerHTML = renderWeather(data.weather);
 }
 
-function save(next) {
+// Notes the settings as they are before a change. Changes made together (adding a feed
+// saves twice) become one step in the history, recorded once they're all done.
+function record(label) {
+  if (!pending) {
+    pending = { before: settings, beforeCards: feeds ? tabCards() : [], label };
+    queueMicrotask(commitHistory);
+  }
+  pending.label ??= label;
+}
+
+function commitHistory() {
+  const { before, beforeCards, label } = pending;
+  pending = null;
+  if (JSON.stringify(before ?? null) === JSON.stringify(settings ?? null)) return;
+  const description = label ?? describeChange({ before, after: settings, beforeCards, afterCards: feeds ? tabCards() : [], titleFor: (id) => widgetFor(id)?.title });
+  history = recordChange(loadHistory() ?? history, before, settings, description, Date.now());
+  saveHistory(history);
+  announce('change', description);
+}
+
+// Tells the page (the undo message, the History and Customise dialogs) what happened.
+function announce(type, label) {
+  document.dispatchEvent(new CustomEvent('history:change', { detail: { type, label } }));
+}
+
+function save(next, label) {
+  record(label);
   settings = next;
   saveSettings(settings);
   drawCards();
 }
 
-// Saves this tab's cards (null goes back to the default layout) and redraws.
-export function setTabCards(cards, arrange = arrangement()) {
+// Saves this tab's cards (null goes back to the default layout) and redraws. `label` names
+// the change in the history, when it can say more than the settings show.
+export function setTabCards(cards, arrange = arrangement(), label = undefined) {
   const tabs = { ...settings?.tabs };
   if (cards) tabs[tab] = { cards, ...(arrange === 'manual' && { arrange }) };
   else delete tabs[tab];
-  save({ v: 1, custom: [], ...settings, tabs });
+  save({ v: 1, custom: [], ...settings, tabs }, label);
 }
 
 // Keeps the cards in the columns shown (see shownColumns): from now on each card stays in
 // its column, and page order runs down each column in turn. Cards not on screen keep their
 // settings and follow.
-export function placeCards(columns) {
+export function placeCards(columns, label) {
   const saved = new Map(tabCards().map((card) => [card.id, card]));
   const placed = columns.flatMap((ids, col) => ids.filter((id) => saved.has(id)).map((id) => ({ ...saved.get(id), col })));
   const ids = new Set(placed.map((card) => card.id));
-  setTabCards([...placed, ...[...saved.values()].filter((card) => !ids.has(card.id))], 'manual');
+  setTabCards([...placed, ...[...saved.values()].filter((card) => !ids.has(card.id))], 'manual', label);
 }
 
 // 'auto' packs the cards to fit the screen again; 'manual' keeps them where they are now.
@@ -230,9 +262,9 @@ export function setArrange(mode) {
   else setTabCards(tabCards().map(({ col, ...card }) => card), 'auto');
 }
 
-export async function replaceSettings(value) {
+export async function replaceSettings(value, label) {
   if (value?.profile) await fetchCatalogue();
-  save(value);
+  save(value, label);
   applyPageOptions();
   refreshCustomFeeds();
   refreshProfileFeeds();
@@ -249,6 +281,49 @@ export async function addCustomFeed(url) {
   save({ v: 1, tabs: {}, ...settings, custom: [...(settings?.custom ?? []), { id, url, title: result.title }] });
   setTabCards([{ id }, ...cards]);
   return null;
+}
+
+// Takes a card off the page. It stays in Customise, unticked, to bring back.
+export async function hideCard(id) {
+  if (!feeds && !(await fetchFeeds())) return;
+  setTabCards(tabCards().map((card) => (card.id === id ? { ...card, hidden: true } : card)));
+}
+
+export const currentHistory = () => history;
+
+// Puts the page back as it was at a point in the history, without recording a change.
+// Having seen the setup screen stays remembered, so going back doesn't offer it again.
+async function goTo(index, type) {
+  history = loadHistory() ?? history;
+  if (!history || index === history.index || index < 0 || index >= history.entries.length) return false;
+  if (!feeds && !(await fetchFeeds())) return false;
+  // Undo names the change it takes back; redo and rewind, the one they go to.
+  const label = type === 'undo' ? history.entries[history.index].label : history.entries[index].label;
+  history = moveTo(history, index);
+  saveHistory(history);
+  const target = history.entries[index].settings;
+  const onboarded = settings?.onboarded || target?.onboarded;
+  const value = target ? { ...target, ...(onboarded && { onboarded: true }) } : onboarded ? { v: 1, tabs: {}, custom: [], onboarded: true } : null;
+  if (value?.profile) await fetchCatalogue();
+  settings = value;
+  saveSettings(settings);
+  drawCards();
+  applyPageOptions();
+  refreshCustomFeeds();
+  refreshProfileFeeds();
+  announce(type, label);
+  return true;
+}
+
+export const undo = () => (canUndo(history) ? goTo(history.index - 1, 'undo') : Promise.resolve(false));
+export const redo = () => (canRedo(history) ? goTo(history.index + 1, 'redo') : Promise.resolve(false));
+export const rewindTo = (index) => goTo(index, 'rewind');
+
+// Forgets every change, keeping the page as it is now.
+export function clearHistory() {
+  history = null;
+  saveHistory(null);
+  announce('clear');
 }
 
 export function removeCustomFeed(id) {

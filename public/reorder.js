@@ -5,7 +5,7 @@
 // turn fitting them to the screen back on. Escape puts the card back. From the keyboard, use
 // the Customise dialog.
 
-import { currentFeeds, fetchFeeds, placeCards, setTabCards, shownColumns, tabCards } from './page.js';
+import { currentFeeds, fetchFeeds, placeCards, setTabCards, shownColumns, tabCards, widgetFor } from './page.js';
 import { moveCard } from './settings.js';
 
 const grid = document.querySelector('.grid');
@@ -118,8 +118,9 @@ async function save(card) {
   const placed = shownColumns();
   const order = [...grid.querySelectorAll('.card')].map((el) => el.id);
   if (!currentFeeds() && !(await fetchFeeds())) return;
+  const label = `Moved “${widgetFor(card.id)?.title ?? card.id}”`;
   if (placed) {
-    placeCards(placed);
+    placeCards(placed, label);
     return;
   }
   // One column on screen: just a new place in the order, after the card now above it.
@@ -127,7 +128,7 @@ async function save(card) {
   const index = order.indexOf(card.id);
   const rest = cards.filter((c) => c.id !== card.id);
   const to = index === 0 ? rest.findIndex((c) => c.id === order[1]) : rest.findIndex((c) => c.id === order[index - 1]) + 1;
-  setTabCards(moveCard(cards, cards.findIndex((c) => c.id === card.id), Math.max(0, to)));
+  setTabCards(moveCard(cards, cards.findIndex((c) => c.id === card.id), Math.max(0, to)), undefined, label);
 }
 
 // The click that ends a drag isn't a click on whatever link is under the pointer.

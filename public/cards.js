@@ -56,6 +56,9 @@ function renderItem(item, widget, now) {
     </li>`;
 }
 
+// The × that removes a card (remove.js shows it once it can).
+const CLOSE_ICON = '<svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg>';
+
 export function renderWidget(widget, now) {
   const title = widget.link
     ? `<a href="${escapeHtml(widget.link)}" target="_blank" rel="noopener">${escapeHtml(widget.title)}</a>`
@@ -73,6 +76,7 @@ export function renderWidget(widget, now) {
     : '';
   return `<section class="card" id="${escapeHtml(widget.id)}" aria-labelledby="${escapeHtml(widget.id)}-title">
     <h2 id="${escapeHtml(widget.id)}-title">${title}</h2>
+    <button type="button" class="card-close" aria-label="Remove ${escapeHtml(widget.title)}" title="Remove this card">${CLOSE_ICON}</button>
     ${body}
     ${stale}
   </section>`;
