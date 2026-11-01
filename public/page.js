@@ -1,11 +1,13 @@
 // Draws the cards in the browser from /api/feeds.json: in the reader's own layout when
 // they've customised it, and in place when the feeds change. The server's first render
 // (the default layout) stays for anyone who hasn't customised, or without JavaScript.
+// Cards from the setup screen's choices (topics.js) are filled from /api/sources.
 
 import { buildCards } from './stories.js';
 import { renderWidget } from './cards.js';
 import { renderWeather } from './forecast.js';
 import { cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
+import { layoutForProfile, profileCards, profileSourceIds, profileWidgets } from './topics.js';
 
 const grid = document.querySelector('.grid');
 const { tab } = document.body.dataset;
@@ -13,10 +15,29 @@ let shownVersion = document.body.dataset.version;
 let feeds = null;
 let settings = loadSettings(); // kept here too, in case storage is blocked
 const custom = new Map(); // custom feed id → { title, items } or { error }, once loaded
+let catalogue = null; // /api/catalogue.json, once a profile needs it
+let profileLoaded = {}; // catalogue feed id → { name, error, items }, from /api/sources
 
 export const currentVersion = () => shownVersion;
 export const currentFeeds = () => feeds;
 export const currentSettings = () => settings;
+export const currentCatalogue = () => catalogue;
+
+// The outlets and topics to choose from. The early script starts this fetch for readers
+// with a profile, so their cards don't wait for it.
+export async function fetchCatalogue() {
+  if (catalogue) return catalogue;
+  try {
+    catalogue = await (window.startCatalogue?.catch(() => null) ?? fetch('/api/catalogue.json').then((response) => (response.ok ? response.json() : null)));
+  } catch {
+    catalogue = null;
+  }
+  window.startCatalogue = null;
+  return catalogue;
+}
+
+// The cards the reader's profile makes (none until the catalogue has loaded).
+const currentProfileCards = () => (settings?.profile && catalogue ? profileCards(settings.profile, catalogue) : []);
 
 // `fresh` skips any cached copy, straight after the refresh button made the server refetch.
 export async function fetchFeeds({ fresh = false } = {}) {
@@ -42,9 +63,10 @@ export async function fetchCustomFeed(url) {
   }
 }
 
-// Every card there is: the server's, then the reader's own feeds, in the snapshot's shape.
+// Every card there is: the server's, the ones the reader's profile makes, then the reader's
+// own feeds, in the snapshot's shape.
 function allWidgets() {
-  const widgets = { ...feeds.widgets };
+  const widgets = { ...feeds.widgets, ...profileWidgets(currentProfileCards(), profileLoaded) };
   for (const feed of settings?.custom ?? []) {
     const loaded = custom.get(feed.id);
     widgets[feed.id] = {
@@ -56,6 +78,10 @@ function allWidgets() {
       custom: true,
       sources: [{ name: feed.title, error: loaded?.error ?? null, items: loaded?.items ?? [] }],
     };
+  }
+  // "Compact" on the setup screen: no pictures on any card.
+  if (settings?.profile?.pictures === false) {
+    for (const [id, widget] of Object.entries(widgets)) widgets[id] = { ...widget, thumbnails: false };
   }
   return widgets;
 }
@@ -109,10 +135,59 @@ export async function refreshCustomFeeds() {
   if (changed) drawCards();
 }
 
+// Loads (or reloads) the catalogue feeds the reader's profile uses, then redraws if any
+// changed. The browser revalidates its copy, so this is usually a 304.
+export async function refreshProfileFeeds() {
+  const ids = profileSourceIds(currentProfileCards());
+  if (!ids.length) return;
+  let loaded;
+  try {
+    const response = await fetch(`/api/sources?ids=${ids.join(',')}`, { cache: 'no-cache' });
+    if (!response.ok) return;
+    loaded = (await response.json()).sources;
+  } catch {
+    return; // offline or restarting: keep what's shown
+  }
+  if (JSON.stringify(loaded) === JSON.stringify(profileLoaded)) return;
+  profileLoaded = loaded;
+  drawCards();
+}
+
+// The weather and photo can be turned off on the setup screen. The early script in the page
+// sets the same classes before it paints; this keeps them in step after a change.
+function applyPageOptions() {
+  const { profile } = settings ?? {};
+  const root = document.documentElement;
+  root.classList.toggle('no-weather', profile?.weather === false);
+  root.classList.toggle('no-backdrop', profile?.backdrop === false);
+  document.body.classList.toggle('has-backdrop', profile?.backdrop !== false && Boolean(document.querySelector('.backdrop')));
+}
+
+// Saves the setup screen's choices and rebuilds the cards from them: cards already on the
+// page keep their place, new ones go after them, and ones no longer wanted are hidden.
+export async function setProfile(profile) {
+  await Promise.all([fetchCatalogue(), feeds || fetchFeeds()]);
+  const next = { v: 1, tabs: {}, custom: [], ...settings, profile, onboarded: true };
+  settings = next;
+  const allIds = Object.keys(allWidgets());
+  const cards = layoutForProfile(settings.tabs[tab]?.cards, currentProfileCards(), allIds, (id) => widgetFor(id)?.custom);
+  settings = { ...next, tabs: { ...next.tabs, [tab]: { ...next.tabs[tab], cards } } };
+  saveSettings(settings);
+  applyPageOptions();
+  drawCards();
+  await refreshProfileFeeds();
+}
+
+// Remembers that the reader has seen the setup screen, without changing their page.
+export function skipSetup() {
+  settings = { v: 1, tabs: {}, custom: [], ...settings, onboarded: true };
+  saveSettings(settings);
+}
+
 // Shows a newer snapshot in place. A new background photo (once a day) needs a reload.
 export function show(data) {
   feeds = data;
-  if (data.backdrop?.url && data.backdrop.url !== document.querySelector('.backdrop')?.getAttribute('src')) {
+  if (settings?.profile?.backdrop !== false && data.backdrop?.url && data.backdrop.url !== document.querySelector('.backdrop')?.getAttribute('src')) {
     location.reload();
     return;
   }
@@ -155,9 +230,12 @@ export function setArrange(mode) {
   else setTabCards(tabCards().map(({ col, ...card }) => card), 'auto');
 }
 
-export function replaceSettings(value) {
+export async function replaceSettings(value) {
+  if (value?.profile) await fetchCatalogue();
   save(value);
+  applyPageOptions();
   refreshCustomFeeds();
+  refreshProfileFeeds();
 }
 
 // Adds a feed the reader typed in, at the top of this tab. Returns an error message, or null.
@@ -181,13 +259,15 @@ export function removeCustomFeed(id) {
 
 // With a customised layout, the early script in the page has already started the fetch.
 // Custom cards show "Loading…" until their feeds arrive.
+applyPageOptions();
 if (settings?.tabs[tab]) {
-  const data = await (window.startFeeds?.catch(() => null) ?? fetchFeeds());
+  const [data] = await Promise.all([window.startFeeds?.catch(() => null) ?? fetchFeeds(), settings.profile && fetchCatalogue()]);
   if (data) {
     feeds = data;
     shownVersion = data.version;
     drawCards();
     refreshCustomFeeds();
+    refreshProfileFeeds();
   }
   document.documentElement.classList.remove('customised');
 }

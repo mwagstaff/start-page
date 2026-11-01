@@ -196,6 +196,13 @@ Weather location: needs a small geocoding lookup (Open-Meteo has a free geocodin
 per-reader weather, which the server doesn't do yet. **Suggest shipping v1 with just
 on/off** for the shared location, and adding a per-reader location as a follow-up.
 
+**Built (steps 3 and 4):** `public/topics.js` turns a profile into cards, `public/setup.js` is
+the setup screen, and Customise has "Topics & sources…". Differences from the sketch above:
+weather is on/off only (no per-reader location yet); in "one card per source" mode each outlet's
+card mixes its feeds for the chosen news topics (its top stories if none); with "Both" regions,
+topic cards mix UK and US outlets. Re-running setup keeps cards where the reader put them, so
+newly chosen cards go after them rather than in the screen's order.
+
 ## 5. Keeping the catalogue healthy
 
 - `npm run check-feeds`: fetches every catalogue URL, reports status, item count and newest

@@ -411,6 +411,42 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 
 .grid.packed .column { flex: 1 1 0; min-width: 0; }
 
+/* Packed columns fit the window, so the page itself never scrolls: each column keeps its
+   cards at full height except the last, which stops at the bottom of the window and
+   scrolls its stories instead. (layout.js measures cards unpacked, so this doesn't skew
+   the packing.) A single column on a narrow screen still scrolls the page as usual. */
+body:has(.grid.packed) {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
+
+.grid.packed { flex: 1 1 auto; min-height: 0; padding-bottom: 0; }
+
+.grid.packed .column {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow-y: auto; /* only if a column's cards can't all fit even when squeezed */
+  scrollbar-width: none;
+}
+
+.grid.packed .card { display: flex; flex-direction: column; flex: none; max-height: calc(100% - 12px); }
+.grid.packed .card:last-child { flex: 0 1 auto; min-height: 160px; }
+.grid.packed .card > :is(h2, .stale) { flex: none; }
+
+.grid.packed .card .items {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
 .card {
   break-inside: avoid;
   margin: 0 0 12px;
@@ -675,3 +711,182 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 }
 
 .add-feed input:focus { outline: none; border-color: var(--accent); }
+
+/* Turned off on the setup screen (the early script sets these before the page paints). */
+.no-weather .weather,
+.no-backdrop .backdrop,
+.no-backdrop .peek { display: none; }
+
+/* Setup screen (setup.js) */
+.setup {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text);
+  background: var(--bg);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);
+}
+
+.setup[open] { display: flex; }
+.setup::backdrop { background: rgb(0 0 0 / 0.5); }
+
+.setup-form { display: flex; flex-direction: column; width: 100%; min-height: 0; }
+
+.setup-body { overflow-y: auto; padding: 22px 22px 8px; }
+
+.setup-head h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: -0.01em; }
+.setup-head p { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+
+.setup fieldset { margin: 0 0 20px; padding: 0; border: 0; min-width: 0; }
+
+.setup legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.setup-hint { margin: -4px 0 8px; color: var(--muted); font-size: 12px; }
+.setup-warning { min-height: 0; margin: 8px 0 0; color: var(--accent); font-size: 12px; }
+.setup-warning:empty { display: none; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips + .chips { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+
+/* Chips and segmented buttons are real inputs, hidden but focusable, inside their labels. */
+.chip input,
+.segmented input { position: absolute; opacity: 0; pointer-events: none; }
+
+.chip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.chip span::before {
+  content: "+";
+  width: 0.8em;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: center;
+}
+
+.chip:hover span { border-color: var(--muted); }
+
+.chip input:checked + span {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  font-weight: 600;
+}
+
+.chip input:checked + span::before { content: "✓"; color: inherit; }
+
+.chip input:focus-visible + span,
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.paywall {
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.segmented label { position: relative; }
+
+.segmented span {
+  display: block;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.segmented input:checked + span { color: #fff; background: var(--accent); font-weight: 600; }
+
+.setup-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 10px;
+}
+
+.setup-option-label { width: 4.5em; color: var(--muted); font-size: 13px; }
+
+.setup-check { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; cursor: pointer; }
+.setup-check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+
+.setup-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.setup-actions button {
+  min-height: 36px;
+  padding: 4px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.setup-actions .primary { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.setup-actions button:disabled { opacity: 0.45; cursor: default; }
+
+/* On phones the setup screen fills the screen, with its buttons always in reach. */
+@media (max-width: 600px) {
+  .setup {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .setup-body { padding: 18px 16px 8px; }
+  .setup-actions { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+  .setup-option-label { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip span { transition: none; }
+}
+
+.customise .setup-open { margin: -4px 0 12px; }

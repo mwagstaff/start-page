@@ -23,7 +23,10 @@ const thumbs = createThumbnailer({ maxEntries: 3000 });
 const images = createImageFinder({ maxEntries: 5000 });
 const customFeeds = createCustomFeeds({ ttlMinutes: config.refreshMinutes });
 const cache = createCache(config, { thumbs, images });
-const sources = createSources(catalogueSources(catalogue), { refreshMinutes: config.refreshMinutes }, { thumbs, images });
+// Feeds also on the default page come from its cache rather than being fetched twice.
+const sources = createSources(catalogueSources(catalogue), { refreshMinutes: config.refreshMinutes }, {
+  thumbs, images, shared: cache.source, sharedVersion: () => cache.snapshot().version,
+});
 sources.start();
 const catalogueBody = JSON.stringify(publicCatalogue(catalogue));
 const catalogueEtag = `"${createHash('sha256').update(catalogueBody).digest('hex').slice(0, 16)}"`;
@@ -160,6 +163,7 @@ const server = createServer(async (req, res) => {
         res.writeHead(301, { Location: `/api/sources?ids=${ids}`, 'Cache-Control': 'public, max-age=86400' });
         return res.end();
       }
+      await (cache.ready || cache.pending);
       const { body, etag } = await sources.get(asked);
       if (notModified(req, res, etag, 'public, max-age=60, stale-while-revalidate=600')) return;
       res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -123,3 +123,14 @@ test('the snapshot sends spare items per source and keeps its version until some
   await cache.refresh();
   assert.equal(cache.snapshot().version, first.version);
 });
+
+test('source() shares a config feed\'s latest result and ignores other URLs', async () => {
+  const cache = createCache({ widgets: { w: { title: 'W', sources: [{ name: 'S', url: 'https://s' }] } } }, {
+    log: quiet,
+    fetch: async () => [item('https://s/1', '2026-10-01')],
+  });
+  assert.deepEqual(cache.source('https://s'), { items: [], fetchedAt: null, error: null });
+  assert.equal(cache.source('https://elsewhere'), undefined);
+  await cache.refresh();
+  assert.equal(cache.source('https://s').items[0].link, 'https://s/1');
+});

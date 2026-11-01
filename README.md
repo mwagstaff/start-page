@@ -103,6 +103,15 @@ npm test
   someone has asked for it in the last 24 hours, then left alone until it's next wanted
   (`lib/sources.js`). Only catalogue ids are accepted, never URLs. Ids are sorted, and any other
   order gets a 301 to the sorted form, so pages asking for the same feeds share one response.
-  Responses carry an ETag and `Cache-Control: public, max-age=60, stale-while-revalidate=600`;
-  Cloudflare will only cache them at the edge once the feeds-snapshot Cache Rule also covers
-  `/api/sources`.
+  Responses carry an ETag and `Cache-Control: public, max-age=60, stale-while-revalidate=600`.
+  Cloudflare caches them through the Cache Rule "Start page: cache feeds snapshot, catalogue and
+  sources (origin Cache-Control)", which covers `/api/feeds.json`, `/api/catalogue.json` and
+  `/api/sources`. Catalogue feeds that are also on the default page (BBC News top stories, BBC
+  Science, BBC Football, Six Colors) are read from its cache rather than fetched twice.
+- First visit (no settings in this browser): `public/setup.js` opens a one-panel setup screen
+  over the default page: region (guessed from the time zone), topics, news sources, one card per
+  topic or per source, pictures or compact, and weather and daily photo on or off. "Build my
+  page" saves the choices as `profile` in the settings and lays out cards from them
+  (`public/topics.js`); "Skip" or Escape just remembers it was seen. Customise has a
+  "Topics & sources…" button to reopen it; cards already on the page keep their place and
+  settings, and unwanted ones are hidden. "Reset to default" clears the profile too.

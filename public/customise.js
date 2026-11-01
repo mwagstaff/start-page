@@ -2,10 +2,12 @@
 // handle) and number of items, choose whether cards are fitted to the screen or stay in the
 // columns they were put in, add your own RSS or Atom feeds, and export or import the
 // settings as a file. Changes apply straight away and are saved in
-// this browser (see settings.js); no account needed.
+// this browser (see settings.js); no account needed. "Topics & sources" reopens the setup
+// screen (setup.js).
 
 import { escapeHtml } from './cards.js';
-import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setTabCards, tabCards, widgetFor } from './page.js';
+import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setTabCards, tabCards, widgetFor } from './page.js';
+import { openSetup } from './setup.js';
 import { MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, moveCard, stepCard, validSettings } from './settings.js';
 
 const opener = document.querySelector('.customise-open');
@@ -20,6 +22,7 @@ function build() {
     <div class="customise-head">
       <h2 id="customise-title">Customise</h2>
       <p>Pick the cards you want, in the order you want them. Cards higher up get first claim on a story that's in more than one. You can also drag cards around the page itself. Changes are saved in this browser.</p>
+      <button type="button" data-action="setup" class="setup-open">Topics &amp; sources…</button>
     </div>
     <label class="arrange-toggle">
       <input type="checkbox" data-field="arrange">
@@ -90,7 +93,7 @@ function save() {
   status('');
 }
 
-function onClick(event) {
+async function onClick(event) {
   const button = event.target.closest('button[data-action]');
   if (!button) return;
   const index = Number(button.closest('li')?.dataset.index);
@@ -118,11 +121,18 @@ function onClick(event) {
     case 'import':
       dialog.querySelector('input[type=file]').click();
       break;
-    case 'reset':
-      setTabCards(null);
+    case 'reset': {
+      // Back to the default page, without asking about topics again.
+      const { profile, tabs, ...rest } = currentSettings() ?? {};
+      await replaceSettings({ v: 1, custom: [], ...rest, tabs: {}, onboarded: true });
       cards = tabCards();
       renderList();
       status('Back to the default cards.');
+      break;
+    }
+    case 'setup':
+      dialog.close();
+      openSetup();
       break;
     case 'close':
       dialog.close();
@@ -249,7 +259,7 @@ async function onImport(event) {
     status("That file isn't a Start settings export.");
     return;
   }
-  replaceSettings(settings);
+  await replaceSettings(settings);
   cards = tabCards();
   renderList();
   status(`Imported ${file.name}.`);
@@ -257,6 +267,7 @@ async function onImport(event) {
 
 async function open() {
   if (!currentFeeds() && !(await fetchFeeds())) return;
+  if (currentSettings()?.profile) await fetchCatalogue(); // so the profile's cards are listed
   if (!dialog) build();
   cards = tabCards();
   status('');

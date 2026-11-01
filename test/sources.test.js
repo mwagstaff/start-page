@@ -120,3 +120,27 @@ test('the public catalogue names feeds by id and leaves out their addresses', ()
   });
   assert.ok(!JSON.stringify(shown).includes('https://'));
 });
+
+test('feeds the default page already fetches are read from its cache, not fetched again', async () => {
+  const fetched = [];
+  let version = 1;
+  const page = { items: [item('https://a/page')], fetchedAt: '2026-10-30T11:55:00Z', error: null };
+  const sources = createSources(list, {}, {
+    log: quiet,
+    images: noImages,
+    shared: (url) => (url === 'https://a/top' ? page : undefined),
+    sharedVersion: () => version,
+    fetch: async (url) => { fetched.push(url); return [item(`${url}/1`)]; },
+  });
+  const first = await sources.get(['a.top', 'b.top']);
+  assert.deepEqual(fetched, ['https://b/top']);
+  assert.equal(JSON.parse(first.body).sources['a.top'].items[0].link, 'https://a/page');
+
+  await sources.refresh();
+  assert.deepEqual(fetched, ['https://b/top', 'https://b/top']);
+
+  // A refresh of the default page shows up in the next response.
+  page.items = [item('https://a/newer')];
+  version = 2;
+  assert.equal(JSON.parse((await sources.get(['a.top'])).body).sources['a.top'].items[0].link, 'https://a/newer');
+});

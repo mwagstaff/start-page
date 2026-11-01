@@ -67,7 +67,7 @@ async function showLocalWeather() {
   document.body.dataset.localWeather = 'true'; // page.js leaves it alone from now on
 }
 
-if (document.querySelector('.weather') && 'geolocation' in navigator) {
+if (document.querySelector('.weather') && !document.documentElement.classList.contains('no-weather') && 'geolocation' in navigator) {
   // A position up to 30 minutes old is fine, and saves the browser a fresh fix on every visit.
   navigator.geolocation.getCurrentPosition(({ coords: { latitude, longitude } }) => {
     coords = { latitude: Math.round(latitude * ROUND) / ROUND, longitude: Math.round(longitude * ROUND) / ROUND };
