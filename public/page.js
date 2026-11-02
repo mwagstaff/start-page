@@ -8,7 +8,7 @@ import { buildCards } from './stories.js';
 import { renderWidget } from './cards.js';
 import { renderWeather } from './forecast.js';
 import { canRedo, canUndo, describeChange, loadHistory, moveTo, recordChange, saveHistory } from './history.js';
-import { MAX_CARD_ITEMS, cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
+import { DENSITIES, MAX_CARD_ITEMS, cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
 import { layoutForProfile, profileCards, profileSourceIds, profileWidgets } from './topics.js';
 
 const grid = document.querySelector('.grid');
@@ -158,7 +158,7 @@ export async function refreshProfileFeeds() {
 }
 
 // The weather and photo can be turned off on the setup screen, and filling the screen with
-// stories and see-through cards in Customise. The early script in the page sets the same classes before it
+// stories, see-through cards and the page's density in Customise. The early script in the page sets the same classes before it
 // paints; this keeps them in step after a change.
 function applyPageOptions() {
   const { profile } = settings ?? {};
@@ -167,6 +167,10 @@ function applyPageOptions() {
   root.classList.toggle('no-fill', settings?.fill === false);
   if (filled !== (settings?.fill !== false)) grid?.dispatchEvent(new Event('layout:refresh'));
   root.classList.toggle('solid-cards', settings?.solid === true);
+  const density = settings?.density ?? DENSITIES[0];
+  const shown = DENSITIES.find((d) => root.classList.contains(`density-${d}`)) ?? DENSITIES[0];
+  for (const d of DENSITIES.slice(1)) root.classList.toggle(`density-${d}`, d === density);
+  if (shown !== density) grid?.dispatchEvent(new Event('layout:refresh'));
   root.classList.toggle('no-weather', profile?.weather === false);
   root.classList.toggle('no-backdrop', profile?.backdrop === false);
   document.body.classList.toggle('has-backdrop', profile?.backdrop !== false && Boolean(document.querySelector('.backdrop')));
@@ -270,6 +274,13 @@ export function setFill(on) {
 export function setSolid(on) {
   const { solid, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
   save(on ? { ...rest, solid: true } : rest, on ? 'Made the cards solid' : 'Made the cards see-through');
+  applyPageOptions();
+}
+
+// How much the page fits in: 'spacious' (the default), 'balanced' or 'compact'.
+export function setDensity(density) {
+  const { density: _, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  save(density === DENSITIES[0] ? rest : { ...rest, density }, `Made the page ${density}`);
   applyPageOptions();
 }
 

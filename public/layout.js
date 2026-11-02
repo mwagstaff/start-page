@@ -5,9 +5,10 @@
 // spares it was drawn with, so every column reaches the bottom of the window. Without
 // JavaScript the CSS multi-column layout still works; this only improves on it.
 
-const MIN_COLUMN_WIDTH = 300; // keep in step with `columns: 300px` in style.css
+const MIN_COLUMN_WIDTH = 300; // if style.css doesn't set --column-width (it changes with the density)
 const EXACT_LIMIT = 16; // above this many cards, use the greedy result alone
 const MIN_ITEMS = 2; // filling never cuts a card below this many stories (or its own number, if fewer)
+const MAX_SPREAD = 10; // px added above and below each story, at most, to even out a column
 
 // How many stories each card in a column shows so the column fills `space`. Each card is
 // { start, sizes }, where sizes[k] is its height showing k stories and `start` is its own
@@ -103,8 +104,9 @@ function columnCountFor(grid) {
   const style = getComputedStyle(grid);
   const width = grid.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   const gap = parseFloat(style.columnGap) || 0;
-  // Same rule the browser uses for `columns: 300px`.
-  return Math.max(1, Math.floor((width + gap) / (MIN_COLUMN_WIDTH + gap)));
+  const columnWidth = parseFloat(style.getPropertyValue('--column-width')) || MIN_COLUMN_WIDTH;
+  // Same rule the browser uses for `columns: var(--column-width)`.
+  return Math.max(1, Math.floor((width + gap) / (columnWidth + gap)));
 }
 
 // A card's height (with its margin) showing each number of its stories, measured with all
@@ -127,6 +129,13 @@ function showStories(items, count) {
   });
 }
 
+// Padding to add above and below each of a column's `items` stories so the column, now
+// `height` tall, fills `space`: whole stories rarely fit exactly, so the gap is shared out
+// between them rather than left at the bottom. Capped, for a column short of stories.
+export function storySpread(space, height, items) {
+  return items ? Math.min(MAX_SPREAD, Math.max(0, space - height) / (2 * items)) : 0;
+}
+
 const resetStories = (grid) => grid.querySelectorAll('.item').forEach((item) => item.classList.remove('show', 'cut'));
 
 function initGrid(grid) {
@@ -141,7 +150,7 @@ function initGrid(grid) {
     laidOutWidth = grid.clientWidth;
     laidOutHeight = window.innerHeight;
     // Measure in the CSS column layout, where each card already has the column width.
-    grid.classList.remove('packed');
+    grid.classList.remove('packed', 'filled');
     grid.replaceChildren(...cards);
     const count = columnCountFor(grid);
     const fill = filling() && count > 1;
@@ -166,10 +175,16 @@ function initGrid(grid) {
     if (!fill) return;
     const style = getComputedStyle(grid);
     const space = grid.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-    for (const group of groups) {
+    // Whatever space is left is shared between the stories, and the last card in each
+    // column stretches over any remainder (style.css), so every column ends level.
+    groups.forEach((group, c) => {
       const counts = fillColumn(group.map((i) => measured[i]), space);
       group.forEach((i, j) => showStories(measured[i].items, counts[j]));
-    }
+      const height = group.reduce((sum, i, j) => sum + measured[i].sizes[counts[j]], 0);
+      const spread = storySpread(space, height, counts.reduce((sum, k) => sum + k, 0));
+      grid.children[c].style.setProperty('--story-spread', `${spread.toFixed(2)}px`);
+    });
+    grid.classList.add('filled');
   };
 
   layout();

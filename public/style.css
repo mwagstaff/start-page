@@ -55,6 +55,42 @@
   }
 }
 
+/* Density (Customise): how much fits on the page. Spacious, the default, leaves wide gaps
+   and fewer, wider columns so more of the photo shows; Compact packs in the most. */
+:root {
+  --gutter: clamp(20px, 3vw, 48px);
+  --gap: 22px;
+  --column-width: 380px; /* layout.js reads this to count columns */
+  --card-pad: 16px 20px 8px;
+  --card-radius: 12px;
+  --card-font: 15px;
+  --item-pad: 10px;
+}
+
+.density-balanced {
+  --gutter: clamp(16px, 2vw, 32px);
+  --gap: 16px;
+  --column-width: 330px;
+  --card-pad: 13px 16px 6px;
+  --card-radius: 10px;
+  --card-font: 14px;
+  --item-pad: 8px;
+}
+
+.density-compact {
+  --gutter: 16px;
+  --gap: 12px;
+  --column-width: 300px;
+  --card-pad: 10px 12px 4px;
+  --card-radius: 8px;
+  --card-font: 14px;
+  --item-pad: 6px;
+}
+
+@media (min-width: 1200px) {
+  .density-compact { --gutter: 20px; }
+}
+
 * { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -177,11 +213,7 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 .peek-caption a { margin-top: 3px; font-weight: 600; }
 .peek-caption a:hover { text-decoration: underline; }
 
-.wrap { padding: 0 16px; }
-
-@media (min-width: 1200px) {
-  .wrap { padding: 0 20px; }
-}
+.wrap { padding: 0 var(--gutter); }
 
 .masthead {
   position: relative;
@@ -458,29 +490,67 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 
 .forecast ol { list-style: none; margin: 0; padding: 0; }
 
+/* Section headings below the header: small capitals, like the week's. */
+.forecast :is(.forecast-today, .forecast-tomorrow, .forecast-week) h3 { margin: 14px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.forecast .forecast-today header h3 { margin: 0; font-size: 15px; color: inherit; font-weight: 700; text-transform: none; letter-spacing: 0; }
+
+/* The next 24 hours in two rows of twelve, so none of it hides behind a sideways scroll.
+   Each hour's time, icon, temperature, rain and wind share rows (a subgrid) with the rest
+   of its row of hours, so an hour with two lines of rain doesn't knock the others out of line. */
 .forecast-hours {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(40px, 1fr);
-  overflow-x: auto;
-  padding-bottom: 14px;
+  grid-template-columns: repeat(12, 1fr);
+  row-gap: 3px;
+  padding-bottom: 5px;
   border-bottom: 1px solid var(--border);
-  scrollbar-width: thin;
 }
 
 .forecast-hours li {
   display: grid;
+  grid-row: span 5;
+  grid-template-rows: subgrid;
   justify-items: center;
-  gap: 3px;
+  padding-bottom: 9px; /* the space between rows of hours */
   text-align: center;
 }
 
+.forecast-hours .forecast-rain { align-self: center; }
+
 .forecast-time { color: var(--muted); font-size: 11px; }
-.forecast-hours .forecast-icon { font-size: 18px; line-height: 1.2; }
+.forecast-hours .is-new-day .forecast-time { color: var(--text); font-weight: 700; }
+.forecast-wind { color: var(--muted); font-size: 10px; white-space: nowrap; }
+.forecast-hours .forecast-icon { font-size: 22px; line-height: 1.2; }
 .forecast-temp { font-weight: 600; }
 .forecast-rain { color: var(--popover-rain); font-size: 11px; min-height: 1.3em; }
 
-.forecast-week h3 { margin: 14px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+/* Tomorrow: its own facts, then the morning, afternoon and evening side by side. */
+.forecast-tomorrow { padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.forecast-summary { display: flex; align-items: center; gap: 6px; margin: 0; }
+.forecast-summary .forecast-icon { font-size: 20px; }
+.forecast-tomorrow .forecast-facts { grid-template-columns: repeat(4, 1fr); margin: 10px 0; }
+
+.forecast-parts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.forecast-parts li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: "icon name temp" "icon rain wind";
+  align-items: center;
+  column-gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.forecast-parts .forecast-icon { grid-area: icon; font-size: 22px; }
+.forecast-part { grid-area: name; font-weight: 600; }
+.forecast-parts .forecast-temp { grid-area: temp; }
+.forecast-parts .forecast-rain { grid-area: rain; min-height: 0; }
+.forecast-parts .forecast-wind { grid-area: wind; }
 
 .forecast-week li {
   display: grid;
@@ -515,7 +585,9 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 }
 
 @media (max-width: 560px) {
-  .forecast-facts { grid-template-columns: repeat(2, 1fr); }
+  .forecast-facts, .forecast-tomorrow .forecast-facts { grid-template-columns: repeat(2, 1fr); }
+  .forecast-hours { grid-template-columns: repeat(6, 1fr); }
+  .forecast-parts { grid-template-columns: 1fr; }
   .forecast-week li { grid-template-columns: 70px 22px 1fr 28px minmax(40px, 1fr) 28px; }
   .forecast-week .forecast-rain { display: none; }
 }
@@ -556,9 +628,9 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 /* Multi-column flow packs cards of different heights without row gaps. */
 .grid {
   position: relative; /* reorder.js measures cards from here */
-  columns: 300px;
-  column-gap: 12px;
-  padding-block: 12px;
+  columns: var(--column-width);
+  column-gap: var(--gap);
+  padding-block: var(--gap);
 }
 
 /* layout.js swaps the flow for balanced flex columns once it has measured the cards. */
@@ -594,9 +666,16 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
   scrollbar-width: none;
 }
 
-.grid.packed .card { display: flex; flex-direction: column; flex: none; max-height: calc(100% - 12px); }
+.grid.packed .card { display: flex; flex-direction: column; flex: none; max-height: calc(100% - var(--gap)); }
 .grid.packed .card:last-child { flex: 0 1 auto; min-height: 160px; }
 .grid.packed .card > :is(h2, .stale) { flex: none; }
+
+/* Filling the screen (layout.js): every column runs the full height, its stories spaced out
+   to share the spare room, and its last card stretched over what's left, so all the
+   columns end level. */
+.grid.filled { align-items: stretch; }
+.grid.filled .card:last-child { flex-grow: 1; }
+.grid.filled .item { padding-block: calc(var(--item-pad) + var(--story-spread, 0px)); }
 
 .grid.packed .card .items {
   min-height: 0;
@@ -608,11 +687,12 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 
 .card {
   break-inside: avoid;
-  margin: 0 0 12px;
+  margin: 0 0 var(--gap);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px 4px;
+  border-radius: var(--card-radius);
+  padding: var(--card-pad);
+  font-size: var(--card-font);
   box-shadow: var(--shadow);
   min-width: 0;
 }
@@ -632,7 +712,7 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 .item {
   display: flex;
   gap: 10px;
-  padding: 6px 0;
+  padding: var(--item-pad) 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -819,6 +899,38 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
   outline: 1px dashed color-mix(in srgb, var(--muted) 55%, transparent);
   outline-offset: 4px;
 }
+
+/* Customise: the page's density, a three-way choice */
+.density { margin: 0 0 14px; padding: 0; border: 0; }
+.density legend { padding: 0; margin-bottom: 6px; font-weight: 600; }
+.density legend small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; font-weight: 400; }
+
+.density-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.density-options label { position: relative; cursor: pointer; }
+.density-options input { position: absolute; opacity: 0; pointer-events: none; }
+
+.density-options span {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.density-options label:hover span { color: var(--text); }
+.density-options input:checked + span { color: #fff; background: var(--accent); }
+.density-options input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Customise: fitting cards to the screen, and the column each card is in */
 .arrange-toggle {

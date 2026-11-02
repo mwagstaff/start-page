@@ -1,15 +1,15 @@
-// The Customise dialog: show or hide cards, change their order (arrows, or drag the
-// handle) and number of items, choose whether cards are fitted to the screen or stay in the
+// The Customise dialog: choose how dense the page is, show or hide cards, change their
+// order (arrows, or drag the handle) and number of items, choose whether cards are fitted to the screen or stay in the
 // columns they were put in, add your own RSS or Atom feeds, and export or import the
 // settings as a file. Changes apply straight away and are saved in
 // this browser (see settings.js); no account needed. "Topics & sources" reopens the setup
 // screen (setup.js). Every change can be undone, or rewound in History (undo.js).
 
 import { escapeHtml } from './cards.js';
-import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setFill, setSolid, setTabCards, tabCards, widgetFor } from './page.js';
+import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setDensity, setFill, setSolid, setTabCards, tabCards, widgetFor } from './page.js';
 import { openSetup } from './setup.js';
 import { openHistory } from './undo.js';
-import { MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, moveCard, stepCard, validSettings } from './settings.js';
+import { DENSITIES, MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, moveCard, stepCard, validSettings } from './settings.js';
 
 const opener = document.querySelector('.customise-open');
 let dialog = null;
@@ -25,6 +25,12 @@ function build() {
       <p>Pick the cards you want, in the order you want them. Cards higher up get first claim on a story that's in more than one. You can also drag cards around the page itself. Changes are saved in this browser.</p>
       <button type="button" data-action="setup" class="setup-open">Topics &amp; sources…</button>
     </div>
+    <fieldset class="density">
+      <legend>Density<small>How much fits on the page. Spacious leaves more room around the cards for the photo; Compact fits in the most stories.</small></legend>
+      <div class="density-options">
+        ${DENSITIES.map((density) => `<label><input type="radio" name="density" value="${density}" data-field="density"><span>${density[0].toUpperCase()}${density.slice(1)}</span></label>`).join('')}
+      </div>
+    </fieldset>
     <label class="arrange-toggle">
       <input type="checkbox" data-field="arrange">
       <span>Fit cards to the screen<small>Arranges the columns so the page is as short as it can be. Turn off to keep cards in the columns you drag them to; moving a card turns it off.</small></span>
@@ -74,6 +80,7 @@ function renderList(focus) {
   dialog.querySelector('[data-field="arrange"]').checked = arrangement() === 'auto';
   dialog.querySelector('[data-field="fill"]').checked = currentSettings()?.fill !== false;
   dialog.querySelector('[data-field="solid"]').checked = currentSettings()?.solid === true;
+  dialog.querySelector(`[data-field="density"][value="${currentSettings()?.density ?? DENSITIES[0]}"]`).checked = true;
   dialog.querySelector('.card-list').innerHTML = cards.map((card, i) => {
     const widget = widgetFor(card.id);
     const title = escapeHtml(widget.title);
@@ -170,6 +177,11 @@ function onChange(event) {
     status(event.target.checked ? 'Cards show as many stories as fit the screen.' : 'Cards show their set number of stories.');
     return;
   }
+  if (field === 'density') {
+    setDensity(event.target.value);
+    status(`The page is ${event.target.value}.`);
+    return;
+  }
   if (field === 'solid') {
     setSolid(event.target.checked);
     status(event.target.checked ? 'Cards are solid.' : 'The photo shows through the cards.');
@@ -200,7 +212,9 @@ function startDrag(event) {
   const row = handle.closest('li');
   const from = Number(row.dataset.index);
   row.classList.add('is-dragging');
-  handle.setPointerCapture(event.pointerId);
+  // Captured on the list rather than the handle: the row (and its handle) is moved in the DOM as it's
+  // dragged, and moving an element releases its capture, which would end the drag after every step.
+  list.setPointerCapture(event.pointerId);
 
   const move = (e) => {
     if (e.pointerId !== event.pointerId) return;
@@ -219,7 +233,7 @@ function startDrag(event) {
     document.removeEventListener('pointermove', move);
     document.removeEventListener('pointerup', end);
     document.removeEventListener('pointercancel', end);
-    handle.removeEventListener('lostpointercapture', end);
+    list.removeEventListener('lostpointercapture', end);
     if (e.type !== 'pointercancel') move(e); // the browser may report losing the capture just before the drop
     row.classList.remove('is-dragging');
     const to = [...list.children].indexOf(row);
@@ -232,7 +246,7 @@ function startDrag(event) {
   document.addEventListener('pointermove', move);
   document.addEventListener('pointerup', end);
   document.addEventListener('pointercancel', end);
-  handle.addEventListener('lostpointercapture', end);
+  list.addEventListener('lostpointercapture', end);
 }
 
 async function onAddFeed(event) {

@@ -63,3 +63,12 @@ test('moveCard joins the column of the card now before it', () => {
   assert.deepEqual(moveCard(cards, 2, 0), [{ id: 'c', col: 0 }, { id: 'a', col: 0 }, { id: 'b', col: 0 }]);
   assert.deepEqual(moveCard([{ id: 'a' }, { id: 'b' }], 1, 0), [{ id: 'b' }, { id: 'a' }]);
 });
+
+test('validSettings keeps a known density, leaving out the default', () => {
+  const density = (value) => validSettings({ v: 1, tabs: {}, density: value }).density;
+  assert.equal(density('compact'), 'compact');
+  assert.equal(density('balanced'), 'balanced');
+  assert.equal(density('spacious'), undefined);
+  assert.equal(density('cosy'), undefined);
+  assert.equal(density(2), undefined);
+});

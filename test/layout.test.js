@@ -77,3 +77,11 @@ test('fillColumn keeps a few stories in each card and leaves cards without any a
   // Nothing more to show: stays at what it has.
   assert.deepEqual(fillColumn([card(3, 3)], 1000), [3]);
 });
+
+test('storySpread shares a column\'s spare room between its stories, within a limit', async () => {
+  const { storySpread } = await import('../public/layout.js');
+  assert.equal(storySpread(800, 760, 10), 2); // 40px over 10 stories: 2px above and below each
+  assert.equal(storySpread(800, 820, 10), 0); // too tall already: nothing added
+  assert.equal(storySpread(800, 200, 2), 10); // short of stories: capped, the last card stretches
+  assert.equal(storySpread(800, 100, 0), 0);
+});

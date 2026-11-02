@@ -90,12 +90,33 @@ test('the masthead shows the rain chart with a tooltip per slot', () => {
 
 test('parses today in detail and the week ahead for the popover', () => {
   const weather = parseWeather(json, 'Beckenham');
-  assert.deepEqual(weather.today.hours.map((h) => h.time), ['Now', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00']);
-  assert.deepEqual(weather.today.hours[2], { time: '14:00', temperature: 16, rainChance: 60, rain: 0.6, wind: 12, label: 'Rain', icon: '🌧️' });
+  assert.equal(weather.today.hours.length, 24);
+  assert.deepEqual(weather.today.hours.slice(0, 3).map((h) => h.time), ['Now', '13:00', '14:00']);
+  assert.deepEqual(weather.today.hours[2], { time: '14:00', newDay: false, temperature: 16, rainChance: 60, rain: 0.6, wind: 12, label: 'Rain', icon: '🌧️' });
+  assert.deepEqual(weather.today.hours.slice(11, 14).map((h) => [h.time, h.newDay]), [['23:00', false], ['Fri', true], ['01:00', false]]);
+  assert.equal(weather.today.hours.at(-1).time, '11:00');
   assert.deepEqual([weather.today.sunrise, weather.today.sunset, weather.today.uv, weather.today.rain, weather.today.humidity, weather.today.wind], ['07:52', '17:41', 2, 3.2, 72, 9]);
   assert.equal(weather.days.length, 7);
-  assert.deepEqual(weather.days[0], { date: '2026-10-30', day: 'Tomorrow', high: 15, low: 8, rainChance: 0, rain: 0, label: 'Mostly clear', icon: '🌤️' });
+  assert.deepEqual(weather.days[0], { date: '2026-10-30', day: 'Tomorrow', high: 15, low: 8, rainChance: 40, rain: 0.9, label: 'Rain', icon: '🌧️' });
   assert.deepEqual(weather.days.slice(1).map((d) => d.day), ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu']);
+});
+
+test('parses tomorrow in more detail, in parts of the day', () => {
+  const { tomorrow } = parseWeather(json, 'Beckenham');
+  assert.deepEqual([tomorrow.day, tomorrow.weekday, tomorrow.wind, tomorrow.uv, tomorrow.sunrise, tomorrow.sunset], ['Tomorrow', 'Fri', 14, 2, '07:52', '17:41']);
+  assert.deepEqual(tomorrow.parts, [
+    { name: 'Morning', low: 8, high: 12, rainChance: 0, rain: 0, wind: 7, label: 'Mostly clear', icon: '🌤️' },
+    { name: 'Afternoon', low: 13, high: 15, rainChance: 0, rain: 0, wind: 14, label: 'Mostly clear', icon: '🌤️' },
+    { name: 'Evening', low: 10, high: 13, rainChance: 40, rain: 0.9, wind: 7, label: 'Rain', icon: '🌧️' },
+  ]);
+});
+
+test('tomorrow leaves out parts of the day the forecast does not cover', () => {
+  const short = { ...json, hourly: Object.fromEntries(Object.entries(json.hourly).map(([key, values]) => [key, values.slice(0, -6)])) };
+  const { tomorrow } = parseWeather(short, 'Beckenham');
+  assert.deepEqual(tomorrow.parts.map((part) => part.name), ['Morning', 'Afternoon']);
+  const { wind_speed_10m_max, ...older } = json.daily;
+  assert.equal(parseWeather({ ...short, daily: older }, 'Beckenham').tomorrow.wind, 14); // from the hours instead
 });
 
 test('the masthead weather opens a popover with today and the week ahead', () => {
@@ -103,12 +124,16 @@ test('the masthead weather opens a popover with today and the week ahead', () =>
   assert.match(html, /class="weather has-outlook" aria-label="Weather in Beckenham" tabindex="0" aria-describedby="forecast-detail"/);
   assert.match(html, /Today in Beckenham/);
   assert.match(html, /Next 7 days/);
+  assert.match(html, /Next 24 hours/);
+  assert.match(html, /<li class="is-new-day">\s*<span class="forecast-time">Fri<\/span>/);
+  assert.match(html, /Tomorrow · Fri/);
+  assert.match(html, /<span class="forecast-part">Evening<\/span>[\s\S]*?10–13°[\s\S]*?40% · 0.9 mm/);
   assert.match(html, /<dt>UV<\/dt><dd>2 <small>low<\/small><\/dd>/);
   assert.match(html, /60% · 0.6 mm/);
 });
 
 test('a forecast cached without the week ahead shows no popover', () => {
-  const { today, days, ...older } = parseWeather(json, 'Beckenham');
+  const { today, tomorrow, days, ...older } = parseWeather(json, 'Beckenham');
   const html = renderPage({ tabs: [{ id: 'home' }], activeTab: { id: 'home' }, widgets: [], weather: older });
   assert.doesNotMatch(html, /forecast-detail/);
 });

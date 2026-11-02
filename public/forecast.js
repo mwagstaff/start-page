@@ -4,9 +4,11 @@
 import { escapeHtml } from './cards.js';
 
 const HOURS_AHEAD = 6;
-const DETAIL_HOURS = 12; // hour by hour in the forecast popover, from now
+const DETAIL_HOURS = 24; // hour by hour in the forecast popover, from now
 const WEEK_DAYS = 7; // days after today in the popover
 const RAIN_SLOTS = 24; // 15-minute steps: the next 6 hours
+// Tomorrow's day in parts, as [name, first hour, hour after the last].
+const DAY_PARTS = [['Morning', 6, 12], ['Afternoon', 12, 18], ['Evening', 18, 24]];
 
 // Rain rate bands in mm/h (American Meteorological Society): light < 2.5, moderate < 7.6, heavy above.
 const RAIN_LEVELS = [[0.1, 'none'], [2.5, 'light'], [7.6, 'moderate'], [Infinity, 'heavy']];
@@ -38,7 +40,7 @@ export function forecastUrl({ latitude, longitude }) {
     longitude,
     current: 'temperature_2m,apparent_temperature,weather_code,is_day,relative_humidity_2m,wind_speed_10m',
     hourly: 'temperature_2m,weather_code,precipitation_probability,is_day,precipitation,wind_speed_10m',
-    daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,precipitation_sum,sunrise,sunset,uv_index_max',
+    daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,precipitation_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max',
     minutely_15: 'precipitation,precipitation_probability',
     forecast_minutely_15: String(RAIN_SLOTS),
     wind_speed_unit: 'mph',
@@ -96,6 +98,50 @@ export function weekday(date) {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
 }
 
+const sum = (values) => values.reduce((total, value) => total + value, 0);
+
+// One part of a day from its hours: the range of temperatures, the wettest and windiest it
+// gets, and the most severe weather (as Open-Meteo picks a day's weather code).
+function dayPart(hourly, name, indexes) {
+  const temperatures = indexes.map((i) => hourly.temperature_2m[i]);
+  const middle = indexes[Math.floor(indexes.length / 2)];
+  return {
+    name,
+    low: Math.round(Math.min(...temperatures)),
+    high: Math.round(Math.max(...temperatures)),
+    rainChance: Math.max(...indexes.map((i) => hourly.precipitation_probability[i] ?? 0)),
+    rain: round1(sum(indexes.map((i) => hourly.precipitation?.[i] ?? 0))),
+    wind: hourly.wind_speed_10m ? Math.round(Math.max(...indexes.map((i) => hourly.wind_speed_10m[i]))) : null,
+    ...describe(Math.max(...indexes.map((i) => hourly.weather_code[i])), hourly.is_day[middle] === 1),
+  };
+}
+
+// Tomorrow in more detail than the week's one line: the extra daily figures, and the morning,
+// afternoon and evening from the hourly forecast. A part is left out unless every hour of it
+// is in the forecast.
+function parseTomorrow({ hourly, daily }, day) {
+  const i = 1;
+  const hoursOf = (from, to) => hourly.time.flatMap((time, index) => {
+    const hour = Number(time.slice(11, 13));
+    return time.startsWith(day.date) && hour >= from && hour < to ? [index] : [];
+  });
+  const parts = DAY_PARTS.flatMap(([name, from, to]) => {
+    const indexes = hoursOf(from, to);
+    return indexes.length === to - from ? [dayPart(hourly, name, indexes)] : [];
+  });
+  const hourlyWind = hourly.wind_speed_10m && hoursOf(0, 24).map((index) => hourly.wind_speed_10m[index]);
+  const wind = daily.wind_speed_10m_max?.[i] ?? (hourlyWind?.length ? Math.max(...hourlyWind) : null);
+  return {
+    ...day,
+    weekday: weekday(day.date),
+    sunrise: daily.sunrise[i]?.slice(11, 16) ?? null,
+    sunset: daily.sunset[i]?.slice(11, 16) ?? null,
+    uv: daily.uv_index_max?.[i] != null ? Math.round(daily.uv_index_max[i]) : null,
+    wind: wind != null ? Math.round(wind) : null,
+    parts,
+  };
+}
+
 // Today in detail and the week ahead, for the popover. Null for forecasts fetched before
 // these fields were asked for (a forecast cached in the browser).
 function parseOutlook(json, currentHour) {
@@ -104,8 +150,11 @@ function parseOutlook(json, currentHour) {
   const from = Math.max(0, hourly.time.findIndex((time) => time >= currentHour));
   const hours = hourly.time.slice(from, from + DETAIL_HOURS).map((time, offset) => {
     const i = from + offset;
+    const newDay = offset > 0 && time.slice(11, 13) === '00';
     return {
-      time: offset === 0 ? 'Now' : time.slice(11, 16),
+      // Midnight is named for the day it starts, so the day change stands out.
+      time: offset === 0 ? 'Now' : newDay ? weekday(time.slice(0, 10)) : time.slice(11, 16),
+      newDay,
       temperature: Math.round(hourly.temperature_2m[i]),
       rainChance: hourly.precipitation_probability[i] ?? null,
       rain: round1(hourly.precipitation?.[i] ?? 0),
@@ -126,6 +175,7 @@ function parseOutlook(json, currentHour) {
     };
   });
   return {
+    tomorrow: days[0] && parseTomorrow(json, days[0]),
     today: {
       ...describe(daily.weather_code[0]),
       sunrise: daily.sunrise[0].slice(11, 16),
@@ -216,9 +266,31 @@ function rainText({ rainChance, rain }) {
   return parts.join(' · ');
 }
 
-// Shown when the pointer is over the weather (or it has focus): today hour by hour with the
-// details that don't fit in the masthead, then the week ahead, each day's range of
-// temperatures drawn on one scale for the whole week.
+function renderTomorrow(tomorrow) {
+  const facts = [
+    fact('Rain', escapeHtml(rainText(tomorrow) || 'None expected')),
+    tomorrow.wind != null && fact('Wind', `${tomorrow.wind} mph`),
+    tomorrow.uv != null && fact('UV', `${tomorrow.uv} <small>${uvLabel(tomorrow.uv)}</small>`),
+    tomorrow.sunrise && tomorrow.sunset && fact('Sun', `↑ ${escapeHtml(tomorrow.sunrise)} ↓ ${escapeHtml(tomorrow.sunset)}`),
+  ].filter(Boolean).join('');
+  const parts = tomorrow.parts.map((part) => `<li>
+          <span class="forecast-part">${escapeHtml(part.name)}</span>
+          <span class="forecast-icon" title="${escapeHtml(part.label)}">${part.icon}</span>
+          <span class="forecast-temp">${part.low === part.high ? `${part.high}°` : `${part.low}–${part.high}°`}</span>
+          <span class="forecast-rain">${escapeHtml(rainText(part))}</span>
+          ${part.wind != null ? `<span class="forecast-wind">${part.wind} mph</span>` : ''}
+        </li>`).join('');
+  return `<section class="forecast-tomorrow" aria-label="Tomorrow">
+          <h3>Tomorrow · ${escapeHtml(tomorrow.weekday)}</h3>
+          <p class="forecast-summary"><span class="forecast-icon" aria-hidden="true">${tomorrow.icon}</span> ${escapeHtml(tomorrow.label)} · H ${tomorrow.high}° L ${tomorrow.low}°</p>
+          <dl class="forecast-facts">${facts}</dl>
+          ${parts ? `<ol class="forecast-parts">${parts}</ol>` : ''}
+        </section>`;
+}
+
+// Shown when the pointer is over the weather (or it has focus): today's details that don't fit
+// in the masthead, the next 24 hours hour by hour, tomorrow in parts, then the week ahead,
+// each day's range of temperatures drawn on one scale for the whole week.
 function renderOutlook(weather) {
   const { today, days } = weather;
   const facts = [
@@ -229,11 +301,12 @@ function renderOutlook(weather) {
     today.uv != null && fact('UV', `${today.uv} <small>${uvLabel(today.uv)}</small>`),
     fact('Sun', `↑ ${escapeHtml(today.sunrise)} ↓ ${escapeHtml(today.sunset)}`),
   ].filter(Boolean).join('');
-  const hours = today.hours.map((hour) => `<li>
+  const hours = today.hours.map((hour) => `<li${hour.newDay ? ' class="is-new-day"' : ''}>
           <span class="forecast-time">${escapeHtml(hour.time)}</span>
           <span class="forecast-icon" title="${escapeHtml(hour.label)}">${hour.icon}</span>
           <span class="forecast-temp">${hour.temperature}°</span>
           <span class="forecast-rain">${escapeHtml(rainText(hour))}</span>
+          ${hour.wind != null ? `<span class="forecast-wind">${hour.wind} mph</span>` : ''}
         </li>`).join('');
   const lowest = Math.min(...days.map((day) => day.low));
   const span = Math.max(1, Math.max(...days.map((day) => day.high)) - lowest);
@@ -258,8 +331,10 @@ function renderOutlook(weather) {
             <span class="forecast-now">${weather.temperature}°</span>
           </header>
           <dl class="forecast-facts">${facts}</dl>
+          <h3>Next ${today.hours.length} hours</h3>
           <ol class="forecast-hours">${hours}</ol>
         </section>
+        ${weather.tomorrow ? renderTomorrow(weather.tomorrow) : ''}
         <section class="forecast-week" aria-label="Next ${days.length} days">
           <h3>Next ${days.length} days</h3>
           <ol>${week}</ol>
