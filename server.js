@@ -11,7 +11,7 @@ import { createImageFinder } from './lib/images.js';
 import { renderPage } from './lib/render.js';
 import { createSources } from './lib/sources.js';
 import { createThumbnailer } from './lib/thumbs.js';
-import { createWeather } from './lib/weather.js';
+import { createWeather, unitForLocale } from './lib/weather.js';
 
 const PORT = Number(process.env.PORT ?? 3060);
 const ROOT = import.meta.dirname;
@@ -197,10 +197,14 @@ const server = createServer(async (req, res) => {
   const { version } = feedsData();
   // The page shows the date and links hashed assets, so those are part of its ETag too.
   const today = new Date().toLocaleDateString('en-GB', { timeZone: 'Europe/London' });
-  const etag = `"${createHash('sha256').update(JSON.stringify([tab.id, version, today, versions])).digest('hex').slice(0, 16)}"`;
+  // Temperatures in the unit of the browser's language, as the browser itself would choose
+  // (forecast.js); one saved in Settings is put right in the browser.
+  const unit = unitForLocale(req.headers['accept-language']?.split(/[,;]/)[0].trim());
+  res.setHeader('Vary', 'Accept-Language');
+  const etag = `"${createHash('sha256').update(JSON.stringify([tab.id, version, today, versions, unit])).digest('hex').slice(0, 16)}"`;
   if (notModified(req, res, etag, 'no-cache')) return;
   const widgets = tab.widgets.map((id) => cache.widget(id));
-  const html = renderPage({ tabs: config.tabs, activeTab: tab, versions, version, weather: weather.current, backdrop: backdrop.current, widgets });
+  const html = renderPage({ tabs: config.tabs, activeTab: tab, versions, version, weather: weather.current, backdrop: backdrop.current, widgets, unit });
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
 });

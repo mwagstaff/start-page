@@ -1410,6 +1410,9 @@ html:has(:is(.settings-screen, .setup-screen)[open]) { overflow: hidden; }
 html:has(:is(.settings-screen, .setup-screen)[open]) body > :is(.masthead, main, .tabs, .peek) { visibility: hidden; }
 html:has(:is(.settings-screen, .setup-screen)[open]) .backdrop { filter: blur(36px) saturate(1.2); transform: scale(1.1); }
 html:has(.setup-screen[open]) .settings-screen[open] { visibility: hidden; }
+/* Opened over the weather screen, they set that aside too, and bring the photo back to blur. */
+html:has(:is(.settings-screen, .setup-screen)[open]) .weather-screen[open] { visibility: hidden; }
+html:has(.weather-screen[open]):has(:is(.settings-screen, .setup-screen)[open]) body > .backdrop { visibility: visible; }
 
 .settings-content {
   box-sizing: border-box;

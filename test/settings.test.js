@@ -72,3 +72,8 @@ test('validSettings keeps a known density, leaving out the default', () => {
   assert.equal(density('cosy'), undefined);
   assert.equal(density(2), undefined);
 });
+
+test('keeps a chosen temperature unit, and nothing else', () => {
+  assert.equal(validSettings({ v: 1, tabs: {}, temperature: 'F' }).temperature, 'F');
+  assert.equal(validSettings({ v: 1, tabs: {}, temperature: 'K' }).temperature, undefined);
+});

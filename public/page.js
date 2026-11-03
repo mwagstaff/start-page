@@ -6,7 +6,7 @@
 
 import { buildCards } from './stories.js';
 import { renderWidget } from './cards.js';
-import { showWeather } from './forecast.js';
+import { setTemperatureUnit, showWeather, shownWeather, temperatureUnit, unitForLocale } from './forecast.js';
 import { canRedo, canUndo, describeChange, loadHistory, moveTo, recordChange, saveHistory } from './history.js';
 import { DENSITIES, MAX_CARD_ITEMS, STARTING_OVER_KEY, cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
 import { layoutForProfile, profileCards, profileSourceIds, profileWidgets } from './topics.js';
@@ -174,6 +174,19 @@ function applyPageOptions() {
   root.classList.toggle('no-weather', profile?.weather === false);
   root.classList.toggle('no-backdrop', profile?.backdrop === false);
   document.body.classList.toggle('has-backdrop', profile?.backdrop !== false && Boolean(document.querySelector('.backdrop')));
+  applyTemperatureUnit();
+}
+
+// Temperatures in °C or °F: the one chosen in Settings, or else the usual one for the
+// reader's region. The server went by the browser's language, so the weather is redrawn
+// only if it shows the other.
+async function applyTemperatureUnit() {
+  setTemperatureUnit(settings?.temperature ?? unitForLocale(navigator.language));
+  const wrongUnit = () => document.querySelector('.weather') && document.querySelector('.weather').dataset.unit !== temperatureUnit();
+  if (!wrongUnit()) return;
+  const data = shownWeather() ? null : feeds ?? (await fetchFeeds());
+  const weather = shownWeather() ?? data?.weather; // weather.js may have shown the reader's own meanwhile
+  if (weather && wrongUnit()) showWeather(weather);
 }
 
 // Saves the setup screen's choices and rebuilds the cards from them: cards already on the
@@ -273,6 +286,13 @@ export function setFill(on) {
 export function setSolid(on) {
   const { solid, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
   save(on ? { ...rest, solid: true } : rest, on ? 'Made the cards solid' : 'Made the cards see-through');
+  applyPageOptions();
+}
+
+// 'C' or 'F', or null to go by the reader's region.
+export function setTemperature(unit) {
+  const { temperature, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  save(unit ? { ...rest, temperature: unit } : rest, unit ? `Showed temperatures in °${unit}` : 'Showed temperatures in the local unit');
   applyPageOptions();
 }
 

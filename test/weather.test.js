@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createWeather, describe, parsePlaceName, parseRain, parseWeather, rainLevel } from '../lib/weather.js';
+import { createWeather, describe, parsePlaceName, parseRain, parseWeather, rainLevel, unitForLocale } from '../lib/weather.js';
 import { renderPage } from '../lib/render.js';
 import { rainHeight, renderScreenContent, skyFor } from '../public/forecast.js';
 
@@ -182,4 +182,15 @@ test('a forecast cached before the details shows the screen with what it has', (
   const html = renderScreenContent(older);
   assert.match(html, /<p class="ws-big">15<span>°<\/span><\/p>/);
   assert.doesNotMatch(html, /Rain today|Next 24 hours|Tomorrow|Next 7 days/);
+});
+
+test('temperatures show in Fahrenheit where that is usual, or when asked', () => {
+  assert.deepEqual(['en-US', 'en', 'es-US', 'en-GB', 'fr-FR', 'en-AU', undefined, 'nonsense!'].map(unitForLocale), ['F', 'F', 'F', 'C', 'C', 'C', 'C', 'C']);
+  const weather = parseWeather(json, 'Beckenham');
+  const html = renderPage({ tabs: [{ id: 'home' }], activeTab: { id: 'home' }, widgets: [], weather, unit: 'F' });
+  assert.match(html, /<section class="weather" data-unit="F"/);
+  assert.match(html, /<span class="temp">59°<\/span>/); // 15°C
+  assert.match(html, /H 61° L 52° · feels 59°/);
+  assert.match(html, /<p class="ws-big">59<span>°<\/span><\/p>/);
+  assert.match(renderScreenContent(weather), /<p class="ws-big">15<span>°<\/span><\/p>/); // Celsius unless told
 });

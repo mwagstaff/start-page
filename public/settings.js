@@ -1,6 +1,6 @@
 // The reader's own layout, kept in this browser's localStorage (no account needed) and
 // exported or imported as a JSON file. Shape:
-//   { v: 1, tabs: { home: { cards: [...], arrange?: 'manual' } }, custom: [...], profile?, onboarded?, fill?, solid?, density? }
+//   { v: 1, tabs: { home: { cards: [...], arrange?: 'manual' } }, custom: [...], profile?, onboarded?, fill?, solid?, density?, temperature? }
 // where cards are in page order, { id, hidden?: true, limit?: number, col?: number }, and
 // custom lists the feeds the reader added, { id: 'custom-…', url, title }. Without
 // `arrange`, cards are packed into columns to fit the screen; with 'manual', each card stays
@@ -11,6 +11,7 @@
 // `solid: true` makes the cards opaque instead of letting the background photo through.
 // `density` packs more onto the page: 'balanced' or 'compact' (see DENSITIES); without it
 // the page is spacious, with wider gaps and fewer columns so more of the photo shows.
+// `temperature` is 'C' or 'F' when the reader chose one; without it, it follows their region.
 
 import { validProfile } from './topics.js';
 
@@ -23,6 +24,7 @@ export const MAX_CUSTOM_FEEDS = 20;
 export const MAX_COLUMNS = 12;
 const MAX_TITLE_LENGTH = 80;
 export const DENSITIES = ['spacious', 'balanced', 'compact']; // least dense first; the first is the default
+export const TEMPERATURE_UNITS = ['C', 'F'];
 
 // A short, stable id for a feed address, so the same feed added twice is one card.
 export function customFeedId(url) {
@@ -67,7 +69,7 @@ export function validSettings(value) {
     .filter((feed) => !ids.has(feed.id) && ids.add(feed.id))
     .slice(0, MAX_CUSTOM_FEEDS);
   const profile = validProfile(value.profile);
-  return { v: 1, tabs, custom, ...(profile && { profile }), ...((value.onboarded === true || profile) && { onboarded: true }), ...(value.fill === false && { fill: false }), ...(value.solid === true && { solid: true }), ...(DENSITIES.includes(value.density) && value.density !== DENSITIES[0] && { density: value.density }) };
+  return { v: 1, tabs, custom, ...(profile && { profile }), ...((value.onboarded === true || profile) && { onboarded: true }), ...(value.fill === false && { fill: false }), ...(value.solid === true && { solid: true }), ...(DENSITIES.includes(value.density) && value.density !== DENSITIES[0] && { density: value.density }), ...(TEMPERATURE_UNITS.includes(value.temperature) && { temperature: value.temperature }) };
 }
 
 // Every card for a tab, in page order: the reader's saved order first, then any of the
@@ -121,7 +123,7 @@ export function loadSettings() {
 
 export function saveSettings(settings) {
   try {
-    if (settings && (Object.keys(settings.tabs).length || settings.onboarded || settings.fill === false || settings.solid || settings.density)) localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    if (settings && (Object.keys(settings.tabs).length || settings.onboarded || settings.fill === false || settings.solid || settings.density || settings.temperature)) localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     else localStorage.removeItem(SETTINGS_KEY);
   } catch {
     // Storage blocked (private window, site data off): the change lasts until the page reloads.

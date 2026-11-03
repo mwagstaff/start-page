@@ -44,6 +44,24 @@ export function skyFor({ code, isDay }) {
   };
 }
 
+// Temperatures are kept in Celsius and shown in the reader's unit: Fahrenheit where that's
+// what people use (the US and a few others), Celsius everywhere else, unless they chose
+// one in Settings. The server picks from the browser's language; the browser sets its own.
+const FAHRENHEIT_REGIONS = new Set(['US', 'PR', 'GU', 'VI', 'AS', 'MP', 'UM', 'LR', 'BS', 'BZ', 'KY', 'PW', 'FM', 'MH']);
+
+export function unitForLocale(locale) {
+  try {
+    return FAHRENHEIT_REGIONS.has(new Intl.Locale(locale).maximize().region) ? 'F' : 'C';
+  } catch {
+    return 'C';
+  }
+}
+
+let shownUnit = 'C'; // in the browser, set by page.js
+export const setTemperatureUnit = (unit) => { shownUnit = unit === 'F' ? 'F' : 'C'; };
+export const temperatureUnit = () => shownUnit;
+const deg = (celsius, unit) => (unit === 'F' ? Math.round(celsius * 9 / 5 + 32) : celsius);
+
 export function forecastUrl({ latitude, longitude }) {
   const params = new URLSearchParams({
     latitude,
@@ -342,11 +360,11 @@ function renderRainToday({ today, rain }) {
       </section>`;
 }
 
-function renderHours(hours) {
+function renderHours(hours, unit) {
   const items = hours.map((hour) => `<li${hour.newDay ? ' class="is-new-day"' : ''}>
           <span class="ws-time">${escapeHtml(hour.time)}</span>
           <span class="ws-icon" title="${escapeHtml(hour.label)}">${hour.icon}</span>
-          <span class="ws-temp">${hour.temperature}°</span>
+          <span class="ws-temp">${deg(hour.temperature, unit)}°</span>
           ${hour.wind != null ? `<span class="ws-wind">${hour.wind} mph</span>` : ''}
         </li>`).join('');
   return `<section class="ws-section" aria-label="Next ${hours.length} hours">
@@ -356,7 +374,7 @@ function renderHours(hours) {
 }
 
 // Tomorrow's figures go on one line, to keep the screen to one window's height.
-function renderTomorrow(tomorrow) {
+function renderTomorrow(tomorrow, unit) {
   const facts = [
     `Rain ${escapeHtml(rainText(tomorrow) || 'none expected')}`,
     tomorrow.wind != null && `Wind ${tomorrow.wind} mph`,
@@ -366,28 +384,28 @@ function renderTomorrow(tomorrow) {
   const parts = tomorrow.parts.map((part) => `<li>
           <span class="ws-icon" title="${escapeHtml(part.label)}">${part.icon}</span>
           <span class="ws-part">${escapeHtml(part.name)}</span>
-          <span class="ws-temp">${part.low === part.high ? `${part.high}°` : `${part.low}–${part.high}°`}</span>
+          <span class="ws-temp">${part.low === part.high ? `${deg(part.high, unit)}°` : `${deg(part.low, unit)}–${deg(part.high, unit)}°`}</span>
           <span class="ws-part-detail"><span class="ws-rain-text">${escapeHtml(rainText(part))}</span>${part.wind != null ? ` <span class="ws-wind">${part.wind} mph</span>` : ''}</span>
         </li>`).join('');
   return `<section class="ws-section ws-tomorrow" aria-label="Tomorrow">
         <h3>Tomorrow · ${escapeHtml(tomorrow.weekday)}</h3>
-        <p class="ws-lead"><span class="ws-icon" aria-hidden="true">${tomorrow.icon}</span> ${escapeHtml(tomorrow.label)}, ${tomorrow.high}° <span class="ws-dim">/ ${tomorrow.low}°</span></p>
+        <p class="ws-lead"><span class="ws-icon" aria-hidden="true">${tomorrow.icon}</span> ${escapeHtml(tomorrow.label)}, ${deg(tomorrow.high, unit)}° <span class="ws-dim">/ ${deg(tomorrow.low, unit)}°</span></p>
         <p class="ws-sub">${facts}</p>
         ${parts ? `<ol class="ws-parts">${parts}</ol>` : ''}
       </section>`;
 }
 
 // The week, compact: each day's range of temperatures drawn on one scale for the whole week.
-function renderWeek(days) {
+function renderWeek(days, unit) {
   const lowest = Math.min(...days.map((day) => day.low));
   const span = Math.max(1, Math.max(...days.map((day) => day.high)) - lowest);
   const rows = days.map((day) => `<li>
           <span class="ws-day">${escapeHtml(day.day)}</span>
           <span class="ws-icon" title="${escapeHtml(day.label)}">${day.icon}</span>
           <span class="ws-rain-text">${escapeHtml(rainText(day))}</span>
-          <span class="ws-low">${day.low}°</span>
+          <span class="ws-low">${deg(day.low, unit)}°</span>
           <span class="ws-range" aria-hidden="true"><span style="left:${((day.low - lowest) / span * 100).toFixed(1)}%;right:${(100 - (day.high - lowest) / span * 100).toFixed(1)}%"></span></span>
-          <span class="ws-high">${day.high}°</span>
+          <span class="ws-high">${deg(day.high, unit)}°</span>
         </li>`).join('');
   return `<section class="ws-section ws-week" aria-label="Next ${days.length} days">
         <h3>Next ${days.length} days</h3>
@@ -398,7 +416,7 @@ function renderWeek(days) {
 // What the weather screen shows: now on one side, large, with the week under it; today's
 // rain, the next 24 hours and tomorrow on the other. Forecasts cached before some of this was fetched show
 // what they have.
-export function renderScreenContent(weather) {
+export function renderScreenContent(weather, unit = shownUnit) {
   const { today, tomorrow, days } = weather;
   const facts = today ? [
     fact('Rain', escapeHtml(rainText({ rainChance: weather.rainChance, rain: today.rain }) || 'None expected')),
@@ -413,16 +431,16 @@ export function renderScreenContent(weather) {
     </header>
     <div class="ws-layout">
       <section class="ws-now" aria-label="Now">
-        <p class="ws-big">${weather.temperature}<span>°</span></p>
+        <p class="ws-big">${deg(weather.temperature, unit)}<span>°</span></p>
         <p class="ws-condition"><span aria-hidden="true">${weather.icon}</span> ${escapeHtml(weather.label)}</p>
-        <p class="ws-range-text">High ${weather.high}° · Low ${weather.low}° · Feels like ${weather.feelsLike}°</p>
+        <p class="ws-range-text">High ${deg(weather.high, unit)}° · Low ${deg(weather.low, unit)}° · Feels like ${deg(weather.feelsLike, unit)}°</p>
         ${facts ? `<dl class="ws-facts">${facts}</dl>` : ''}
-        ${days?.length ? renderWeek(days) : ''}
+        ${days?.length ? renderWeek(days, unit) : ''}
       </section>
       <div class="ws-detail">
         ${today ? renderRainToday(weather) : ''}
-        ${today?.hours?.length ? renderHours(today.hours) : ''}
-        ${tomorrow ? renderTomorrow(tomorrow) : ''}
+        ${today?.hours?.length ? renderHours(today.hours, unit) : ''}
+        ${tomorrow ? renderTomorrow(tomorrow, unit) : ''}
       </div>
     </div>`;
 }
@@ -430,7 +448,7 @@ export function renderScreenContent(weather) {
 // The weather screen, opened from the masthead (weather-screen.js), fills the window below it.
 // The sky behind it follows the weather now; the canvas draws its rain, snow, cloud or sun.
 // Close sits outside the content, so it stays put when a refresh redraws the forecast.
-export function renderWeatherScreen(weather) {
+export function renderWeatherScreen(weather, unit = shownUnit) {
   if (!weather) return '';
   const { sky, time } = skyFor(weather);
   return `<dialog class="weather-screen" id="weather-screen" data-sky="${sky}" data-time="${time}" aria-label="Weather in ${escapeHtml(weather.name)}">
@@ -438,26 +456,26 @@ export function renderWeatherScreen(weather) {
     <form class="ws-close-form" method="dialog">
       <button class="ws-close" type="submit" autofocus><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9m0-9l-9 9"/></svg>Close<kbd>Esc</kbd></button>
     </form>
-    <div class="ws-content">${renderScreenContent(weather)}</div>
+    <div class="ws-content">${renderScreenContent(weather, unit)}</div>
   </dialog>`;
 }
 
-export function renderWeather(weather) {
+export function renderWeather(weather, unit = shownUnit) {
   if (!weather) return '';
   const hours = weather.hours.map((hour) => `<li title="${escapeHtml(hour.label)}${hour.rainChance ? `, ${hour.rainChance}% chance of rain` : ''}">
         <span class="hour">${escapeHtml(hour.time)}</span>
         <span aria-hidden="true">${hour.icon}</span>
-        <span>${hour.temperature}°</span>
+        <span>${deg(hour.temperature, unit)}°</span>
       </li>`).join('');
   const rain = weather.rainChance ? ` · ${weather.rainChance}% rain` : '';
   // The whole of the weather opens the full forecast: a button laid over it takes the click.
-  return `<section class="weather${weather.stale ? ' is-stale' : ''}" aria-label="Weather in ${escapeHtml(weather.name)}"${weather.stale ? ' title="Weather update failed; showing the last forecast"' : ''}>
+  return `<section class="weather${weather.stale ? ' is-stale' : ''}" data-unit="${unit}" aria-label="Weather in ${escapeHtml(weather.name)}"${weather.stale ? ' title="Weather update failed; showing the last forecast"' : ''}>
       <div class="now">
         <span class="icon" aria-hidden="true">${weather.icon}</span>
-        <span class="temp">${weather.temperature}°</span>
+        <span class="temp">${deg(weather.temperature, unit)}°</span>
         <span class="summary">
           <strong>${escapeHtml(weather.name)}</strong> ${escapeHtml(weather.label)}
-          <span class="detail">H ${weather.high}° L ${weather.low}° · feels ${weather.feelsLike}°${rain}</span>
+          <span class="detail">H ${deg(weather.high, unit)}° L ${deg(weather.low, unit)}° · feels ${deg(weather.feelsLike, unit)}°${rain}</span>
         </span>
       </div>
       ${renderRain(weather.rain)}
@@ -466,11 +484,15 @@ export function renderWeather(weather) {
     </section>`;
 }
 
+let lastShown = null;
+export const shownWeather = () => lastShown; // so a change of unit can redraw it
+
 // In the browser: puts a newer forecast in the masthead and on the weather screen. The screen
 // is updated in place, so an open one stays open, its sky still moving, through a refresh.
 // weather-screen.js hears about it, to mark the new masthead button as open, or to open a
 // screen the address asked for that wasn't there until now.
 export function showWeather(weather) {
+  lastShown = weather;
   const current = document.querySelector('.weather');
   if (current) current.outerHTML = renderWeather(weather);
   const screen = document.getElementById('weather-screen');

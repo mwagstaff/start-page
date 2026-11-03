@@ -1,6 +1,7 @@
 // The Settings screen, a page of its own at /settings: choose how dense the page is, show or
 // hide cards, change their order (arrows, or drag the handle) and number of stories, choose
-// whether cards are fitted to the screen or stay in the columns they were put in, add your
+// whether cards are fitted to the screen or stay in the columns they were put in, show
+// temperatures in °C or °F (or whichever is usual where you are), add your
 // own RSS or Atom feeds, and export or import the settings as a file. Changes apply straight
 // away and are saved in this browser (see settings.js); no account needed. "Edit topics and
 // sources" reopens the setup screen (setup.js). Every change can be undone, or rewound in
@@ -10,7 +11,8 @@
 // loaded at /settings opens it straight away. Done, Escape or Back closes it.
 
 import { escapeHtml } from './cards.js';
-import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setDensity, setFill, setSolid, setTabCards, tabCards, widgetFor } from './page.js';
+import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setDensity, setFill, setSolid, setTabCards, setTemperature, tabCards, widgetFor } from './page.js';
+import { unitForLocale } from './forecast.js';
 import { openSetup } from './setup.js';
 import { openHistory } from './undo.js';
 import { askStartOver } from './start-over.js';
@@ -84,6 +86,17 @@ function build() {
               <span>Solid cards<small>Hides the background photo behind the cards.</small></span>
             </label>
           </section>
+          <section class="settings-section" aria-labelledby="settings-weather-title">
+            <h2 id="settings-weather-title">Weather</h2>
+            <fieldset class="density">
+              <legend>Temperature</legend>
+              <div class="density-options">
+                <label><input type="radio" name="temperature" value="" data-field="temperature"><span>Automatic<small>°${unitForLocale(navigator.language)} for your region</small></span></label>
+                <label><input type="radio" name="temperature" value="C" data-field="temperature"><span>Celsius<small>°C</small></span></label>
+                <label><input type="radio" name="temperature" value="F" data-field="temperature"><span>Fahrenheit<small>°F</small></span></label>
+              </div>
+            </fieldset>
+          </section>
           <section class="settings-section" aria-labelledby="settings-backup-title">
             <h2 id="settings-backup-title">Backup and history</h2>
             <p class="settings-hint">Export your settings to a file to use them in another browser. History lets you undo any change.</p>
@@ -125,6 +138,7 @@ function renderList(focus) {
   dialog.querySelector('[data-field="fill"]').checked = currentSettings()?.fill !== false;
   dialog.querySelector('[data-field="solid"]').checked = currentSettings()?.solid === true;
   dialog.querySelector(`[data-field="density"][value="${currentSettings()?.density ?? DENSITIES[0]}"]`).checked = true;
+  dialog.querySelector(`[data-field="temperature"][value="${currentSettings()?.temperature ?? ''}"]`).checked = true;
   dialog.querySelector('.card-list').innerHTML = cards.map((card, i) => {
     const widget = widgetFor(card.id);
     const title = escapeHtml(widget.title);
@@ -226,6 +240,11 @@ function onChange(event) {
   if (field === 'density') {
     setDensity(event.target.value);
     status(`Density set to ${event.target.value}.`);
+    return;
+  }
+  if (field === 'temperature') {
+    setTemperature(event.target.value || null);
+    status(event.target.value ? `Temperatures are in °${event.target.value}.` : `Temperatures follow your region (°${unitForLocale(navigator.language)}).`);
     return;
   }
   if (field === 'solid') {
