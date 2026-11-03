@@ -14,6 +14,8 @@
   --masthead-muted: #b5b0a6;
   --masthead-border: #3a3834;
   --shadow: 0 1px 2px rgb(29 28 26 / 0.04);
+  --serif: "New York", ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -476,8 +478,8 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
   --ws-faint: oklch(97% 0.01 250 / 0.45);
   --ws-line: oklch(97% 0.01 250 / 0.16);
   --ws-rain: oklch(86% 0.08 235);
-  --ws-serif: "New York", ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --ws-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ws-serif: var(--serif);
+  --ws-ease: var(--ease-out);
   position: fixed;
   inset: var(--ws-top, 0px) 0 0; /* weather-screen.js sets the masthead's height */
   z-index: 14; /* over the cards, under the masthead */
@@ -1133,7 +1135,15 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 
 .customise::backdrop { background: rgb(0 0 0 / 0.45); }
 
-.customise h2 { margin: 0 0 4px; font-size: 17px; }
+.customise {
+  --field: var(--surface);
+  --field-hover: color-mix(in srgb, var(--text) 5%, var(--surface));
+  --glass-line: var(--border);
+  padding: 20px 20px 16px;
+  border-radius: 16px;
+}
+
+.customise h2 { margin: 0 0 6px; font-family: var(--serif); font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
 
 .customise-head p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
 
@@ -1335,9 +1345,19 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 .add-feed input:focus { outline: none; border-color: var(--accent); }
 
 /* The Settings screen (settings-screen.js) and the setup screen (setup.js): pages of their own at
-   /settings and /setup, filling the window, with the same header and two columns of sections. */
+   /settings and /settings/topics-and-sources, filling the window, with the same header and two
+   columns of sections. Like the weather screen they set the page aside rather than cover it:
+   the day's photo stays behind them, softly blurred under a veil, and the sections are frosted
+   panels over it, headed in small capitals, with a serif title. */
 .settings-screen,
 .setup-screen {
+  --veil: var(--bg);
+  --glass: var(--surface);
+  --glass-line: var(--border);
+  --glass-shadow: 0 1px 2px rgb(29 28 26 / 0.05), 0 10px 30px -12px rgb(29 28 26 / 0.18);
+  --field: var(--bg);
+  --field-hover: color-mix(in srgb, var(--text) 6%, var(--bg));
+  --pad: 24px;
   width: 100vw;
   max-width: none;
   height: 100dvh;
@@ -1346,45 +1366,116 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
   padding: 0;
   border: 0;
   color: var(--text);
-  background: var(--bg);
+  background: var(--veil);
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-screen,
+  .setup-screen {
+    --glass-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.5);
+    --field: rgb(255 255 255 / 0.04);
+    --field-hover: rgb(255 255 255 / 0.08);
+  }
+}
+
+/* Over the photo: a light (or, in the dark, deep) veil, with panels that let a little through. */
+:root:not(.no-backdrop) .has-backdrop :is(.settings-screen, .setup-screen) {
+  --veil: linear-gradient(180deg, rgb(244 242 238 / 0.5), rgb(244 242 238 / 0.72));
+  --glass: rgb(255 255 255 / 0.7);
+  --glass-line: rgb(255 255 255 / 0.6);
+  --field: rgb(244 242 238 / 0.75);
+  --field-hover: rgb(236 233 227 / 0.9);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.no-backdrop) .has-backdrop :is(.settings-screen, .setup-screen) {
+    --veil: linear-gradient(180deg, rgb(12 12 11 / 0.5), rgb(12 12 11 / 0.72));
+    --glass: rgb(24 23 21 / 0.66);
+    --glass-line: rgb(255 255 255 / 0.08);
+    --field: rgb(0 0 0 / 0.22);
+    --field-hover: rgb(255 255 255 / 0.06);
+  }
 }
 
 .settings-screen::backdrop,
-.setup-screen::backdrop { background: var(--bg); }
+.setup-screen::backdrop { background: transparent; }
+
+.settings-screen[open],
+.setup-screen[open] { animation: ws-fade 0.35s var(--ease-out); }
+
+/* While either is open the page behind steps away, leaving only the photo, blurred once (a
+   static filter, so it costs nothing as the page scrolls). Settings also steps away while the
+   setup screen is open over it. */
+html:has(:is(.settings-screen, .setup-screen)[open]) { overflow: hidden; }
+html:has(:is(.settings-screen, .setup-screen)[open]) body > :is(.masthead, main, .tabs, .peek) { visibility: hidden; }
+html:has(:is(.settings-screen, .setup-screen)[open]) .backdrop { filter: blur(36px) saturate(1.2); transform: scale(1.1); }
+html:has(.setup-screen[open]) .settings-screen[open] { visibility: hidden; }
 
 .settings-content {
   box-sizing: border-box;
   height: 100%;
   overflow-y: auto;
-  padding: 0 24px 24px;
+  padding: 0 var(--pad) calc(var(--pad) + env(safe-area-inset-bottom));
+  scrollbar-width: thin;
+  scrollbar-color: var(--glass-line) transparent;
 }
 
+/* The header runs the full width, frosted, so the sections blur as they scroll under it. */
 .settings-head {
   position: sticky;
   top: 0;
   z-index: 2;
   display: flex;
-  align-items: baseline;
-  gap: 14px;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 18px 0 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  align-items: center;
+  gap: 16px;
+  margin: 0 calc(var(--pad) * -1);
+  padding: 18px max(var(--pad), calc((100% + var(--pad) * 2 - 1180px) / 2)) 16px;
+  border-bottom: 1px solid var(--glass-line);
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
 }
 
-.settings-head h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+.settings-head h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(24px, 2.4vw, 30px);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+}
+
 .settings-head p { flex: 1; margin: 0; color: var(--muted); font-size: 13px; }
+
 /* A message about the last change takes the place of the note about saving. */
 .settings-status:empty,
 .settings-head:has(.settings-status:not(:empty)) .settings-saved { display: none; }
-.settings-status { color: var(--text); }
-.settings-head .primary { min-width: 84px; min-height: 32px; align-self: center; }
-.settings-head button { align-self: center; }
+.settings-head .settings-status { flex: 0 1 auto; margin-right: auto; }
+
+.settings-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px 5px 10px;
+  border-radius: 999px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, var(--glass));
+  font-weight: 500;
+  animation: ws-rise 0.4s var(--ease-out);
+}
+
+.settings-status::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 
 /* Back to Settings, from the setup screen. */
-.setup-screen .settings-back { margin-right: -4px; border-color: transparent; background: transparent; color: var(--muted); }
-.setup-screen .settings-back:not(:disabled):hover { color: var(--text); border-color: var(--border); }
+.setup-screen .settings-back { margin-right: -6px; padding-inline: 10px 14px; border-color: transparent; background: transparent; color: var(--muted); }
+.setup-screen .settings-back:not(:disabled):hover { color: var(--text); background: var(--field); border-color: var(--glass-line); }
 .setup-screen [hidden] { display: none; }
 
 .settings-columns {
@@ -1396,40 +1487,177 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
   align-items: start;
 }
 
-.settings-side { display: grid; gap: 14px; }
+.settings-side { display: grid; gap: 16px; align-content: start; }
 
 .settings-section {
-  padding: 14px 16px 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
+  padding: 14px 20px 18px;
+  border: 1px solid var(--glass-line);
+  border-radius: 16px;
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+  animation: ws-rise 0.6s var(--ease-out) both;
 }
 
-.settings-section h2 { margin: 0 0 4px; font-size: 15px; }
-.settings-hint { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+/* The sections arrive one after another, down each column. */
+.settings-side + .settings-side > :nth-child(1) { animation-delay: 0.04s; }
+.settings-side > :nth-child(2) { animation-delay: 0.08s; }
+.settings-side + .settings-side > :nth-child(2) { animation-delay: 0.12s; }
+.settings-side > :nth-child(3) { animation-delay: 0.16s; }
+
+/* A section that only leads somewhere else keeps its button beside the text. */
+.settings-link { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 16px; }
+.settings-link h2 { grid-column: 1 / -1; }
+.settings-link .settings-hint { margin: 0; }
+
+/* Section headings in small capitals over a hairline, as on the weather screen. */
+.settings-section h2 {
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--glass-line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.settings-hint { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; text-wrap: pretty; }
 .settings-hint strong { color: var(--text); font-weight: 600; }
-.settings-section .arrange-toggle:last-child { margin-bottom: 0; }
+.settings-section > :last-child { margin-bottom: 0; }
 
 .settings-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-.settings-screen .danger-outline { color: var(--danger); }
-.settings-screen .danger-outline:not(:disabled):hover { border-color: var(--danger); }
 
-/* Rows sit on the section's surface, so they get the page colour to stand apart. */
-.settings-screen .card-list { gap: 4px; }
-.settings-screen .card-list li { padding: 3px 6px 3px 10px; background: var(--bg); }
-.settings-screen .card-list input[type=number],
-.settings-screen .card-move button { min-height: 26px; }
+/* Buttons are pills: quiet by default, blue for the main action, red text for starting over. */
+:is(.settings-screen, .setup-screen, .customise) button {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--glass-line);
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--field);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+:is(.settings-screen, .setup-screen, .customise) button:not(:disabled):hover { border-color: color-mix(in srgb, var(--muted) 45%, transparent); background: var(--field-hover); }
+:is(.settings-screen, .setup-screen, .customise) button:not(:disabled):active { transform: scale(0.97); }
+:is(.settings-screen, .setup-screen, .customise) button:disabled { opacity: 0.4; cursor: default; }
+
+:is(.settings-screen, .setup-screen, .customise) .primary {
+  border-color: transparent;
+  color: #fff;
+  background: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+:is(.settings-screen, .setup-screen, .customise) .primary:not(:disabled):hover { border-color: transparent; background: color-mix(in srgb, var(--accent) 88%, #000); }
+.settings-head .primary { min-width: 88px; }
+
+/* Done shows its key, like Close on the weather screen. */
+.settings-head kbd {
+  margin: 0 -8px 0 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.2);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.settings-screen .danger-outline { color: var(--danger); }
+.settings-screen .danger-outline:not(:disabled):hover { border-color: color-mix(in srgb, var(--danger) 50%, transparent); background: color-mix(in srgb, var(--danger) 8%, var(--field)); }
+
+/* The card list: rows set into the panel, picked out on hover. */
+.settings-screen .card-list { gap: 6px; }
+
+.settings-screen .card-list li {
+  min-height: 44px;
+  padding: 4px 6px 4px 12px;
+  border-color: transparent;
+  border-radius: 10px;
+  background: var(--field);
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.settings-screen .card-list li:hover { background: var(--field-hover); }
+.settings-screen .card-list li.is-dragging { border-color: var(--accent); background: var(--glass); }
+.settings-screen .card-toggle { font-weight: 500; }
+.settings-screen .card-list input[type=number] { min-height: 30px; border-radius: 8px; background: var(--glass); }
+.settings-screen .card-move button { width: 30px; min-height: 30px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); }
+.settings-screen .card-move button:not(:disabled):hover { color: var(--text); background: var(--glass); }
+
 .settings-screen .density-options,
-.settings-screen .add-feed input { background: var(--bg); }
+.settings-screen .add-feed input { border-color: var(--glass-line); background: var(--field); }
+.settings-screen .density-options { padding: 3px; border-radius: 12px; }
+.settings-screen .density-options span { padding: 7px 8px; border-radius: 9px; transition: background-color 0.15s, color 0.15s; }
+.settings-screen .density legend { margin-bottom: 8px; }
+.settings-screen .add-feed { margin-top: 18px; }
+.settings-screen .add-feed input { min-height: 36px; padding-inline: 14px; border-radius: 999px; }
+.settings-screen .add-feed input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* On and off settings are switches, the label on the left. */
+.arrange-toggle,
+.setup-check { justify-content: space-between; }
+
+.settings-screen .arrange-toggle { flex-direction: row-reverse; gap: 16px; margin: 0; padding: 10px 0; border-top: 1px solid var(--glass-line); font-weight: 500; }
+.settings-screen .arrange-toggle:first-of-type { margin-top: 14px; }
+.settings-screen .arrange-toggle:last-child { padding-bottom: 0; }
+.settings-screen .arrange-toggle small { margin-top: 3px; line-height: 1.45; }
+
+:is(.settings-screen, .setup-screen) :is(.arrange-toggle, .setup-check) input {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 22px;
+  margin: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+:is(.settings-screen, .setup-screen) :is(.arrange-toggle, .setup-check) input::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  transition: transform 0.2s var(--ease-out);
+}
+
+:is(.settings-screen, .setup-screen) :is(.arrange-toggle, .setup-check) input:checked { background: var(--accent); }
+:is(.settings-screen, .setup-screen) :is(.arrange-toggle, .setup-check) input:checked::before { transform: translateX(14px); }
+:is(.settings-screen, .setup-screen) :is(.arrange-toggle, .setup-check) input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-screen .arrange-toggle input { margin-top: 1px; }
 
 @media (max-width: 860px) {
-  .settings-columns { grid-template-columns: 1fr; }
-  .settings-content { padding: 0 16px calc(16px + env(safe-area-inset-bottom)); }
+  .settings-screen,
+  .setup-screen { --pad: 16px; }
+  .settings-columns { grid-template-columns: 1fr; gap: 14px; margin-top: 16px; }
+  .settings-side { gap: 14px; }
   .settings-saved { display: none; }
+  .settings-head { gap: 10px; padding-block: 12px; }
+  .settings-head kbd { display: none; }
   .settings-head p { font-size: 12px; }
   .settings-head { justify-content: space-between; }
-  .setup-screen .settings-head { flex-wrap: wrap; align-items: center; row-gap: 6px; }
-  .setup-screen .settings-head h1 { flex: 1; }
+  .settings-section { padding: 14px 16px 16px; border-radius: 14px; }
+  .settings-link { grid-template-columns: 1fr; row-gap: 12px; }
+  .settings-link .settings-buttons { justify-self: start; }
+  /* Back and Save share the top row; the title and intro take a row each below. */
+  .setup-screen .settings-head { flex-wrap: wrap; row-gap: 4px; }
+  .setup-screen .settings-head .settings-back { margin-left: -10px; }
+  .setup-screen .settings-head .primary { margin-left: auto; }
+  .setup-screen .settings-head h1 { order: 4; flex-basis: 100%; margin-top: 4px; }
   .setup-screen .setup-intro { order: 5; flex-basis: 100%; }
   .setup-option-label { width: 100%; }
 }
@@ -1437,7 +1665,11 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 @media (min-width: 861px) {
   .setup-screen .settings-columns { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
 }
-.setup-screen .settings-side { align-content: start; }
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-screen[open], .setup-screen[open], .settings-section, .settings-status { animation: none; }
+  :is(.settings-screen, .setup-screen) :is(.arrange-toggle, .setup-check) input::before { transition: none; }
+}
 
 /* Turned off on the setup screen (the early script sets these before the page paints). */
 .no-weather .weather,
@@ -1445,29 +1677,15 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 .no-backdrop .peek { display: none; }
 
 /* Setup screen (setup.js): its page is laid out like Settings (above); these are its controls. */
-.setup-screen button {
-  min-height: 28px;
-  padding: 2px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  background: var(--surface);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.setup-screen .primary { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
-.setup-screen button:disabled { opacity: 0.45; cursor: default; }
 .setup-screen .chip span,
-.setup-screen .segmented { background: var(--bg); }
+.setup-screen .segmented { border-color: var(--glass-line); background: var(--field); }
 
 .setup-hint { margin: -4px 0 8px; color: var(--muted); font-size: 12px; }
 .setup-warning { min-height: 0; margin: 8px 0 0; color: var(--warning); font-size: 12px; }
 .setup-warning:empty { display: none; }
 
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chips + .chips { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips + .chips { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--glass-line, var(--border)); }
 
 /* Chips and segmented buttons are real inputs, hidden but focusable, inside their labels. */
 .chip input,
@@ -1477,16 +1695,18 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 32px;
-  padding: 5px 12px;
+  min-height: 34px;
+  padding: 6px 14px 6px 11px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
   font-size: 13px;
   cursor: pointer;
   user-select: none;
-  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
 }
+
+.chip:active span { transform: scale(0.97); }
 
 .chip span::before {
   content: "+";
@@ -1496,12 +1716,13 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
   text-align: center;
 }
 
-.chip:hover span { border-color: var(--muted); }
+.chip:hover span { border-color: color-mix(in srgb, var(--muted) 45%, transparent); background: var(--field-hover, var(--surface)); }
 
+.setup-screen .chip input:checked + span,
 .chip input:checked + span {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  background: color-mix(in srgb, var(--accent) 14%, var(--glass, var(--surface)));
   font-weight: 600;
 }
 
@@ -1526,7 +1747,7 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
   display: inline-flex;
   padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 999px;
   background: var(--surface);
 }
 
@@ -1534,28 +1755,33 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 
 .segmented span {
   display: block;
-  padding: 5px 14px;
-  border-radius: 6px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  color: var(--muted);
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   user-select: none;
+  transition: background-color 0.15s, color 0.15s;
 }
 
-.segmented input:checked + span { color: #fff; background: var(--accent); font-weight: 600; }
+.segmented label:hover span { color: var(--text); }
+
+.segmented input:checked + span { color: #fff; background: var(--accent); font-weight: 600; box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--accent) 70%, transparent); }
 
 .setup-option {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 12px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .setup-option-label { width: 4.5em; color: var(--muted); font-size: 13px; }
 
-.setup-check { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; cursor: pointer; }
-.setup-check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
-.setup-options .setup-option:last-of-type { margin-bottom: 4px; }
+.setup-check { display: flex; flex-direction: row-reverse; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--glass-line, var(--border)); font-size: 13px; font-weight: 500; cursor: pointer; }
+.setup-check:last-child { padding-bottom: 0; }
+.setup-options .setup-option:last-of-type { margin-bottom: 16px; }
 .chips[data-list="interests"]:empty { display: none; }
 
 

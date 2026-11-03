@@ -38,21 +38,30 @@ function build() {
         <h1 id="settings-title">Settings</h1>
         <p class="settings-saved">Changes are saved automatically in this browser.</p>
         <p class="settings-status" role="status"></p>
-        <button type="button" data-action="close" class="primary">Done</button>
+        <button type="button" data-action="close" class="primary">Done<kbd aria-hidden="true">Esc</kbd></button>
       </header>
       <div class="settings-columns">
-        <section class="settings-section settings-cards" aria-labelledby="settings-cards-title">
-          <h2 id="settings-cards-title">Cards</h2>
-          <p class="settings-hint">Choose which cards to show and drag them into order. A story that fits more than one card appears in the highest one.</p>
-          <ol class="card-list"></ol>
-          <form class="add-feed">
-            <label for="add-feed-url">Add an RSS or Atom feed</label>
-            <div class="add-feed-row">
-              <input id="add-feed-url" type="text" inputmode="url" spellcheck="false" placeholder="https://example.com/feed.xml" autocomplete="off" required>
-              <button type="submit">Add feed</button>
+        <div class="settings-side">
+          <section class="settings-section settings-link" aria-labelledby="settings-topics-title">
+            <h2 id="settings-topics-title">Topics and sources</h2>
+            <p class="settings-hint">Change your region, topics, news outlets, weather and background photo.</p>
+            <div class="settings-buttons">
+              <button type="button" data-action="setup">Edit topics and sources…</button>
             </div>
-          </form>
-        </section>
+          </section>
+          <section class="settings-section settings-cards" aria-labelledby="settings-cards-title">
+            <h2 id="settings-cards-title">Cards</h2>
+            <p class="settings-hint">Choose which cards to show and drag them into order. A story that fits more than one card appears in the highest one.</p>
+            <ol class="card-list"></ol>
+            <form class="add-feed">
+              <label for="add-feed-url">Add an RSS or Atom feed</label>
+              <div class="add-feed-row">
+                <input id="add-feed-url" type="text" inputmode="url" spellcheck="false" placeholder="https://example.com/feed.xml" autocomplete="off" required>
+                <button type="submit">Add feed</button>
+              </div>
+            </form>
+          </section>
+        </div>
         <div class="settings-side">
           <section class="settings-section" aria-labelledby="settings-layout-title">
             <h2 id="settings-layout-title">Layout</h2>
@@ -74,13 +83,6 @@ function build() {
               <input type="checkbox" data-field="solid">
               <span>Solid cards<small>Hides the background photo behind the cards.</small></span>
             </label>
-          </section>
-          <section class="settings-section" aria-labelledby="settings-topics-title">
-            <h2 id="settings-topics-title">Topics and sources</h2>
-            <p class="settings-hint">Change your region, topics, news outlets, weather and background photo.</p>
-            <div class="settings-buttons">
-              <button type="button" data-action="setup">Edit topics and sources…</button>
-            </div>
           </section>
           <section class="settings-section" aria-labelledby="settings-backup-title">
             <h2 id="settings-backup-title">Backup and history</h2>
