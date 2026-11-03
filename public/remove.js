@@ -1,5 +1,5 @@
 // The small × in each card's top-right corner takes the card off the page, after asking.
-// Nothing is deleted: the card stays in Customise to tick again, and the change can be
+// Nothing is deleted: the card stays in Settings to tick again, and the change can be
 // undone or rewound (undo.js). The buttons are in every card's markup (cards.js) but only
 // show once this script has run, since without it they'd do nothing.
 
@@ -13,7 +13,7 @@ let target = null; // the card being asked about
 
 // Clock with an arrow running backwards, as on the History button.
 const HISTORY_ICON = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8"/><path d="M2.4 2.6v2.6H5"/><path d="M8 5.2V8l2 1.3"/></svg>';
-const CUSTOMISE_ICON = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/><circle cx="5.5" cy="4" r="1.6" fill="currentColor"/><circle cx="10.5" cy="8" r="1.6" fill="currentColor"/><circle cx="7" cy="12" r="1.6" fill="currentColor"/></svg>';
+const SETTINGS_ICON = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/><circle cx="5.5" cy="4" r="1.6" fill="currentColor"/><circle cx="10.5" cy="8" r="1.6" fill="currentColor"/><circle cx="7" cy="12" r="1.6" fill="currentColor"/></svg>';
 
 function build() {
   dialog = document.createElement('dialog');
@@ -54,7 +54,7 @@ function ask(card) {
       <ul class="remove-ways">
         <li><kbd>${key}</kbd><span><strong>Undo</strong> straight away, or press Undo in the message that appears.</span></li>
         <li><span class="remove-icon">${HISTORY_ICON}</span><span><strong>History</strong> in the top bar lists every change, so you can rewind to any point.</span></li>
-        <li><span class="remove-icon">${CUSTOMISE_ICON}</span><span><strong>Customise</strong> in the top bar: tick “${escapeHtml(title)}” to show it again.</span></li>
+        <li><span class="remove-icon">${SETTINGS_ICON}</span><span><strong>Settings</strong> in the top bar: tick “${escapeHtml(title)}” to show it again.</span></li>
       </ul>
     </div>
     <div class="customise-actions">

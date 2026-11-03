@@ -1,9 +1,9 @@
 // Drag a card anywhere on it to move it (mouse: press and move; touch: press and hold, then
 // move). The card lifts and follows the pointer, a dashed outline shows where it will land,
 // and the other cards slide out of the way. On a drop the cards stay in the columns they're
-// in now (page.js `placeCards`), with no limit on how many go in one column; Customise can
+// in now (page.js `placeCards`), with no limit on how many go in one column; Settings can
 // turn fitting them to the screen back on. Escape puts the card back. From the keyboard, use
-// the Customise dialog.
+// the Settings screen.
 
 import { currentFeeds, fetchFeeds, placeCards, setTabCards, shownColumns, tabCards, widgetFor } from './page.js';
 import { moveCard } from './settings.js';

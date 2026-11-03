@@ -163,7 +163,8 @@ function renderHistory() {
 export function openHistory() {
   if (!dialog) build();
   renderHistory();
-  document.querySelectorAll('dialog[open]').forEach((open) => { if (open !== dialog) open.close(); });
+  // Settings stays open underneath, to come back to.
+  document.querySelectorAll('dialog[open]:not(.settings-screen)').forEach((open) => { if (open !== dialog) open.close(); });
   if (!dialog.open) dialog.showModal();
   hideToast();
   (dialog.querySelector('.is-current .history-item') ?? dialog.querySelector('[data-action="close"]')).focus({ preventScroll: true });

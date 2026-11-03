@@ -21,6 +21,12 @@ npm test
   OpenStreetMap's Nominatim for the place name itself, with coordinates rounded to about 1km,
   so the location never reaches this server. The browser keeps the forecast for 15 minutes
   and the place name for good (localStorage).
+- Clicking the weather in the masthead opens the weather screen at `#weather`, which can be
+  bookmarked. Its animated sky follows the weather now. To see any sky whatever the weather,
+  add a test to the address, with `&time=night` for the night version, e.g.
+  `/#weather?test=thunderstorm&time=night`. Tests: `clear` (or `sunny`), `fair` (or
+  `mostly-clear`, `partly-cloudy`), `cloud` (or `cloudy`, `overcast`), `fog`, `drizzle`,
+  `rain`, `downpour` (or `heavy-rain`), `snow`, `storm` (or `thunderstorm`).
 - The masthead's rain chart shows the next 6 hours in 15-minute bars from Open-Meteo's
   `minutely_15` forecast. Bar height is the rate, full height at 8 mm/h. The shade gives the
   band: light below 2.5 mm/h, moderate below 7.6, heavy above. A one-line summary sits beside
@@ -59,18 +65,19 @@ npm test
 - Open pages re-request the snapshot every minute while visible, and when you switch back to
   the tab (usually a 304). If it has changed, they redraw the cards in place, but only after
   30 seconds without scrolling, typing or moving the pointer, and not while a search is
-  half-typed or the Customise dialog is open. A new daily photo reloads the page. The ↻ button
+  half-typed or Settings is open. A new daily photo reloads the page. The ↻ button
   in the masthead fetches every feed and the weather straight away (`POST /api/refresh`, at
   most once a minute), then redraws.
-- The sliders button in the masthead opens Customise: show or hide cards (including any card
+- The sliders button in the masthead opens Settings, a full-window page at `/settings`
+  (`public/settings-screen.js`; the address can be bookmarked or shared, and Back closes it): show or hide cards (including any card
   in `config.widgets` that isn't on the tab), change their order (arrows, or drag a row by its
-  ⠿ handle, which works with touch too) and number of items (up to 15), add your own RSS or
+  ⠿ handle, which works with touch too) and number of stories (up to 15), add your own RSS or
   Atom feeds (up to 20), choose whether cards are fitted to the screen, and export or import
   the settings as `start-page-settings.json`. On the page itself you can drag any card (press
   and move with a mouse; press and hold, then move, on a touch screen; Escape cancels): it
   lifts and follows the pointer, a dashed outline shows where it will land, and the other
   cards slide out of the way. Dropping a card keeps every card in the column it's in, with no
-  limit per column (`public/reorder.js`); "Fit cards to the screen" in Customise packs them
+  limit per column (`public/reorder.js`); "Auto-arrange cards" in Settings packs them
   to fit again. Settings are kept in
   the browser's localStorage under `start-page:settings`, with no account. With a saved
   layout, the browser draws the cards from the snapshot; a small script in the page's `<head>`
@@ -108,10 +115,15 @@ npm test
   sources (origin Cache-Control)", which covers `/api/feeds.json`, `/api/catalogue.json` and
   `/api/sources`. Catalogue feeds that are also on the default page (BBC News top stories, BBC
   Science, BBC Football, Six Colors) are read from its cache rather than fetched twice.
-- First visit (no settings in this browser): `public/setup.js` opens a one-panel setup screen
-  over the default page: region (guessed from the time zone), topics, news sources, one card per
-  topic or per source, pictures or compact, and weather and daily photo on or off. "Build my
+- First visit (no settings in this browser): `public/setup.js` opens the setup page at
+  `/settings/topics-and-sources` (shareable, like `/settings`), over the default page: region (guessed from the time zone), topics, news sources, one card per
+  topic or per source, pictures or headlines only, and weather and daily photo on or off. "Build my
   page" saves the choices as `profile` in the settings and lays out cards from them
-  (`public/topics.js`); "Skip" or Escape just remembers it was seen. Customise has a
-  "Topics & sources…" button to reopen it; cards already on the page keep their place and
-  settings, and unwanted ones are hidden. "Reset to default" clears the profile too.
+  (`public/topics.js`); "Skip for now", Escape or Back just remembers it was seen. Settings has an
+  "Edit topics and sources…" button that opens it on top of Settings, with "← Settings" (or
+  Back) to return; cards already on the page keep their place and
+  settings, and unwanted ones are hidden. "Reset cards" clears the profile too.
+  "Start over…" (`public/start-over.js`) asks first, offering an export, then clears the
+  settings and history from this browser and reloads the home page, so the setup screen opens
+  as on a first visit, over a blank page (the cards show again once it's built or skipped).
+  It can't be undone.

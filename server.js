@@ -131,7 +131,7 @@ const server = createServer(async (req, res) => {
     return res.end(body);
   }
 
-  // A feed someone added in Customise, fetched (safely) and kept for a few minutes. The
+  // A feed someone added in Settings, fetched (safely) and kept for a few minutes. The
   // browser draws its card; the same feed is shared by everyone who adds it.
   if (pathname === '/api/feed') {
     try {
@@ -185,7 +185,9 @@ const server = createServer(async (req, res) => {
     return send(res, 200, JSON.stringify({ lastRefresh: cache.lastRefresh }), 'application/json');
   }
 
-  const tabId = pathname === '/' ? 'home' : pathname.slice(1);
+  // /settings and /settings/topics-and-sources are the home page with the Settings or setup
+  // screen open (settings-screen.js, setup.js).
+  const tabId = ['/', '/settings', '/settings/topics-and-sources'].includes(pathname) ? 'home' : pathname.slice(1);
   const tab = config.tabs.find((t) => t.id === tabId);
   if (!tab) return send(res, 404, 'Not found', 'text/plain');
 

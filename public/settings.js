@@ -15,6 +15,9 @@
 import { validProfile } from './topics.js';
 
 export const SETTINGS_KEY = 'start-page:settings'; // the early script in lib/render.js reads it too
+// Set (for this tab only) by "Start over", so the setup screen opens on a blank page rather
+// than over the default cards; lib/render.js reads it too.
+export const STARTING_OVER_KEY = 'start-page:starting-over';
 export const MAX_CARD_ITEMS = 15; // keep in step with lib/cache.js
 export const MAX_CUSTOM_FEEDS = 20;
 export const MAX_COLUMNS = 12;

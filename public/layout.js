@@ -2,8 +2,10 @@
 // once the reader has placed cards themselves (page.js marks the grid `data-arrange=manual`
 // and each card `data-col`), in the columns they chose. Then, unless the reader turned it
 // off (the `no-fill` class on the page), each card shows more or fewer stories, from the
-// spares it was drawn with, so every column reaches the bottom of the window. Without
-// JavaScript the CSS multi-column layout still works; this only improves on it.
+// spares it was drawn with, so every column reaches the bottom of the window. With more
+// cards than fit the window, even squeezed, the page scrolls instead (`scrolls`): cards show
+// their own number of stories, and shorter columns are filled to end level with the
+// tallest. Without JavaScript the CSS multi-column layout still works; this only improves on it.
 
 const MIN_COLUMN_WIDTH = 300; // if style.css doesn't set --column-width (it changes with the density)
 const EXACT_LIMIT = 16; // above this many cards, use the greedy result alone
@@ -136,6 +138,18 @@ export function storySpread(space, height, items) {
   return items ? Math.min(MAX_SPREAD, Math.max(0, space - height) / (2 * items)) : 0;
 }
 
+// Whether the columns (arrays of card indices into `cards`, each { start, sizes }) need
+// more than `space`, and so the page should scroll. Filling, a card can drop to its fewest
+// stories; otherwise only the last card in a column gives way (it scrolls its stories), and
+// it still needs room for that many.
+export function overflows(columns, cards, space, fill) {
+  const fewest = (card) => card.sizes[Math.min(MIN_ITEMS, card.start)];
+  return columns.some((column) => column.reduce((sum, i, j) => {
+    const card = cards[i];
+    return sum + (fill || j === column.length - 1 ? fewest(card) : card.sizes[card.start]);
+  }, 0) > space);
+}
+
 const resetStories = (grid) => grid.querySelectorAll('.item').forEach((item) => item.classList.remove('show', 'cut'));
 
 function initGrid(grid) {
@@ -145,12 +159,12 @@ function initGrid(grid) {
   const filling = () => !document.documentElement.classList.contains('no-fill');
 
   const layout = () => {
-    // The window's height only matters when filling it.
-    if (grid.clientWidth === laidOutWidth && (!filling() || window.innerHeight === laidOutHeight)) return;
+    // The window's height decides whether the cards fit, and how far to fill them.
+    if (grid.clientWidth === laidOutWidth && window.innerHeight === laidOutHeight) return;
     laidOutWidth = grid.clientWidth;
     laidOutHeight = window.innerHeight;
     // Measure in the CSS column layout, where each card already has the column width.
-    grid.classList.remove('packed', 'filled');
+    grid.classList.remove('packed', 'filled', 'scrolls');
     grid.replaceChildren(...cards);
     const count = columnCountFor(grid);
     const fill = filling() && count > 1;
@@ -172,9 +186,14 @@ function initGrid(grid) {
       return column;
     }));
     grid.classList.add('packed');
-    if (!fill) return;
     const style = getComputedStyle(grid);
-    const space = grid.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    let space = grid.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    if (overflows(groups, measured, space, fill)) {
+      grid.classList.add('scrolls');
+      // Filled to the tallest column at its cards' own numbers of stories.
+      space = Math.max(...groups.map((group) => group.reduce((sum, i) => sum + heights[i], 0)));
+    }
+    if (!fill) return;
     // Whatever space is left is shared between the stories, and the last card in each
     // column stretches over any remainder (style.css), so every column ends level.
     groups.forEach((group, c) => {

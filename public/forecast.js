@@ -1,4 +1,5 @@
-// Open-Meteo forecasts: the request, reading the response, and the masthead markup.
+// Open-Meteo forecasts: the request, reading the response, and the markup for the masthead
+// and the full-screen weather.
 // Shared by the server (the default location) and the browser (the reader's own location).
 
 import { escapeHtml } from './cards.js';
@@ -14,24 +15,33 @@ const DAY_PARTS = [['Morning', 6, 12], ['Afternoon', 12, 18], ['Evening', 18, 24
 const RAIN_LEVELS = [[0.1, 'none'], [2.5, 'light'], [7.6, 'moderate'], [Infinity, 'heavy']];
 const LEVEL_ORDER = ['none', 'light', 'moderate', 'heavy'];
 
-// WMO weather interpretation codes, as used by Open-Meteo.
+// WMO weather interpretation codes, as used by Open-Meteo, with the sky the weather screen
+// draws for each (weather-screen.js).
 const CONDITIONS = [
-  [[0], 'Clear', '☀️', '🌙'],
-  [[1], 'Mostly clear', '🌤️', '🌙'],
-  [[2], 'Partly cloudy', '⛅', '☁️'],
-  [[3], 'Overcast', '☁️', '☁️'],
-  [[45, 48], 'Fog', '🌫️', '🌫️'],
-  [[51, 53, 55, 56, 57], 'Drizzle', '🌦️', '🌧️'],
-  [[61, 63, 66, 80, 81], 'Rain', '🌧️', '🌧️'],
-  [[65, 67, 82], 'Heavy rain', '🌧️', '🌧️'],
-  [[71, 73, 75, 77, 85, 86], 'Snow', '🌨️', '🌨️'],
-  [[95, 96, 99], 'Thunderstorm', '⛈️', '⛈️'],
+  [[0], 'Clear', '☀️', '🌙', 'clear'],
+  [[1], 'Mostly clear', '🌤️', '🌙', 'fair'],
+  [[2], 'Partly cloudy', '⛅', '☁️', 'fair'],
+  [[3], 'Overcast', '☁️', '☁️', 'cloud'],
+  [[45, 48], 'Fog', '🌫️', '🌫️', 'fog'],
+  [[51, 53, 55, 56, 57], 'Drizzle', '🌦️', '🌧️', 'drizzle'],
+  [[61, 63, 66, 80, 81], 'Rain', '🌧️', '🌧️', 'rain'],
+  [[65, 67, 82], 'Heavy rain', '🌧️', '🌧️', 'downpour'],
+  [[71, 73, 75, 77, 85, 86], 'Snow', '🌨️', '🌨️', 'snow'],
+  [[95, 96, 99], 'Thunderstorm', '⛈️', '⛈️', 'storm'],
 ];
 
 export function describe(code, isDay = true) {
   const match = CONDITIONS.find(([codes]) => codes.includes(code));
   if (!match) return { label: 'Unknown', icon: '🌡️' };
   return { label: match[1], icon: isDay ? match[2] : match[3] };
+}
+
+// The weather screen's sky for the weather now: the condition, and day or night.
+export function skyFor({ code, isDay }) {
+  return {
+    sky: CONDITIONS.find(([codes]) => codes.includes(code))?.[4] ?? 'cloud',
+    time: isDay === false ? 'night' : 'day',
+  };
 }
 
 export function forecastUrl({ latitude, longitude }) {
@@ -174,6 +184,14 @@ function parseOutlook(json, currentHour) {
       ...describe(daily.weather_code[i]),
     };
   });
+  // Today from midnight, for the rain chart. Hours gone stay (shown dimmed) so the day reads whole.
+  const rainHours = hourly.time.flatMap((time, i) => (time.startsWith(daily.time[0]) ? [{
+    time: time.slice(11, 16),
+    mm: round1(hourly.precipitation?.[i] ?? 0),
+    chance: hourly.precipitation_probability[i] ?? null,
+    past: time < currentHour,
+    now: time === currentHour,
+  }] : []));
   return {
     tomorrow: days[0] && parseTomorrow(json, days[0]),
     today: {
@@ -184,7 +202,9 @@ function parseOutlook(json, currentHour) {
       rain: round1(daily.precipitation_sum?.[0] ?? 0),
       humidity: current.relative_humidity_2m ?? null,
       wind: current.wind_speed_10m != null ? Math.round(current.wind_speed_10m) : null,
+      date: daily.time[0],
       hours,
+      rainHours,
     },
     days,
   };
@@ -209,6 +229,8 @@ export function parseWeather(json, name) {
     temperature: Math.round(current.temperature_2m),
     feelsLike: Math.round(current.apparent_temperature),
     ...describe(current.weather_code, current.is_day === 1),
+    code: current.weather_code,
+    isDay: current.is_day === 1,
     high: Math.round(daily.temperature_2m_max[0]),
     low: Math.round(daily.temperature_2m_min[0]),
     rainChance: daily.precipitation_probability_max[0],
@@ -266,94 +288,170 @@ function rainText({ rainChance, rain }) {
   return parts.join(' · ');
 }
 
-function renderTomorrow(tomorrow) {
-  const facts = [
-    fact('Rain', escapeHtml(rainText(tomorrow) || 'None expected')),
-    tomorrow.wind != null && fact('Wind', `${tomorrow.wind} mph`),
-    tomorrow.uv != null && fact('UV', `${tomorrow.uv} <small>${uvLabel(tomorrow.uv)}</small>`),
-    tomorrow.sunrise && tomorrow.sunset && fact('Sun', `↑ ${escapeHtml(tomorrow.sunrise)} ↓ ${escapeHtml(tomorrow.sunset)}`),
-  ].filter(Boolean).join('');
-  const parts = tomorrow.parts.map((part) => `<li>
-          <span class="forecast-part">${escapeHtml(part.name)}</span>
-          <span class="forecast-icon" title="${escapeHtml(part.label)}">${part.icon}</span>
-          <span class="forecast-temp">${part.low === part.high ? `${part.high}°` : `${part.low}–${part.high}°`}</span>
-          <span class="forecast-rain">${escapeHtml(rainText(part))}</span>
-          ${part.wind != null ? `<span class="forecast-wind">${part.wind} mph</span>` : ''}
-        </li>`).join('');
-  return `<section class="forecast-tomorrow" aria-label="Tomorrow">
-          <h3>Tomorrow · ${escapeHtml(tomorrow.weekday)}</h3>
-          <p class="forecast-summary"><span class="forecast-icon" aria-hidden="true">${tomorrow.icon}</span> ${escapeHtml(tomorrow.label)} · H ${tomorrow.high}° L ${tomorrow.low}°</p>
-          <dl class="forecast-facts">${facts}</dl>
-          ${parts ? `<ol class="forecast-parts">${parts}</ol>` : ''}
-        </section>`;
+// "Tuesday 3 November", from a local date such as "2026-11-03".
+const longDate = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+
+// Rain in mm/h on a fixed scale, so a bar's height says how hard it rains whatever the day:
+// each band (light to 2.5, moderate to 7.6, heavy) takes a third of the chart, heavy topping
+// out at 16 mm/h.
+const RAIN_SCALE = [0, 2.5, 7.6, 16];
+
+export function rainHeight(rate) {
+  const band = RAIN_SCALE.findIndex((limit) => rate < limit) - 1;
+  if (band < 0) return 100; // heavier than the scale goes
+  const within = (rate - RAIN_SCALE[band]) / (RAIN_SCALE[band + 1] - RAIN_SCALE[band]);
+  return round1(((band + within) / 3) * 100);
 }
 
-// Shown when the pointer is over the weather (or it has focus): today's details that don't fit
-// in the masthead, the next 24 hours hour by hour, tomorrow in parts, then the week ahead,
-// each day's range of temperatures drawn on one scale for the whole week.
-function renderOutlook(weather) {
-  const { today, days } = weather;
+// Today's rain hour by hour: a bar for how hard it falls, on a column shaded by the chance of
+// any. The line above says how hard and how much is still to come, then the next 6 hours.
+function renderRainToday({ today, rain }) {
+  const hours = today.rainHours;
+  if (!hours?.length) return '';
+  const ahead = hours.filter((hour) => !hour.past);
+  const total = round1(sum(ahead.map((hour) => hour.mm)));
+  const peak = ahead.reduce((top, hour) => (hour.mm > (top?.mm ?? 0) ? hour : top), null);
+  const headline = total > 0
+    ? `${capitalise(rainLevel(peak.mm) === 'none' ? 'light' : rainLevel(peak.mm))} rain to come: ${total} mm, heaviest at ${peak.time}`
+    : hours.some((hour) => hour.mm > 0) ? 'Dry for the rest of the day' : 'No rain expected today';
+  // Each hour has its own popover, shown at once on hover (style.css). Near the ends of the
+  // chart it lines up with the chart's edge rather than spilling past it.
+  const columns = hours.map((hour, i) => {
+    const tick = hour.now ? 'Now' : Number(hour.time.slice(0, 2)) % 3 === 0 ? hour.time.slice(0, 2) : '';
+    const level = hour.mm >= 0.1 ? (rainLevel(hour.mm) === 'none' ? 'light' : rainLevel(hour.mm)) : null;
+    const edge = i < 3 ? ' is-start' : i >= hours.length - 3 ? ' is-end' : '';
+    const classes = [hour.past && 'is-past', hour.now && 'is-now'].filter(Boolean).join(' ');
+    return `<li${classes ? ` class="${classes}"` : ''}>
+            <span class="ws-tip${edge}" aria-hidden="true">
+              <span class="ws-tip-time">${escapeHtml(hour.time)}${hour.now ? ' · now' : ''}</span>
+              <span class="ws-tip-rain">${level ? `<i class="ws-dot is-${level}"></i>${RAIN_LABELS[level]} · <b>${hour.mm} mm</b>` : 'Dry'}</span>
+              ${hour.chance != null ? `<span class="ws-tip-chance"><span class="ws-tip-meter"><span style="width:${hour.chance}%"></span></span>${hour.chance}% chance of rain</span>` : ''}
+            </span>
+            <span class="ws-bar">${hour.chance ? `<span class="ws-chance" style="opacity:${(hour.chance / 100).toFixed(2)}"></span>` : ''}${level ? `<span class="ws-amount is-${level}" style="height:${rainHeight(hour.mm)}%"></span>` : ''}</span>
+            <span class="ws-tick">${tick}</span>
+          </li>`;
+  }).join('');
+  return `<section class="ws-section ws-rain" aria-label="Rain today">
+        <h3>Rain today${rain ? `<span class="ws-h3-note">Next 6 hours: ${escapeHtml(rain.summary.charAt(0).toLowerCase() + rain.summary.slice(1))}</span>` : ''}</h3>
+        <p class="ws-lead">${escapeHtml(headline)}</p>
+        <div class="ws-rain-chart">
+          <div class="ws-bands" aria-hidden="true"><span>Heavy</span><span>Moderate</span><span>Light</span></div>
+          <p class="ws-legend"><span class="ws-key-amount"></span>How hard it rains <span class="ws-key-chance"></span>Shade: chance of rain</p>
+          <ol role="img" aria-label="${escapeHtml(`Rain today, hour by hour. ${headline}.`)}">${columns}</ol>
+        </div>
+      </section>`;
+}
+
+function renderHours(hours) {
+  const items = hours.map((hour) => `<li${hour.newDay ? ' class="is-new-day"' : ''}>
+          <span class="ws-time">${escapeHtml(hour.time)}</span>
+          <span class="ws-icon" title="${escapeHtml(hour.label)}">${hour.icon}</span>
+          <span class="ws-temp">${hour.temperature}°</span>
+          ${hour.wind != null ? `<span class="ws-wind">${hour.wind} mph</span>` : ''}
+        </li>`).join('');
+  return `<section class="ws-section" aria-label="Next ${hours.length} hours">
+        <h3>Next ${hours.length} hours</h3>
+        <ol class="ws-hours">${items}</ol>
+      </section>`;
+}
+
+// Tomorrow's figures go on one line, to keep the screen to one window's height.
+function renderTomorrow(tomorrow) {
   const facts = [
-    fact('Feels like', `${weather.feelsLike}°`),
+    `Rain ${escapeHtml(rainText(tomorrow) || 'none expected')}`,
+    tomorrow.wind != null && `Wind ${tomorrow.wind} mph`,
+    tomorrow.uv != null && `UV ${tomorrow.uv} ${uvLabel(tomorrow.uv)}`,
+    tomorrow.sunrise && tomorrow.sunset && `Sun ↑ ${escapeHtml(tomorrow.sunrise)} ↓ ${escapeHtml(tomorrow.sunset)}`,
+  ].filter(Boolean).join(' · ');
+  const parts = tomorrow.parts.map((part) => `<li>
+          <span class="ws-icon" title="${escapeHtml(part.label)}">${part.icon}</span>
+          <span class="ws-part">${escapeHtml(part.name)}</span>
+          <span class="ws-temp">${part.low === part.high ? `${part.high}°` : `${part.low}–${part.high}°`}</span>
+          <span class="ws-part-detail"><span class="ws-rain-text">${escapeHtml(rainText(part))}</span>${part.wind != null ? ` <span class="ws-wind">${part.wind} mph</span>` : ''}</span>
+        </li>`).join('');
+  return `<section class="ws-section ws-tomorrow" aria-label="Tomorrow">
+        <h3>Tomorrow · ${escapeHtml(tomorrow.weekday)}</h3>
+        <p class="ws-lead"><span class="ws-icon" aria-hidden="true">${tomorrow.icon}</span> ${escapeHtml(tomorrow.label)}, ${tomorrow.high}° <span class="ws-dim">/ ${tomorrow.low}°</span></p>
+        <p class="ws-sub">${facts}</p>
+        ${parts ? `<ol class="ws-parts">${parts}</ol>` : ''}
+      </section>`;
+}
+
+// The week, compact: each day's range of temperatures drawn on one scale for the whole week.
+function renderWeek(days) {
+  const lowest = Math.min(...days.map((day) => day.low));
+  const span = Math.max(1, Math.max(...days.map((day) => day.high)) - lowest);
+  const rows = days.map((day) => `<li>
+          <span class="ws-day">${escapeHtml(day.day)}</span>
+          <span class="ws-icon" title="${escapeHtml(day.label)}">${day.icon}</span>
+          <span class="ws-rain-text">${escapeHtml(rainText(day))}</span>
+          <span class="ws-low">${day.low}°</span>
+          <span class="ws-range" aria-hidden="true"><span style="left:${((day.low - lowest) / span * 100).toFixed(1)}%;right:${(100 - (day.high - lowest) / span * 100).toFixed(1)}%"></span></span>
+          <span class="ws-high">${day.high}°</span>
+        </li>`).join('');
+  return `<section class="ws-section ws-week" aria-label="Next ${days.length} days">
+        <h3>Next ${days.length} days</h3>
+        <ol>${rows}</ol>
+      </section>`;
+}
+
+// What the weather screen shows: now on one side, large, with the week under it; today's
+// rain, the next 24 hours and tomorrow on the other. Forecasts cached before some of this was fetched show
+// what they have.
+export function renderScreenContent(weather) {
+  const { today, tomorrow, days } = weather;
+  const facts = today ? [
     fact('Rain', escapeHtml(rainText({ rainChance: weather.rainChance, rain: today.rain }) || 'None expected')),
     today.wind != null && fact('Wind', `${today.wind} mph`),
     today.humidity != null && fact('Humidity', `${today.humidity}%`),
     today.uv != null && fact('UV', `${today.uv} <small>${uvLabel(today.uv)}</small>`),
-    fact('Sun', `↑ ${escapeHtml(today.sunrise)} ↓ ${escapeHtml(today.sunset)}`),
-  ].filter(Boolean).join('');
-  const hours = today.hours.map((hour) => `<li${hour.newDay ? ' class="is-new-day"' : ''}>
-          <span class="forecast-time">${escapeHtml(hour.time)}</span>
-          <span class="forecast-icon" title="${escapeHtml(hour.label)}">${hour.icon}</span>
-          <span class="forecast-temp">${hour.temperature}°</span>
-          <span class="forecast-rain">${escapeHtml(rainText(hour))}</span>
-          ${hour.wind != null ? `<span class="forecast-wind">${hour.wind} mph</span>` : ''}
-        </li>`).join('');
-  const lowest = Math.min(...days.map((day) => day.low));
-  const span = Math.max(1, Math.max(...days.map((day) => day.high)) - lowest);
-  const week = days.map((day) => `<li>
-          <span class="forecast-day">${escapeHtml(day.day)}</span>
-          <span class="forecast-icon" aria-hidden="true">${day.icon}</span>
-          <span class="forecast-label">${escapeHtml(day.label)}</span>
-          <span class="forecast-rain">${escapeHtml(rainText(day))}</span>
-          <span class="forecast-low">${day.low}°</span>
-          <span class="forecast-range" aria-hidden="true"><span style="left:${((day.low - lowest) / span * 100).toFixed(1)}%;right:${(100 - (day.high - lowest) / span * 100).toFixed(1)}%"></span></span>
-          <span class="forecast-high">${day.high}°</span>
-        </li>`).join('');
-  return `<div class="forecast" id="forecast-detail">
-      <div class="forecast-panel">
-        <section class="forecast-today" aria-label="Today">
-          <header>
-            <span class="forecast-big" aria-hidden="true">${weather.icon}</span>
-            <div>
-              <h3>Today in ${escapeHtml(weather.name)}</h3>
-              <p>${escapeHtml(today.label)} · H ${weather.high}° L ${weather.low}°</p>
-            </div>
-            <span class="forecast-now">${weather.temperature}°</span>
-          </header>
-          <dl class="forecast-facts">${facts}</dl>
-          <h3>Next ${today.hours.length} hours</h3>
-          <ol class="forecast-hours">${hours}</ol>
-        </section>
-        ${weather.tomorrow ? renderTomorrow(weather.tomorrow) : ''}
-        <section class="forecast-week" aria-label="Next ${days.length} days">
-          <h3>Next ${days.length} days</h3>
-          <ol>${week}</ol>
-        </section>
+    fact('Sunrise', escapeHtml(today.sunrise)),
+    fact('Sunset', escapeHtml(today.sunset)),
+  ].filter(Boolean).join('') : '';
+  return `<header class="ws-top">
+      <p class="ws-place"><strong>${escapeHtml(weather.name)}</strong>${today?.date ? `<span>${escapeHtml(longDate(today.date))}</span>` : ''}</p>
+    </header>
+    <div class="ws-layout">
+      <section class="ws-now" aria-label="Now">
+        <p class="ws-big">${weather.temperature}<span>°</span></p>
+        <p class="ws-condition"><span aria-hidden="true">${weather.icon}</span> ${escapeHtml(weather.label)}</p>
+        <p class="ws-range-text">High ${weather.high}° · Low ${weather.low}° · Feels like ${weather.feelsLike}°</p>
+        ${facts ? `<dl class="ws-facts">${facts}</dl>` : ''}
+        ${days?.length ? renderWeek(days) : ''}
+      </section>
+      <div class="ws-detail">
+        ${today ? renderRainToday(weather) : ''}
+        ${today?.hours?.length ? renderHours(today.hours) : ''}
+        ${tomorrow ? renderTomorrow(tomorrow) : ''}
       </div>
     </div>`;
 }
 
+// The weather screen, opened from the masthead (weather-screen.js), fills the window below it.
+// The sky behind it follows the weather now; the canvas draws its rain, snow, cloud or sun.
+// Close sits outside the content, so it stays put when a refresh redraws the forecast.
+export function renderWeatherScreen(weather) {
+  if (!weather) return '';
+  const { sky, time } = skyFor(weather);
+  return `<dialog class="weather-screen" id="weather-screen" data-sky="${sky}" data-time="${time}" aria-label="Weather in ${escapeHtml(weather.name)}">
+    <canvas class="ws-sky" aria-hidden="true"></canvas>
+    <form class="ws-close-form" method="dialog">
+      <button class="ws-close" type="submit" autofocus><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9m0-9l-9 9"/></svg>Close<kbd>Esc</kbd></button>
+    </form>
+    <div class="ws-content">${renderScreenContent(weather)}</div>
+  </dialog>`;
+}
+
 export function renderWeather(weather) {
   if (!weather) return '';
-  const outlook = weather.today && weather.days?.length;
   const hours = weather.hours.map((hour) => `<li title="${escapeHtml(hour.label)}${hour.rainChance ? `, ${hour.rainChance}% chance of rain` : ''}">
         <span class="hour">${escapeHtml(hour.time)}</span>
         <span aria-hidden="true">${hour.icon}</span>
         <span>${hour.temperature}°</span>
       </li>`).join('');
   const rain = weather.rainChance ? ` · ${weather.rainChance}% rain` : '';
-  // Focusable, so the popover opens from the keyboard (or a tap) as well as on hover.
-  return `<section class="weather${weather.stale ? ' is-stale' : ''}${outlook ? ' has-outlook' : ''}" aria-label="Weather in ${escapeHtml(weather.name)}"${outlook ? ' tabindex="0" aria-describedby="forecast-detail"' : ''}${weather.stale ? ' title="Weather update failed; showing the last forecast"' : ''}>
+  // The whole of the weather opens the full forecast: a button laid over it takes the click.
+  return `<section class="weather${weather.stale ? ' is-stale' : ''}" aria-label="Weather in ${escapeHtml(weather.name)}"${weather.stale ? ' title="Weather update failed; showing the last forecast"' : ''}>
       <div class="now">
         <span class="icon" aria-hidden="true">${weather.icon}</span>
         <span class="temp">${weather.temperature}°</span>
@@ -364,6 +462,31 @@ export function renderWeather(weather) {
       </div>
       ${renderRain(weather.rain)}
       <ul class="hours">${hours}</ul>
-      ${outlook ? renderOutlook(weather) : ''}
+      <button class="weather-open" type="button" aria-haspopup="dialog" aria-controls="weather-screen" title="Open the full forecast"><span>Full forecast</span></button>
     </section>`;
+}
+
+// In the browser: puts a newer forecast in the masthead and on the weather screen. The screen
+// is updated in place, so an open one stays open, its sky still moving, through a refresh.
+// weather-screen.js hears about it, to mark the new masthead button as open, or to open a
+// screen the address asked for that wasn't there until now.
+export function showWeather(weather) {
+  const current = document.querySelector('.weather');
+  if (current) current.outerHTML = renderWeather(weather);
+  const screen = document.getElementById('weather-screen');
+  if (screen) {
+    Object.assign(screen.dataset, skyFor(weather));
+    screen.setAttribute('aria-label', `Weather in ${weather.name}`);
+    // Swapped in quietly: no entrance again (style.css), and nothing at all if nothing changed.
+    const content = screen.querySelector('.ws-content');
+    const html = renderScreenContent(weather);
+    if (html !== content.dataset.html) {
+      screen.dataset.refreshed = '';
+      content.innerHTML = html;
+      content.dataset.html = html;
+    }
+  } else {
+    document.body.insertAdjacentHTML('beforeend', renderWeatherScreen(weather));
+  }
+  document.dispatchEvent(new Event('weather:shown'));
 }

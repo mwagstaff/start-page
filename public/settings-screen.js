@@ -1,78 +1,120 @@
-// The Customise dialog: choose how dense the page is, show or hide cards, change their
-// order (arrows, or drag the handle) and number of items, choose whether cards are fitted to the screen or stay in the
-// columns they were put in, add your own RSS or Atom feeds, and export or import the
-// settings as a file. Changes apply straight away and are saved in
-// this browser (see settings.js); no account needed. "Topics & sources" reopens the setup
-// screen (setup.js). Every change can be undone, or rewound in History (undo.js).
+// The Settings screen, a page of its own at /settings: choose how dense the page is, show or
+// hide cards, change their order (arrows, or drag the handle) and number of stories, choose
+// whether cards are fitted to the screen or stay in the columns they were put in, add your
+// own RSS or Atom feeds, and export or import the settings as a file. Changes apply straight
+// away and are saved in this browser (see settings.js); no account needed. "Edit topics and
+// sources" reopens the setup screen (setup.js). Every change can be undone, or rewound in
+// History (undo.js), except "Start over", which clears everything and goes back to the setup
+// screen (start-over.js).
+// While it's open the address is /settings, so it can be bookmarked or shared, and a page
+// loaded at /settings opens it straight away. Done, Escape or Back closes it.
 
 import { escapeHtml } from './cards.js';
 import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setDensity, setFill, setSolid, setTabCards, tabCards, widgetFor } from './page.js';
 import { openSetup } from './setup.js';
 import { openHistory } from './undo.js';
+import { askStartOver } from './start-over.js';
 import { DENSITIES, MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, moveCard, stepCard, validSettings } from './settings.js';
 
-const opener = document.querySelector('.customise-open');
+const PATH = '/settings';
+const opener = document.querySelector('.settings-open');
 let dialog = null;
-let cards = []; // this tab's cards in the dialog's order, hidden ones included
+let cards = []; // this tab's cards in the screen's order, hidden ones included
+let pushed = false; // opening added /settings to the history, so closing goes back over it
+
+const DENSITY_HINTS = {
+  spacious: 'More of the photo',
+  balanced: 'In between',
+  compact: 'Most stories',
+};
 
 function build() {
   dialog = document.createElement('dialog');
-  dialog.className = 'customise';
-  dialog.setAttribute('aria-labelledby', 'customise-title');
+  dialog.className = 'settings-screen';
+  dialog.setAttribute('aria-labelledby', 'settings-title');
   dialog.innerHTML = `
-    <div class="customise-head">
-      <h2 id="customise-title">Customise</h2>
-      <p>Pick the cards you want, in the order you want them. Cards higher up get first claim on a story that's in more than one. You can also drag cards around the page itself. Changes are saved in this browser.</p>
-      <button type="button" data-action="setup" class="setup-open">Topics &amp; sources…</button>
-    </div>
-    <fieldset class="density">
-      <legend>Density<small>How much fits on the page. Spacious leaves more room around the cards for the photo; Compact fits in the most stories.</small></legend>
-      <div class="density-options">
-        ${DENSITIES.map((density) => `<label><input type="radio" name="density" value="${density}" data-field="density"><span>${density[0].toUpperCase()}${density.slice(1)}</span></label>`).join('')}
+    <div class="settings-content">
+      <header class="settings-head">
+        <h1 id="settings-title">Settings</h1>
+        <p class="settings-saved">Changes are saved automatically in this browser.</p>
+        <p class="settings-status" role="status"></p>
+        <button type="button" data-action="close" class="primary">Done</button>
+      </header>
+      <div class="settings-columns">
+        <section class="settings-section settings-cards" aria-labelledby="settings-cards-title">
+          <h2 id="settings-cards-title">Cards</h2>
+          <p class="settings-hint">Choose which cards to show and drag them into order. A story that fits more than one card appears in the highest one.</p>
+          <ol class="card-list"></ol>
+          <form class="add-feed">
+            <label for="add-feed-url">Add an RSS or Atom feed</label>
+            <div class="add-feed-row">
+              <input id="add-feed-url" type="text" inputmode="url" spellcheck="false" placeholder="https://example.com/feed.xml" autocomplete="off" required>
+              <button type="submit">Add feed</button>
+            </div>
+          </form>
+        </section>
+        <div class="settings-side">
+          <section class="settings-section" aria-labelledby="settings-layout-title">
+            <h2 id="settings-layout-title">Layout</h2>
+            <fieldset class="density">
+              <legend>Density</legend>
+              <div class="density-options">
+                ${DENSITIES.map((density) => `<label><input type="radio" name="density" value="${density}" data-field="density"><span>${density[0].toUpperCase()}${density.slice(1)}<small>${DENSITY_HINTS[density] ?? ''}</small></span></label>`).join('')}
+              </div>
+            </fieldset>
+            <label class="arrange-toggle">
+              <input type="checkbox" data-field="arrange">
+              <span>Auto-arrange cards<small>Balances the columns to keep the page short. Dragging a card turns this off.</small></span>
+            </label>
+            <label class="arrange-toggle">
+              <input type="checkbox" data-field="fill">
+              <span>Fill each column<small>Adds or removes stories so every column reaches the bottom of the screen.</small></span>
+            </label>
+            <label class="arrange-toggle">
+              <input type="checkbox" data-field="solid">
+              <span>Solid cards<small>Hides the background photo behind the cards.</small></span>
+            </label>
+          </section>
+          <section class="settings-section" aria-labelledby="settings-topics-title">
+            <h2 id="settings-topics-title">Topics and sources</h2>
+            <p class="settings-hint">Change your region, topics, news outlets, weather and background photo.</p>
+            <div class="settings-buttons">
+              <button type="button" data-action="setup">Edit topics and sources…</button>
+            </div>
+          </section>
+          <section class="settings-section" aria-labelledby="settings-backup-title">
+            <h2 id="settings-backup-title">Backup and history</h2>
+            <p class="settings-hint">Export your settings to a file to use them in another browser. History lets you undo any change.</p>
+            <div class="settings-buttons">
+              <button type="button" data-action="export">Export</button>
+              <button type="button" data-action="import">Import</button>
+              <input type="file" accept="application/json,.json" hidden>
+              <button type="button" data-action="history">History…</button>
+            </div>
+          </section>
+          <section class="settings-section" aria-labelledby="settings-reset-title">
+            <h2 id="settings-reset-title">Reset</h2>
+            <p class="settings-hint"><strong>Reset cards</strong> brings back the default cards and removes feeds you added. <strong>Start over</strong> clears everything and sets the page up from scratch.</p>
+            <div class="settings-buttons">
+              <button type="button" data-action="reset">Reset cards</button>
+              <button type="button" data-action="start-over" class="danger-outline">Start over…</button>
+            </div>
+          </section>
+        </div>
       </div>
-    </fieldset>
-    <label class="arrange-toggle">
-      <input type="checkbox" data-field="arrange">
-      <span>Fit cards to the screen<small>Arranges the columns so the page is as short as it can be. Turn off to keep cards in the columns you drag them to; moving a card turns it off.</small></span>
-    </label>
-    <label class="arrange-toggle">
-      <input type="checkbox" data-field="fill">
-      <span>Fill the screen with stories<small>Shows more or fewer stories in each card so every column reaches the bottom of the window. Each card's Items number is where it starts.</small></span>
-    </label>
-    <label class="arrange-toggle">
-      <input type="checkbox" data-field="solid">
-      <span>Solid cards<small>Makes the cards opaque, so the background photo doesn't show through them.</small></span>
-    </label>
-    <ol class="card-list"></ol>
-    <form class="add-feed">
-      <label for="add-feed-url">Add a feed</label>
-      <div class="add-feed-row">
-        <input id="add-feed-url" type="text" inputmode="url" spellcheck="false" placeholder="https://example.com/feed.xml" autocomplete="off" required>
-        <button type="submit">Add</button>
-      </div>
-    </form>
-    <p class="customise-status" role="status"></p>
-    <div class="customise-actions">
-      <button type="button" data-action="export">Export</button>
-      <button type="button" data-action="import">Import</button>
-      <input type="file" accept="application/json,.json" hidden>
-      <button type="button" data-action="reset">Reset to default</button>
-      <button type="button" data-action="history">History…</button>
-      <button type="button" data-action="close" class="primary">Done</button>
     </div>`;
   document.body.append(dialog);
 
   dialog.addEventListener('click', onClick);
   dialog.addEventListener('change', onChange);
-  // Clicking the backdrop outside the panel closes it.
-  dialog.addEventListener('pointerdown', (event) => { if (event.target === dialog) dialog.close(); });
+  dialog.addEventListener('close', closed);
   dialog.querySelector('input[type=file]').addEventListener('change', onImport);
   dialog.querySelector('.add-feed').addEventListener('submit', onAddFeed);
   dialog.querySelector('.card-list').addEventListener('pointerdown', startDrag);
 }
 
 function status(message) {
-  dialog.querySelector('.customise-status').textContent = message;
+  dialog.querySelector('.settings-status').textContent = message;
 }
 
 function renderList(focus) {
@@ -88,7 +130,7 @@ function renderList(focus) {
     return `<li class="${card.hidden ? 'is-hidden' : ''}" data-index="${i}">
         <span class="drag-handle" aria-hidden="true" title="Drag to reorder">⠿</span>
         <label class="card-toggle"><input type="checkbox" data-field="shown"${card.hidden ? '' : ' checked'}> ${title}${card.col !== undefined && !card.hidden ? ` <small class="card-column">column ${card.col + 1}</small>` : ''}</label>
-        <label class="card-limit">Items <input type="number" data-field="limit" min="1" max="${MAX_CARD_ITEMS}" value="${card.limit ?? widget.limit ?? defaultLimit}"></label>
+        <label class="card-limit">Stories <input type="number" data-field="limit" min="1" max="${MAX_CARD_ITEMS}" value="${card.limit ?? widget.limit ?? defaultLimit}"></label>
         <span class="card-move">
           <button type="button" data-action="up" aria-label="Move ${title} up"${i === 0 ? ' disabled' : ''}>↑</button>
           <button type="button" data-action="down" aria-label="Move ${title} down"${i === cards.length - 1 ? ' disabled' : ''}>↓</button>
@@ -146,15 +188,17 @@ async function onClick(event) {
       await replaceSettings({ v: 1, custom: [], ...rest, tabs: {}, onboarded: true }, 'Reset to the default cards');
       cards = tabCards();
       renderList();
-      status('Back to the default cards.');
+      status('Default cards restored.');
       break;
     }
     case 'setup':
-      dialog.close();
-      openSetup();
+      openSetup(); // on top of Settings, which it comes back to
       break;
     case 'history':
       openHistory();
+      break;
+    case 'start-over':
+      askStartOver({ onExport: exportSettings });
       break;
     case 'close':
       dialog.close();
@@ -169,22 +213,22 @@ function onChange(event) {
     setArrange(event.target.checked ? 'auto' : 'manual');
     cards = tabCards();
     renderList();
-    status(event.target.checked ? 'Cards are fitted to the screen.' : 'Cards stay in the columns they\'re in now.');
+    status(event.target.checked ? 'Auto-arrange is on.' : 'Auto-arrange is off. Cards stay where you put them.');
     return;
   }
   if (field === 'fill') {
     setFill(event.target.checked);
-    status(event.target.checked ? 'Cards show as many stories as fit the screen.' : 'Cards show their set number of stories.');
+    status(event.target.checked ? 'Columns now fill the screen.' : 'Each card shows its set number of stories.');
     return;
   }
   if (field === 'density') {
     setDensity(event.target.value);
-    status(`The page is ${event.target.value}.`);
+    status(`Density set to ${event.target.value}.`);
     return;
   }
   if (field === 'solid') {
     setSolid(event.target.checked);
-    status(event.target.checked ? 'Cards are solid.' : 'The photo shows through the cards.');
+    status(event.target.checked ? 'Solid cards are on.' : 'Solid cards are off.');
     return;
   }
   const index = Number(event.target.closest('li').dataset.index);
@@ -194,7 +238,7 @@ function onChange(event) {
   } else {
     const limit = Math.round(Number(event.target.value));
     if (!(limit >= 1 && limit <= MAX_CARD_ITEMS)) {
-      status(`Pick between 1 and ${MAX_CARD_ITEMS} items.`);
+      status(`Choose between 1 and ${MAX_CARD_ITEMS} stories.`);
       return;
     }
     cards[index] = { ...cards[index], limit };
@@ -272,7 +316,7 @@ async function onAddFeed(event) {
   input.value = '';
   cards = tabCards();
   renderList();
-  status(`Added ${widgetFor(cards[0].id).title} at the top.`);
+  status(`Added ${widgetFor(cards[0].id).title} to the top of the list.`);
 }
 
 function exportSettings() {
@@ -283,7 +327,7 @@ function exportSettings() {
   link.download = 'start-page-settings.json';
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-  status('Settings saved as start-page-settings.json.');
+  status('Exported to start-page-settings.json.');
 }
 
 async function onImport(event) {
@@ -304,7 +348,10 @@ async function onImport(event) {
   status(`Imported ${file.name}.`);
 }
 
+const isSettingsPath = () => location.pathname === PATH;
+
 async function open() {
+  if (dialog?.open) return;
   if (!currentFeeds() && !(await fetchFeeds())) return;
   if (currentSettings()?.profile) await fetchCatalogue(); // so the profile's cards are listed
   if (!dialog) build();
@@ -312,16 +359,51 @@ async function open() {
   status('');
   renderList();
   dialog.showModal();
+  dialog.querySelector('.settings-content').scrollTop = 0;
+  if (!isSettingsPath()) {
+    history.pushState(null, '', PATH);
+    pushed = true;
+  }
 }
 
-// Undo, redo or rewind while the dialog is open: show the page as it is now.
+// However it closed (Done, Escape or Back), put the address back.
+function closed() {
+  if (isSettingsPath()) {
+    if (pushed) history.back();
+    else history.replaceState(null, '', `/${location.search}${location.hash}`);
+  }
+  pushed = false;
+  opener?.focus();
+}
+
+// Undo, redo or rewind while the screen is open: show the page as it is now.
 document.addEventListener('history:change', ({ detail: { type } }) => {
   if (!dialog?.open || type === 'change' || type === 'clear') return;
   cards = tabCards();
   renderList();
 });
 
+// Back from the setup screen: show the cards it made.
+document.addEventListener('setup:close', ({ detail: { saved } }) => {
+  if (!dialog?.open) return;
+  cards = tabCards();
+  renderList();
+  status(saved ? 'Topics and sources saved.' : '');
+  dialog.querySelector('[data-action="setup"]').focus();
+});
+
+// Back and Forward, or /settings reached without reloading.
+addEventListener('popstate', () => {
+  if (isSettingsPath()) open();
+  else if (dialog?.open) {
+    pushed = false;
+    dialog.close();
+  }
+});
+
 if (opener) {
   opener.hidden = false;
   opener.addEventListener('click', open);
 }
+
+if (isSettingsPath()) open();

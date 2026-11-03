@@ -6,9 +6,9 @@
 
 import { buildCards } from './stories.js';
 import { renderWidget } from './cards.js';
-import { renderWeather } from './forecast.js';
+import { showWeather } from './forecast.js';
 import { canRedo, canUndo, describeChange, loadHistory, moveTo, recordChange, saveHistory } from './history.js';
-import { DENSITIES, MAX_CARD_ITEMS, cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
+import { DENSITIES, MAX_CARD_ITEMS, STARTING_OVER_KEY, cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
 import { layoutForProfile, profileCards, profileSourceIds, profileWidgets } from './topics.js';
 
 const grid = document.querySelector('.grid');
@@ -92,7 +92,7 @@ function allWidgets() {
 
 export const widgetFor = (id) => allWidgets()[id];
 
-// This tab's cards in page order, with hidden ones included (for the Customise dialog).
+// This tab's cards in page order, with hidden ones included (for the Settings screen).
 export function tabCards(from = settings) {
   const defaults = feeds.tabs.find((t) => t.id === tab)?.widgets ?? [];
   return cardList(from?.tabs[tab]?.cards, defaults, Object.keys(allWidgets()));
@@ -158,7 +158,7 @@ export async function refreshProfileFeeds() {
 }
 
 // The weather and photo can be turned off on the setup screen, and filling the screen with
-// stories, see-through cards and the page's density in Customise. The early script in the page sets the same classes before it
+// stories, see-through cards and the page's density in Settings. The early script in the page sets the same classes before it
 // paints; this keeps them in step after a change.
 function applyPageOptions() {
   const { profile } = settings ?? {};
@@ -208,8 +208,7 @@ export function show(data) {
   shownVersion = data.version;
   drawCards();
   // weather.js marks the page once it shows the reader's own forecast; leave that alone.
-  const weather = document.querySelector('.weather');
-  if (weather && data.weather && !document.body.dataset.localWeather) weather.outerHTML = renderWeather(data.weather);
+  if (document.querySelector('.weather') && data.weather && !document.body.dataset.localWeather) showWeather(data.weather);
 }
 
 // Notes the settings as they are before a change. Changes made together (adding a feed
@@ -232,7 +231,7 @@ function commitHistory() {
   announce('change', description);
 }
 
-// Tells the page (the undo message, the History and Customise dialogs) what happened.
+// Tells the page (the undo message, the History dialog and Settings screen) what happened.
 function announce(type, label) {
   document.dispatchEvent(new CustomEvent('history:change', { detail: { type, label } }));
 }
@@ -313,7 +312,7 @@ export async function addCustomFeed(url) {
   return null;
 }
 
-// Takes a card off the page. It stays in Customise, unticked, to bring back.
+// Takes a card off the page. It stays in Settings, unticked, to bring back.
 export async function hideCard(id) {
   if (!feeds && !(await fetchFeeds())) return;
   setTabCards(tabCards().map((card) => (card.id === id ? { ...card, hidden: true } : card)));
@@ -354,6 +353,20 @@ export function clearHistory() {
   history = null;
   saveHistory(null);
   announce('clear');
+}
+
+// Forgets everything saved in this browser, history included, and goes to the home page,
+// where the setup screen opens as on a first visit, with no cards behind it until the
+// reader builds their page (setup.js). Can't be undone (start-over.js asks).
+export function startOver() {
+  settings = null;
+  history = null;
+  saveSettings(null);
+  saveHistory(null);
+  try {
+    sessionStorage.setItem(STARTING_OVER_KEY, '1');
+  } catch {}
+  location.assign('/');
 }
 
 export function removeCustomFeed(id) {

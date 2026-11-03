@@ -5,15 +5,15 @@
   --text: #1d1c1a;
   --muted: #6d6a64;
   --accent: #c2410c;
+  --action: #2563eb; /* buttons and choices in Settings and its dialogs */
+  --warning: #c2410c;
+  --danger: #b91c1c;
   --visited: #7b7770;
   --masthead-bg: #1d1c1a;
   --masthead-text: #f4f2ee;
   --masthead-muted: #b5b0a6;
   --masthead-border: #3a3834;
   --shadow: 0 1px 2px rgb(29 28 26 / 0.04);
-  --popover-bg: #ffffff;
-  --popover-rain: #2a6fc4;
-  --popover-shadow: 0 12px 32px rgb(29 28 26 / 0.18), 0 2px 6px rgb(29 28 26 / 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,15 +24,15 @@
     --text: #ebe8e2;
     --muted: #9a958c;
     --accent: #f08a4b;
+    --action: #3b82f6;
+    --warning: #f08a4b;
+    --danger: #dc2626;
     --visited: #86827a;
     --masthead-bg: #0c0c0b;
     --masthead-text: #ebe8e2;
     --masthead-muted: #9a958c;
     --masthead-border: #2f2d2a;
     --shadow: none;
-    --popover-bg: #1e1d1b;
-    --popover-rain: #6aa8f0;
-    --popover-shadow: 0 12px 32px rgb(0 0 0 / 0.5);
   }
 }
 
@@ -217,7 +217,7 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 
 .masthead {
   position: relative;
-  z-index: 15; /* the forecast popover opens over the cards */
+  z-index: 15; /* above the cards */
   background: var(--masthead-bg);
   color: var(--masthead-text);
 }
@@ -422,174 +422,505 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
   .rain { display: none; }
 }
 
-/* Forecast popover: hovering (or focusing) the weather opens today in detail and the week
-   ahead. It stays solid even over the photo: the masthead's blur can't reach below it. */
-.weather.has-outlook { position: relative; cursor: default; border-radius: 8px; outline-offset: 4px; }
+/* The weather in the masthead opens the full-screen forecast: a button laid over all of it
+   takes the click, and lights the area up on hover so it's plain that it's one target. */
+.weather { position: relative; }
 
-.forecast {
+.weather-open {
   position: absolute;
-  top: 100%;
-  right: 0;
-  width: min(580px, calc(100vw - 24px));
-  padding-top: 10px; /* a bridge, so the pointer can move onto the popover without it closing */
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-4px);
-  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
+  inset: -6px -10px;
+  z-index: 1;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--masthead-text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-.weather:is(:hover, :focus-within) .forecast {
-  opacity: 1;
-  visibility: visible;
-  transform: none;
-  transition-delay: 0.12s; /* passing the pointer over the weather doesn't flash it */
-}
-
-.forecast-panel {
-  max-height: calc(100dvh - 96px);
-  overflow-y: auto;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--popover-bg);
-  box-shadow: var(--popover-shadow);
-  color: var(--text);
-  font-size: 13px;
+/* "Full forecast", hung on the box's bottom edge, clear of the weather itself. */
+.weather-open span {
+  position: absolute;
+  right: 12px;
+  bottom: -9px;
+  padding: 2px 8px;
+  border: 1px solid rgb(255 255 255 / 0.3);
+  border-radius: 999px;
+  background: #2a2926;
+  font-size: 10px;
   line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.weather-open:is(:hover, :focus-visible, [aria-expanded="true"]) {
+  border-color: rgb(255 255 255 / 0.3);
+  background: rgb(255 255 255 / 0.12);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+}
+
+.weather-open:focus-visible { outline: 2px solid var(--masthead-text); outline-offset: 2px; }
+.weather-open:is(:hover, :focus-visible, [aria-expanded="true"]) span { opacity: 1; transform: none; }
+
+/* The weather screen. A sky to suit the weather now fills the window below the masthead; the canvas
+   (weather-screen.js) draws its rain, snow, cloud or sun over it, and the forecast sits on
+   top, set large and quiet: a serif for the figures, small capitals for the headings. */
+.weather-screen {
+  --ws-text: oklch(97% 0.01 250);
+  --ws-muted: oklch(97% 0.01 250 / 0.68);
+  --ws-faint: oklch(97% 0.01 250 / 0.45);
+  --ws-line: oklch(97% 0.01 250 / 0.16);
+  --ws-rain: oklch(86% 0.08 235);
+  --ws-serif: "New York", ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --ws-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  position: fixed;
+  inset: var(--ws-top, 0px) 0 0; /* weather-screen.js sets the masthead's height */
+  z-index: 14; /* over the cards, under the masthead */
+  width: 100vw;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: var(--ws-sky);
+  color: var(--ws-text);
   font-variant-numeric: tabular-nums;
 }
 
-.forecast h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.weather-screen[open] { animation: ws-fade 0.5s var(--ws-ease); }
+html:has(.weather-screen[open]) { overflow: hidden; }
+html:has(.weather-screen[open]) .masthead { position: sticky; top: 0; } /* in view however far down the page was */
 
-.forecast-today header {
+/* While the screen is open the page behind it is hidden, which spares the browser the photo
+   and the cards' blurs, and the same sky is painted behind everything. If the browser ever
+   misses drawing the screen for a frame, what shows through is sky, not the photo. */
+html:has(.weather-screen[open]) body { background: var(--ws-sky) fixed; }
+html:has(.weather-screen[open]) body > :is(main, .tabs, .peek, .backdrop) { visibility: hidden; }
+
+/* Skies, by day and by night, set on the page so the body can paint them too. All are deep
+   enough for light text. */
+:root { --ws-sky: linear-gradient(170deg, #1b4f86 0%, #2f6fae 45%, #5b8fbe 100%); }
+:root:has(.weather-screen[data-sky="fair"]) { --ws-sky: linear-gradient(170deg, #24548a 0%, #3a74ab 50%, #6a93b8 100%); }
+:root:has(.weather-screen[data-sky="cloud"]) { --ws-sky: linear-gradient(175deg, #3a434f 0%, #535d6a 55%, #66707c 100%); }
+:root:has(.weather-screen[data-sky="fog"]) { --ws-sky: linear-gradient(180deg, #4b545d 0%, #646d75 60%, #737b82 100%); }
+:root:has(.weather-screen[data-sky="drizzle"]) { --ws-sky: linear-gradient(175deg, #2e3b4a 0%, #435265 60%, #536276 100%); }
+:root:has(.weather-screen[data-sky="rain"]) { --ws-sky: linear-gradient(175deg, #232f3d 0%, #34445a 60%, #44556b 100%); }
+:root:has(.weather-screen[data-sky="downpour"]) { --ws-sky: linear-gradient(175deg, #19212c 0%, #273343 60%, #344255 100%); }
+:root:has(.weather-screen[data-sky="storm"]) { --ws-sky: linear-gradient(175deg, #15161f 0%, #252636 55%, #383649 100%); }
+:root:has(.weather-screen[data-sky="snow"]) { --ws-sky: linear-gradient(175deg, #46566b 0%, #5f6f85 55%, #74839a 100%); }
+:root:has(.weather-screen[data-time="night"]) { --ws-sky: linear-gradient(175deg, #070b17 0%, #0e1830 55%, #1c2b4a 100%); }
+:root:has(.weather-screen[data-time="night"]:is([data-sky="cloud"], [data-sky="fog"], [data-sky="drizzle"], [data-sky="rain"], [data-sky="snow"])) { --ws-sky: linear-gradient(175deg, #0d1119 0%, #19202c 55%, #262f3e 100%); }
+:root:has(.weather-screen[data-time="night"]:is([data-sky="downpour"], [data-sky="storm"])) { --ws-sky: linear-gradient(175deg, #07080d 0%, #11131c 55%, #1c1f2c 100%); }
+
+/* Sunshine, and moonlight on a clear night: a glow high on the right, drawn once here rather
+   than on the canvas every frame. By day, faint rays fan out from it. */
+.weather-screen:is([data-sky="clear"], [data-sky="fair"])::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-conic-gradient(from 8deg at 82% 10%, rgb(255 236 200 / 0.05) 0deg 2.2deg, transparent 2.2deg 25.7deg),
+    radial-gradient(circle at 82% 10%, rgb(255 226 170 / 0.5), rgb(255 205 140 / 0.18) 16%, transparent 62%);
+  -webkit-mask-image: radial-gradient(circle at 82% 10%, #000 30%, transparent 85%);
+  mask-image: radial-gradient(circle at 82% 10%, #000 30%, transparent 85%);
+  pointer-events: none;
+}
+
+.weather-screen:is([data-sky="clear"], [data-sky="fair"])[data-time="night"]::before {
+  background: radial-gradient(circle at 80% 14%, rgb(220 230 255 / 0.2), transparent 45%);
+}
+
+/* A test sky (#weather?test=…, weather-screen.js) says so at the top of the screen, between
+   the place and Close. */
+.weather-screen[data-test]::after {
+  content: "Test sky: " attr(data-test);
+  position: absolute;
+  top: calc(clamp(14px, 2.6vh, 40px) + 9px);
+  left: 50%;
+  z-index: 2;
+  padding: 5px 12px;
+  border: 1px solid var(--ws-line);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.45);
+  color: var(--ws-text);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.ws-sky {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.ws-content {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  padding: clamp(14px, 2.6vh, 40px) clamp(16px, 4.5vw, 72px) clamp(14px, 2vh, 48px);
+  /* A gentle shade under the detail column keeps small text legible over the brightest skies. */
+  background: linear-gradient(90deg, transparent 35%, rgb(6 10 18 / 0.22) 70%);
+  scrollbar-width: thin;
+  scrollbar-color: var(--ws-line) transparent;
+}
+
+.ws-top {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 40px; /* level with the Close button */
+  padding-right: 120px;
 }
 
-.forecast-today header p { margin: 2px 0 0; color: var(--muted); }
-.forecast-big { font-size: 36px; line-height: 1; }
-.forecast-now { margin-left: auto; font-size: 34px; font-weight: 300; }
+.ws-place { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin: 0; }
+.ws-place strong { font-family: var(--ws-serif); font-size: clamp(20px, 2vw, 26px); font-weight: 500; letter-spacing: -0.01em; }
+.ws-place span { color: var(--ws-muted); font-size: 14px; }
+/* Close stays put while the forecast scrolls under it. */
+.ws-close-form { position: absolute; top: clamp(14px, 2.6vh, 40px); right: clamp(16px, 4.5vw, 72px); z-index: 2; margin: 0; }
 
-.forecast-facts {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+.ws-close {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  margin: 14px 0;
+  height: 40px;
+  padding: 0 8px 0 14px;
+  border: 1px solid var(--ws-line);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.1);
+  color: var(--ws-text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-.forecast-facts div {
-  padding: 7px 10px;
+.ws-close:hover { background: rgb(255 255 255 / 0.2); border-color: rgb(255 255 255 / 0.3); }
+.ws-close:focus-visible { outline: 2px solid var(--ws-text); outline-offset: 3px; }
+.ws-close svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+
+.ws-close kbd {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.12);
+  color: var(--ws-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.ws-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: clamp(32px, 6vw, 110px);
+  max-width: 1320px;
+  margin: clamp(8px, 2vh, 56px) auto 0;
+}
+
+/* Now: the temperature, as large as the window allows, then the week. */
+.ws-now { align-self: start; }
+.ws-now > * { animation: ws-rise 0.8s var(--ws-ease) both; }
+.ws-now > :nth-child(2) { animation-delay: 0.06s; }
+.ws-now > :nth-child(3) { animation-delay: 0.12s; }
+.ws-now > :nth-child(4) { animation-delay: 0.18s; }
+.ws-now > :nth-child(5) { animation-delay: 0.24s; }
+
+.ws-big {
+  margin: 0 0 0 -0.06em;
+  font-family: var(--ws-serif);
+  font-size: clamp(100px, min(19vw, 23vh), 300px); /* sized by the height too, so it all fits */
+  font-weight: 200;
+  line-height: 0.85;
+  letter-spacing: -0.05em;
+}
+
+.ws-big span { color: var(--ws-faint); font-weight: 100; }
+
+.ws-condition {
+  margin: clamp(8px, 1.8vh, 18px) 0 4px;
+  font-family: var(--ws-serif);
+  font-size: clamp(26px, min(3vw, 4.4vh), 40px);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.ws-condition span { font-style: normal; font-size: 0.8em; }
+.ws-range-text { margin: 0; color: var(--ws-muted); font-size: 15px; }
+
+.ws-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: clamp(14px, 3vh, 32px) 0 0;
+  border-top: 1px solid var(--ws-line);
+}
+
+.ws-facts div { padding: clamp(5px, 0.9vh, 12px) 12px clamp(5px, 0.9vh, 12px) 0; border-bottom: 1px solid var(--ws-line); }
+.ws-facts dt { color: var(--ws-muted); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.ws-facts dd { margin: 4px 0 0; font-size: 17px; font-weight: 500; }
+.ws-facts small { color: var(--ws-muted); font-size: 12px; font-weight: 400; }
+
+/* The detail column */
+.ws-detail { display: grid; gap: clamp(16px, 2.6vh, 52px); padding-top: 6px; }
+.ws-section { animation: ws-rise 0.8s var(--ws-ease) both; }
+.ws-section:nth-child(2) { animation-delay: 0.08s; }
+.ws-section:nth-child(3) { animation-delay: 0.16s; }
+.ws-section:nth-child(4) { animation-delay: 0.24s; }
+
+.ws-section h3 {
+  margin: 0 0 clamp(8px, 1.4vh, 14px);
+  padding-bottom: clamp(5px, 0.9vh, 8px);
+  border-bottom: 1px solid var(--ws-line);
+  color: var(--ws-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ws-section ol { list-style: none; margin: 0; padding: 0; }
+.ws-lead { margin: 0; font-family: var(--ws-serif); font-size: 22px; letter-spacing: -0.01em; }
+.ws-lead .ws-icon { font-family: system-ui, sans-serif; }
+.ws-sub { margin: 4px 0 0; color: var(--ws-muted); font-family: system-ui, sans-serif; font-size: 13px; letter-spacing: 0; }
+.ws-h3-note { float: right; color: var(--ws-muted); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.ws-dim { color: var(--ws-muted); }
+.ws-icon { font-size: 22px; line-height: 1.2; }
+.ws-time, .ws-wind, .ws-tick { color: var(--ws-muted); font-size: 11px; }
+.ws-temp { font-weight: 600; }
+.ws-rain-text { color: var(--ws-rain); font-size: 11px; }
+
+/* Rain today: one column per hour from midnight; hours gone are faded, the hour now marked.
+   The scale is fixed (forecast.js), a third each for light, moderate and heavy rain, with the
+   bands labelled in a gutter on the left. Heavier rain is brighter, as in the masthead. */
+.ws-rain-chart {
+  --ws-bar-h: clamp(56px, 9vh, 110px);
+  --ws-rain-light: oklch(78% 0.1 240);
+  --ws-rain-moderate: oklch(88% 0.08 235);
+  --ws-rain-heavy: oklch(97% 0.03 230);
+  position: relative;
+  margin-top: clamp(8px, 1.6vh, 18px);
+  padding-left: 62px;
+}
+
+.ws-bands {
+  position: absolute;
+  top: 14px;
+  right: 0;
+  left: 0;
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  height: var(--ws-bar-h);
+  pointer-events: none;
+}
+
+.ws-bands span {
+  border-top: 1px dashed var(--ws-line);
+  color: var(--ws-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
+.ws-rain-chart ol {
+  position: relative; /* over the band lines */
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 3px;
+  padding-top: 14px;
+}
+
+.ws-rain-chart li { display: grid; grid-template-rows: var(--ws-bar-h) auto; gap: 6px; }
+
+.ws-bar {
+  position: relative;
+  border-bottom: 1px solid var(--ws-line);
+}
+
+.ws-chance, .ws-amount {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+}
+
+.ws-chance { top: 0; background: rgb(255 255 255 / 0.2); } /* opacity: the chance, set inline */
+.ws-amount { min-height: 3px; border-radius: 3px 3px 0 0; background: var(--ws-rain-light); }
+.ws-amount.is-moderate { background: var(--ws-rain-moderate); }
+.ws-amount.is-heavy { background: var(--ws-rain-heavy); box-shadow: 0 0 12px oklch(97% 0.03 230 / 0.4); }
+.ws-rain-chart .is-past :is(.ws-bar, .ws-tick) { opacity: 0.35; }
+.ws-rain-chart li { position: relative; }
+.ws-rain-chart li:hover .ws-bar { box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.08); }
+
+/* An hour's popover: over its column, at once on hover. */
+.ws-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 3;
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--ws-line);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--text) 5%, transparent);
+  background: oklch(24% 0.03 250 / 0.94);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+  color: var(--ws-text);
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.08s ease, transform 0.08s ease, visibility 0s linear 0.08s;
 }
 
-.forecast-facts dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-.forecast-facts dd { margin: 2px 0 0; font-weight: 600; }
-.forecast-facts small { color: var(--muted); font-weight: 400; }
+.ws-tip.is-start { left: 0; transform: translateY(4px); }
+.ws-tip.is-end { right: 0; left: auto; transform: translateY(4px); }
+.ws-rain-chart li:hover .ws-tip { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: 0s; }
+.ws-rain-chart li:hover .ws-tip:is(.is-start, .is-end) { transform: none; }
+.ws-tip-time { color: var(--ws-muted); font-size: 11px; letter-spacing: 0.04em; }
+.ws-tip-rain { display: flex; align-items: center; gap: 6px; }
+.ws-tip-rain b { font-weight: 600; }
+.ws-dot { width: 8px; height: 8px; border-radius: 2px; }
+.ws-dot.is-light { background: var(--ws-rain-light); }
+.ws-dot.is-moderate { background: var(--ws-rain-moderate); }
+.ws-dot.is-heavy { background: var(--ws-rain-heavy); }
+.ws-tip-chance { display: flex; align-items: center; gap: 6px; color: var(--ws-muted); font-size: 11px; }
+.ws-tip-meter { width: 40px; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.15); overflow: hidden; }
+.ws-tip-meter span { display: block; height: 100%; background: var(--ws-text); }
+.ws-tick { text-align: center; white-space: nowrap; }
+.ws-rain-chart .is-now .ws-tick { color: var(--ws-text); font-weight: 700; }
+.ws-rain-chart .is-now .ws-bar { border-bottom: 2px solid var(--ws-text); background: linear-gradient(var(--ws-faint), var(--ws-faint)) 50% 0 / 1px 100% no-repeat; } /* a hairline down the hour now */
 
-.forecast ol { list-style: none; margin: 0; padding: 0; }
-
-/* Section headings below the header: small capitals, like the week's. */
-.forecast :is(.forecast-today, .forecast-tomorrow, .forecast-week) h3 { margin: 14px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-.forecast .forecast-today header h3 { margin: 0; font-size: 15px; color: inherit; font-weight: 700; text-transform: none; letter-spacing: 0; }
-
-/* The next 24 hours in two rows of twelve, so none of it hides behind a sideways scroll.
-   Each hour's time, icon, temperature, rain and wind share rows (a subgrid) with the rest
-   of its row of hours, so an hour with two lines of rain doesn't knock the others out of line. */
-.forecast-hours {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  row-gap: 3px;
-  padding-bottom: 5px;
-  border-bottom: 1px solid var(--border);
+/* The key sits above the chart, at the right. */
+.ws-legend {
+  position: absolute;
+  top: -3px;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  line-height: 1;
+  color: var(--ws-muted);
+  font-size: 11px;
 }
 
-.forecast-hours li {
+.ws-legend span { width: 8px; height: 8px; border-radius: 2px; }
+.ws-legend span + span, .ws-key-chance { margin-left: 10px; }
+.ws-legend .ws-key-amount { width: 14px; background: linear-gradient(90deg, var(--ws-rain-light), var(--ws-rain-moderate), var(--ws-rain-heavy)); }
+.ws-key-chance { background: rgb(255 255 255 / 0.22); }
+
+/* The next 24 hours in two rows of twelve. Each hour's lines share rows (a subgrid) with the
+   rest of its row of hours, so they stay in line. */
+.ws-hours {
   display: grid;
-  grid-row: span 5;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  row-gap: 2px;
+}
+
+.ws-hours li {
+  display: grid;
+  grid-row: span 4;
   grid-template-rows: subgrid;
   justify-items: center;
-  padding-bottom: 9px; /* the space between rows of hours */
+  padding-bottom: clamp(4px, 1vh, 14px); /* the space between rows of hours */
   text-align: center;
 }
 
-.forecast-hours .forecast-rain { align-self: center; }
+.ws-hours .is-new-day .ws-time { color: var(--ws-text); font-weight: 700; }
 
-.forecast-time { color: var(--muted); font-size: 11px; }
-.forecast-hours .is-new-day .forecast-time { color: var(--text); font-weight: 700; }
-.forecast-wind { color: var(--muted); font-size: 10px; white-space: nowrap; }
-.forecast-hours .forecast-icon { font-size: 22px; line-height: 1.2; }
-.forecast-temp { font-weight: 600; }
-.forecast-rain { color: var(--popover-rain); font-size: 11px; min-height: 1.3em; }
+/* Tomorrow */
+.ws-tomorrow .ws-sub { margin: 4px 0 clamp(10px, 1.8vh, 16px); }
 
-/* Tomorrow: its own facts, then the morning, afternoon and evening side by side. */
-.forecast-tomorrow { padding-bottom: 14px; border-bottom: 1px solid var(--border); }
-.forecast-summary { display: flex; align-items: center; gap: 6px; margin: 0; }
-.forecast-summary .forecast-icon { font-size: 20px; }
-.forecast-tomorrow .forecast-facts { grid-template-columns: repeat(4, 1fr); margin: 10px 0; }
-
-.forecast-parts {
+.ws-parts {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 
-.forecast-parts li {
+.ws-parts li {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  grid-template-areas: "icon name temp" "icon rain wind";
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "icon name" "icon temp" "icon detail";
+  align-content: start;
+  column-gap: 10px;
+}
+
+.ws-parts .ws-icon { grid-area: icon; font-size: 28px; }
+.ws-part { grid-area: name; color: var(--ws-muted); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.ws-parts .ws-temp { grid-area: temp; font-family: var(--ws-serif); font-size: 20px; font-weight: 400; }
+.ws-part-detail { grid-area: detail; font-size: 11px; }
+
+/* The week, compact, each day's range of temperatures on one scale: cool to warm. */
+.ws-week { margin-top: clamp(14px, 2.6vh, 36px); }
+
+.ws-week li {
+  display: grid;
+  grid-template-columns: 76px 26px minmax(0, 1fr) 30px minmax(60px, 130px) 30px;
   align-items: center;
-  column-gap: 8px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  gap: 10px;
+  padding: clamp(1px, 0.3vh, 5px) 0;
+  border-bottom: 1px solid var(--ws-line);
 }
 
-.forecast-parts .forecast-icon { grid-area: icon; font-size: 22px; }
-.forecast-part { grid-area: name; font-weight: 600; }
-.forecast-parts .forecast-temp { grid-area: temp; }
-.forecast-parts .forecast-rain { grid-area: rain; min-height: 0; }
-.forecast-parts .forecast-wind { grid-area: wind; }
+.ws-day { font-weight: 600; }
+.ws-week .ws-icon { font-size: 19px; text-align: center; }
+.ws-week .ws-rain-text { text-align: right; white-space: nowrap; }
+.ws-low { color: var(--ws-muted); text-align: right; }
+.ws-high { font-weight: 600; }
 
-.forecast-week li {
-  display: grid;
-  grid-template-columns: 74px 24px 1fr auto 30px minmax(70px, 120px) 30px;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 0;
-  border-top: 1px solid var(--border);
-}
-
-.forecast-week li:first-child { border-top: 0; }
-.forecast-day { font-weight: 600; }
-.forecast-week .forecast-icon { font-size: 17px; text-align: center; }
-.forecast-label { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.forecast-week .forecast-rain { min-height: 0; text-align: right; }
-.forecast-low { color: var(--muted); text-align: right; }
-.forecast-high { font-weight: 600; }
-
-/* Each day's low to high, on one scale for the whole week: cool to warm. */
-.forecast-range {
+.ws-range {
   position: relative;
-  height: 5px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--text) 10%, transparent);
+  height: 4px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.12);
 }
 
-.forecast-range span {
+.ws-range span {
   position: absolute;
   inset-block: 0;
-  border-radius: 3px;
-  background: linear-gradient(90deg, #5aa9e6, #f2b84b);
+  border-radius: 2px;
+  background: linear-gradient(90deg, #8cc4f0, #f5c46a);
 }
 
-@media (max-width: 560px) {
-  .forecast-facts, .forecast-tomorrow .forecast-facts { grid-template-columns: repeat(2, 1fr); }
-  .forecast-hours { grid-template-columns: repeat(6, 1fr); }
-  .forecast-parts { grid-template-columns: 1fr; }
-  .forecast-week li { grid-template-columns: 70px 22px 1fr 28px minmax(40px, 1fr) 28px; }
-  .forecast-week .forecast-rain { display: none; }
+@keyframes ws-fade { from { opacity: 0; } }
+@keyframes ws-rise { from { opacity: 0; transform: translateY(14px); } }
+
+/* A refresh while open swaps the forecast in without its entrance (forecast.js). */
+@media (prefers-reduced-motion: reduce) {
+  .weather-screen[open], .ws-now > *, .ws-section { animation: none; }
+}
+
+.weather-screen[data-refreshed] :is(.ws-now > *, .ws-section) { animation: none; }
+
+@media (max-width: 960px) {
+  .ws-layout { grid-template-columns: minmax(0, 1fr); }
+  .ws-content { background: rgb(6 10 18 / 0.12); }
+}
+
+@media (max-width: 600px) {
+  .ws-close { padding: 0 12px; }
+  .ws-close kbd { display: none; }
+  .ws-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ws-hours { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .ws-parts { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .ws-rain-chart { --ws-bar-h: 90px; padding-left: 54px; }
+  .ws-rain-chart ol { gap: 2px; }
+  .ws-week li { grid-template-columns: 66px 24px minmax(0, 1fr) 28px minmax(30px, 70px) 28px; gap: 8px; }
 }
 
 @media (max-width: 900px) {
@@ -642,11 +973,14 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 
 .grid.packed .column { flex: 1 1 0; min-width: 0; }
 
-/* Packed columns fit the window, so the page itself never scrolls: each column keeps its
+/* Packed columns fit the window, so the page itself doesn't scroll: each column keeps its
    cards at full height except the last, which stops at the bottom of the window and
    scrolls its stories instead. (layout.js measures cards unpacked, so this doesn't skew
-   the packing.) A single column on a narrow screen still scrolls the page as usual. */
-body:has(.grid.packed) {
+   the packing.) With more cards than fit (`scrolls`, from layout.js), or a single column on
+   a narrow screen, the page scrolls as usual. */
+html { scrollbar-gutter: stable; } /* a page scrollbar coming and going mustn't change the column count */
+
+body:has(.grid.packed:not(.scrolls)) {
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -669,6 +1003,14 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 .grid.packed .card { display: flex; flex-direction: column; flex: none; max-height: calc(100% - var(--gap)); }
 .grid.packed .card:last-child { flex: 0 1 auto; min-height: 160px; }
 .grid.packed .card > :is(h2, .stale) { flex: none; }
+
+.grid.packed.scrolls { padding-bottom: 0; }
+.grid.packed.scrolls .column { max-height: none; overflow: visible; }
+.grid.packed.scrolls .card { max-height: none; }
+.grid.packed.scrolls .card:last-child { min-height: 0; }
+
+/* Straight after "Start over", a blank page behind the setup screen (setup.js). */
+.starting-over .grid { visibility: hidden; }
 
 /* Filling the screen (layout.js): every column runs the full height, its stories spaced out
    to share the spare room, and its last card stretched over what's left, so all the
@@ -774,7 +1116,10 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 /* With a customised layout saved, page.js draws the reader's cards; hide the default ones until then. */
 .customised .grid { visibility: hidden; }
 
-/* Customise dialog */
+/* Settings and the dialogs opened from it use blue for buttons, choices and focus rings. */
+.settings-screen, .setup-screen, .customise { --accent: var(--action); }
+
+/* Dialogs (history, removing a card, starting over) */
 .customise {
   width: min(520px, calc(100vw - 32px));
   max-height: calc(100vh - 64px);
@@ -828,8 +1173,8 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 
 .card-move { display: flex; gap: 2px; }
 
-.customise button,
-.customise input[type=number] {
+:is(.customise, .settings-screen) button,
+:is(.customise, .settings-screen) input[type=number] {
   min-height: 28px;
   padding: 2px 10px;
   border: 1px solid var(--border);
@@ -840,17 +1185,17 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
   font-size: 13px;
 }
 
-.customise input[type=number] { padding-inline: 6px; }
+:is(.customise, .settings-screen) input[type=number] { padding-inline: 6px; }
 
-.customise input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+:is(.customise, .settings-screen) input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 
 .card-move button { width: 30px; padding: 0; }
 
-.customise button:not(:disabled) { cursor: pointer; }
-.customise button:not(:disabled):hover { border-color: var(--muted); }
-.customise button:disabled { opacity: 0.35; }
+:is(.customise, .settings-screen) button:not(:disabled) { cursor: pointer; }
+:is(.customise, .settings-screen) button:not(:disabled):hover { border-color: var(--muted); }
+:is(.customise, .settings-screen) button:disabled { opacity: 0.35; }
 
-.customise .primary { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+:is(.customise, .settings-screen) .primary { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
 
 .customise-status { min-height: 1.35em; margin: 10px 0 0; color: var(--muted); font-size: 12px; }
 
@@ -865,6 +1210,7 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 
 @media (max-width: 480px) {
   .card-limit { font-size: 0; gap: 0; } /* the number box is enough on narrow screens */
+  .density-options small { display: none; }
 }
 
 /* Dragging cards around the page (reorder.js) */
@@ -900,10 +1246,9 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
   outline-offset: 4px;
 }
 
-/* Customise: the page's density, a three-way choice */
+/* Settings: the page's density, a three-way choice */
 .density { margin: 0 0 14px; padding: 0; border: 0; }
-.density legend { padding: 0; margin-bottom: 6px; font-weight: 600; }
-.density legend small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.density legend { padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
 
 .density-options {
   display: grid;
@@ -929,10 +1274,11 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 }
 
 .density-options label:hover span { color: var(--text); }
+.density-options small { display: block; margin-top: 1px; font-size: 11px; font-weight: 400; opacity: 0.8; }
 .density-options input:checked + span { color: #fff; background: var(--accent); }
 .density-options input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Customise: fitting cards to the screen, and the column each card is in */
+/* Settings: fitting cards to the screen, and the column each card is in */
 .arrange-toggle {
   display: flex;
   align-items: flex-start;
@@ -946,7 +1292,7 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 .arrange-toggle small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; font-weight: 400; }
 .card-column { color: var(--muted); font-size: 12px; font-weight: 400; white-space: nowrap; }
 
-/* Customise: drag handles, removing a feed, adding one */
+/* Settings: drag handles, removing a feed, adding one */
 .drag-handle {
   flex: none;
   margin-right: -4px;
@@ -966,8 +1312,8 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
   cursor: grabbing;
 }
 
-.customise .card-remove { width: 28px; padding: 0; color: var(--muted); font-size: 16px; }
-.customise .card-remove:hover { color: var(--accent); }
+:is(.customise, .settings-screen) .card-remove { width: 28px; padding: 0; color: var(--muted); font-size: 16px; }
+:is(.customise, .settings-screen) .card-remove:hover { color: var(--accent); }
 
 .add-feed { display: grid; gap: 6px; margin-top: 14px; }
 .add-feed label { font-weight: 600; font-size: 13px; }
@@ -988,47 +1334,136 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 
 .add-feed input:focus { outline: none; border-color: var(--accent); }
 
+/* The Settings screen (settings-screen.js) and the setup screen (setup.js): pages of their own at
+   /settings and /setup, filling the window, with the same header and two columns of sections. */
+.settings-screen,
+.setup-screen {
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.settings-screen::backdrop,
+.setup-screen::backdrop { background: var(--bg); }
+
+.settings-content {
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+  padding: 0 24px 24px;
+}
+
+.settings-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.settings-head h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+.settings-head p { flex: 1; margin: 0; color: var(--muted); font-size: 13px; }
+/* A message about the last change takes the place of the note about saving. */
+.settings-status:empty,
+.settings-head:has(.settings-status:not(:empty)) .settings-saved { display: none; }
+.settings-status { color: var(--text); }
+.settings-head .primary { min-width: 84px; min-height: 32px; align-self: center; }
+.settings-head button { align-self: center; }
+
+/* Back to Settings, from the setup screen. */
+.setup-screen .settings-back { margin-right: -4px; border-color: transparent; background: transparent; color: var(--muted); }
+.setup-screen .settings-back:not(:disabled):hover { color: var(--text); border-color: var(--border); }
+.setup-screen [hidden] { display: none; }
+
+.settings-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 20px;
+  max-width: 1180px;
+  margin: 18px auto 0;
+  align-items: start;
+}
+
+.settings-side { display: grid; gap: 14px; }
+
+.settings-section {
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.settings-section h2 { margin: 0 0 4px; font-size: 15px; }
+.settings-hint { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.settings-hint strong { color: var(--text); font-weight: 600; }
+.settings-section .arrange-toggle:last-child { margin-bottom: 0; }
+
+.settings-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-screen .danger-outline { color: var(--danger); }
+.settings-screen .danger-outline:not(:disabled):hover { border-color: var(--danger); }
+
+/* Rows sit on the section's surface, so they get the page colour to stand apart. */
+.settings-screen .card-list { gap: 4px; }
+.settings-screen .card-list li { padding: 3px 6px 3px 10px; background: var(--bg); }
+.settings-screen .card-list input[type=number],
+.settings-screen .card-move button { min-height: 26px; }
+.settings-screen .density-options,
+.settings-screen .add-feed input { background: var(--bg); }
+
+@media (max-width: 860px) {
+  .settings-columns { grid-template-columns: 1fr; }
+  .settings-content { padding: 0 16px calc(16px + env(safe-area-inset-bottom)); }
+  .settings-saved { display: none; }
+  .settings-head p { font-size: 12px; }
+  .settings-head { justify-content: space-between; }
+  .setup-screen .settings-head { flex-wrap: wrap; align-items: center; row-gap: 6px; }
+  .setup-screen .settings-head h1 { flex: 1; }
+  .setup-screen .setup-intro { order: 5; flex-basis: 100%; }
+  .setup-option-label { width: 100%; }
+}
+
+@media (min-width: 861px) {
+  .setup-screen .settings-columns { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
+}
+.setup-screen .settings-side { align-content: start; }
+
 /* Turned off on the setup screen (the early script sets these before the page paints). */
 .no-weather .weather,
 .no-backdrop .backdrop,
 .no-backdrop .peek { display: none; }
 
-/* Setup screen (setup.js) */
-.setup {
-  width: min(640px, calc(100vw - 32px));
-  max-height: calc(100dvh - 48px);
-  padding: 0;
+/* Setup screen (setup.js): its page is laid out like Settings (above); these are its controls. */
+.setup-screen button {
+  min-height: 28px;
+  padding: 2px 12px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 6px;
   color: var(--text);
-  background: var(--bg);
-  box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
 }
 
-.setup[open] { display: flex; }
-.setup::backdrop { background: rgb(0 0 0 / 0.5); }
-
-.setup-form { display: flex; flex-direction: column; width: 100%; min-height: 0; }
-
-.setup-body { overflow-y: auto; padding: 22px 22px 8px; }
-
-.setup-head h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: -0.01em; }
-.setup-head p { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
-
-.setup fieldset { margin: 0 0 20px; padding: 0; border: 0; min-width: 0; }
-
-.setup legend {
-  margin-bottom: 8px;
-  padding: 0;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
+.setup-screen .primary { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.setup-screen button:disabled { opacity: 0.45; cursor: default; }
+.setup-screen .chip span,
+.setup-screen .segmented { background: var(--bg); }
 
 .setup-hint { margin: -4px 0 8px; color: var(--muted); font-size: 12px; }
-.setup-warning { min-height: 0; margin: 8px 0 0; color: var(--accent); font-size: 12px; }
+.setup-warning { min-height: 0; margin: 8px 0 0; color: var(--warning); font-size: 12px; }
 .setup-warning:empty { display: none; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1120,52 +1555,14 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 
 .setup-check { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; cursor: pointer; }
 .setup-check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.setup-options .setup-option:last-of-type { margin-bottom: 4px; }
+.chips[data-list="interests"]:empty { display: none; }
 
-.setup-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 22px;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-}
-
-.setup-actions button {
-  min-height: 36px;
-  padding: 4px 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  background: var(--surface);
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.setup-actions .primary { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
-.setup-actions button:disabled { opacity: 0.45; cursor: default; }
-
-/* On phones the setup screen fills the screen, with its buttons always in reach. */
-@media (max-width: 600px) {
-  .setup {
-    width: 100vw;
-    max-width: none;
-    height: 100dvh;
-    max-height: none;
-    margin: 0;
-    border: 0;
-    border-radius: 0;
-  }
-  .setup-body { padding: 18px 16px 8px; }
-  .setup-actions { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
-  .setup-option-label { width: 100%; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .chip span { transition: none; }
 }
 
-.customise .setup-open { margin: -4px 0 12px; }
 
 /* Removing a card: the × in its corner (remove.js), shown on hover or focus */
 .card { position: relative; }
@@ -1200,6 +1597,13 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 @media (hover: none) { .card-close { opacity: 0.45; } }
 .is-reordering .card-close,
 .card.is-lifted .card-close { opacity: 0; }
+
+/* Asking before clearing everything (start-over.js) */
+.start-over-list { margin: 0 0 12px; padding-left: 20px; display: grid; gap: 3px; font-size: 13px; color: var(--muted); }
+.start-over-warning { margin: 0 0 4px; font-size: 13px; }
+.customise .danger { color: #fff; background: var(--danger); border-color: var(--danger); font-weight: 600; }
+.customise .danger:not(:disabled):hover { border-color: var(--danger); filter: brightness(1.08); }
+.start-over .start-over-cancel { margin-left: auto; }
 
 /* Asking before a card is removed */
 .remove-dialog { width: min(440px, calc(100vw - 32px)); }

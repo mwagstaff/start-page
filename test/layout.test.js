@@ -85,3 +85,15 @@ test('storySpread shares a column\'s spare room between its stories, within a li
   assert.equal(storySpread(800, 200, 2), 10); // short of stories: capped, the last card stretches
   assert.equal(storySpread(800, 100, 0), 0);
 });
+
+test('overflows: the page scrolls only when a column can\'t fit, even with its cards squeezed', async () => {
+  const { overflows } = await import('../public/layout.js');
+  // Each card: 30 + 40 a story. Squeezed to two stories, a card is 110 tall.
+  const cards = [card(6, 15), card(6, 15), card(6, 15), card(6, 15)];
+  // Filling: two cards squeezed need 220.
+  assert.equal(overflows([[0, 1], [2, 3]], cards, 220, true), false);
+  assert.equal(overflows([[0, 1], [2, 3]], cards, 219, true), true);
+  // Not filling: every card but the last keeps its own six stories (270), the last needs 110.
+  assert.equal(overflows([[0, 1]], cards, 380, false), false);
+  assert.equal(overflows([[0, 1]], cards, 379, false), true);
+});

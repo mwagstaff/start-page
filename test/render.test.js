@@ -44,12 +44,12 @@ test('shows an empty state when every source failed', () => {
   assert.match(html, /Couldn't load this feed/);
 });
 
-test('the page carries its version, refresh and customise buttons, and an import map', () => {
+test('the page carries its version, refresh and settings buttons, and an import map', () => {
   const widgets = [{ id: 'hn', title: 'HN', link: null, thumbnails: false, merged: false, failedSources: [], items: [] }];
   const html = renderPage({ tabs: [{ id: 'home', label: 'Home', widgets: ['hn'] }], activeTab: { id: 'home' }, widgets, version: 'abc123', versions: { 'page.js': 'h1', 'cards.js': 'h2' } });
   assert.match(html, /data-tab="home" data-version="abc123"/);
   assert.match(html, /<button class="refresh" type="button"/);
-  assert.match(html, /<button class="customise-open icon-button" type="button"[^>]* hidden>/);
+  assert.match(html, /<button class="settings-open icon-button" type="button"[^>]* hidden>/);
   assert.match(html, /<form class="search" action="https:\/\/www\.google\.com\/search" method="get" target="_blank" rel="noopener" role="search">\s*<input type="search" name="q"/);
   assert.match(html, /<script type="importmap">\{"imports":\{"\/static\/page\.js":"\/static\/page\.js\?v=h1","\/static\/cards\.js":"\/static\/cards\.js\?v=h2"\}\}<\/script>/);
   assert.match(html, /src="\/static\/page\.js\?v=h1"/);

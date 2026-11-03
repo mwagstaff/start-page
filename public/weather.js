@@ -3,7 +3,7 @@
 // reader's location never reaches this server. If location is unavailable or refused, the
 // default forecast simply stays.
 
-import { forecastUrl, parsePlaceName, parseWeather, renderWeather } from './forecast.js';
+import { forecastUrl, parsePlaceName, parseWeather, showWeather } from './forecast.js';
 
 const ROUND = 100; // two decimal places, about 1km: plenty for weather, and less precise to send
 const REFRESH_MS = 15 * 60_000;
@@ -45,8 +45,8 @@ async function placeName(spot, coords) {
 async function forecastFor(coords) {
   const spot = `${coords.latitude},${coords.longitude}`;
   const cached = stored(FORECAST_KEY);
-  // A forecast cached before the popover showed tomorrow in detail: fetch it again.
-  if (cached?.spot === spot && cached.weather.tomorrow && Date.now() - cached.fetchedAt < REFRESH_MS) return cached.weather;
+  // A forecast cached before the weather screen showed today's rain: fetch it again.
+  if (cached?.spot === spot && cached.weather.today?.rainHours && Date.now() - cached.fetchedAt < REFRESH_MS) return cached.weather;
   try {
     const [response, name] = await Promise.all([fetch(forecastUrl(coords)), placeName(spot, coords)]);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -62,9 +62,8 @@ let coords = null;
 
 async function showLocalWeather() {
   const weather = coords && (await forecastFor(coords));
-  const current = document.querySelector('.weather');
-  if (!weather || !current) return;
-  current.outerHTML = renderWeather(weather);
+  if (!weather || !document.querySelector('.weather')) return;
+  showWeather(weather);
   document.body.dataset.localWeather = 'true'; // page.js leaves it alone from now on
 }
 
