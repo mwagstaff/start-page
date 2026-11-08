@@ -9,6 +9,10 @@
 // with lightning, snow, fog, drifting cloud, or stars at night (sunshine is in style.css). It only runs while
 // the screen is open and the tab is visible, and stays still for readers who ask for reduced
 // motion.
+// A day picked from the week shows in detail in place of today, until another is picked, or
+// back to today, or the screen is opened again.
+
+import { pickDay, shownWeather } from './forecast.js';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const random = (low, high) => low + Math.random() * (high - low);
@@ -311,6 +315,8 @@ function open() {
   if (!dialog || dialog.open) return;
   place(dialog);
   delete dialog.dataset.refreshed; // play the entrance again
+  delete dialog.dataset.picking;
+  pickDay(null, shownWeather() ?? fetched); // from today
   dialog.show();
   dialog.querySelector('.ws-content').scrollTop = 0; // from the top, not where it was last left
   setCovered(true);
@@ -339,7 +345,22 @@ document.addEventListener('close', (event) => {
   if (event.target === screen()) closed();
 }, true); // 'close' doesn't bubble, so listen as it comes down
 
+// The page as the server drew it has no forecast to hand, so the first day picked fetches it
+// (page.js only when needed: the screen shouldn't wait for it to load).
+let fetched = null;
+async function pick(date) {
+  fetched = shownWeather() ? null : fetched ?? (await (await import('./page.js')).fetchFeeds())?.weather;
+  pickDay(date, shownWeather() ?? fetched);
+  // Focus stays on the day picked (now drawn afresh), or on the week once back to today.
+  screen().querySelector(date ? '.ws-day-pick[aria-pressed="true"]' : '.ws-day-pick')?.focus({ preventScroll: true });
+}
+
 document.addEventListener('click', (event) => {
+  const day = event.target.closest('.weather-screen [data-day]');
+  if (day) {
+    pick(day.dataset.day);
+    return;
+  }
   if (!event.target.closest('.weather-open')) return;
   if (screen()?.open) screen().close();
   else open();

@@ -98,7 +98,8 @@ test('parses today in detail and the week ahead for the weather screen', () => {
   assert.equal(weather.today.hours.at(-1).time, '11:00');
   assert.deepEqual([weather.today.sunrise, weather.today.sunset, weather.today.uv, weather.today.rain, weather.today.humidity, weather.today.wind], ['07:52', '17:41', 2, 3.2, 72, 9]);
   assert.equal(weather.days.length, 7);
-  assert.deepEqual(weather.days[0], { date: '2026-10-30', day: 'Tomorrow', high: 15, low: 8, rainChance: 40, rain: 0.9, label: 'Rain', icon: '🌧️' });
+  const { date, day, high, low, rainChance, rain, label, icon } = weather.days[0];
+  assert.deepEqual({ date, day, high, low, rainChance, rain, label, icon }, { date: '2026-10-30', day: 'Tomorrow', high: 15, low: 8, rainChance: 40, rain: 0.9, label: 'Rain', icon: '🌧️' });
   assert.deepEqual(weather.days.slice(1).map((d) => d.day), ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu']);
 });
 
@@ -175,6 +176,25 @@ test('rain is charted on a fixed scale, a third each for light, moderate and hea
   weather.today.rainHours[4] = { ...weather.today.rainHours[4], mm: 9 };
   assert.match(renderScreenContent(weather), /<p class="ws-lead">Heavy rain to come: 9.7 mm, heaviest at 15:00<\/p>/);
   assert.match(renderScreenContent(weather), /<span class="ws-amount is-heavy" style="height:72.2%">/);
+});
+
+test('a day picked from the week shows in detail, hour by hour', () => {
+  const weather = parseWeather(json, 'Beckenham');
+  const tomorrow = weather.days[0];
+  assert.equal(tomorrow.hours.length, 24);
+  assert.deepEqual(tomorrow.hours.map((h) => h.time).slice(0, 2), ['00:00', '01:00']);
+  assert.ok(tomorrow.hours.every((h) => 'code' in h && !('icon' in h))); // kept small
+  const today = renderScreenContent(weather);
+  assert.match(today, /<button class="ws-day-pick" type="button" data-day="2026-10-30" aria-pressed="false"/);
+  assert.match(today, /Rain today/);
+  const picked = renderScreenContent(weather, 'C', '2026-10-30');
+  assert.match(picked, /<div class="ws-detail is-picked">/);
+  assert.match(picked, /<h3>Friday 30 October<button class="ws-back" type="button" data-day="">/);
+  assert.match(picked, /<h3>Rain · Fri<\/h3>/);
+  assert.match(picked, /<h3>Hour by hour<\/h3>/);
+  assert.match(picked, /data-day="" aria-pressed="true"/); // picked again: back to today
+  assert.doesNotMatch(picked, /Rain today|Next 24 hours/);
+  assert.match(renderScreenContent(weather, 'C', '2020-01-01'), /Rain today/); // a day gone: today
 });
 
 test('a forecast cached before the details shows the screen with what it has', () => {
