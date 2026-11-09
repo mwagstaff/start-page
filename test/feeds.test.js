@@ -26,6 +26,15 @@ test('extracts Hacker News points, comments and discussion link', async () => {
   assert.equal(item.comments, 57);
 });
 
+test('links Lobsters discussions but not a blog\'s own comment box', () => {
+  const rss = (comments) => `<rss><channel><title>T</title><item><title>A story</title><link>https://example.com/a</link><comments>${comments}</comments></item></channel></rss>`;
+  const [lobsters] = parseFeed(rss('https://lobste.rs/s/ezjewj/a_story'));
+  assert.equal(lobsters.commentsUrl, 'https://lobste.rs/s/ezjewj/a_story');
+  assert.equal(lobsters.points, undefined);
+  const [blog] = parseFeed(rss('https://example.com/a#respond'));
+  assert.equal(blog.commentsUrl, undefined);
+});
+
 test('parses Atom entries, preferring the alternate link and published date', async () => {
   const items = parseFeed(await fixture('atom.xml'));
   assert.equal(items[0].title, 'Apple’s new chip, explained');

@@ -13,9 +13,9 @@ for (const type of ['pointermove', 'pointerdown', 'keydown', 'scroll', 'wheel', 
   addEventListener(type, () => { lastActivity = Date.now(); }, { passive: true });
 }
 
-// Busy: recently active, looking at the photo, customising, or with a half-typed search waiting.
+// Busy: recently active, looking at the photo, customising (a dialog or the setup bar's drawer), or with a half-typed search waiting.
 const busy = () => Date.now() - lastActivity < IDLE_BEFORE_UPDATE_MS
-  || document.querySelector('.peek:hover, .peek:focus-within, dialog[open]')
+  || document.querySelector('.peek:hover, .peek:focus-within, dialog[open], .sb.is-open')
   || document.querySelector('.search input')?.value.trim();
 
 async function check({ evenIfBusy = false } = {}) {

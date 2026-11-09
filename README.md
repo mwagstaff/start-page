@@ -59,7 +59,7 @@ npm test
   ETag, with `Cache-Control: public, max-age=60, stale-while-revalidate=600`; a request with a
   matching `If-None-Match` gets a 304. The page itself also has an ETag. Cloudflare serves the
   snapshot from its edge through the skynolimit.dev Cache Rule "Start page: cache feeds
-  snapshot (origin Cache-Control)": it makes `/api/feeds.json` on start.skynolimit.dev eligible
+  snapshot (origin Cache-Control)": it makes `/api/feeds.json` on tab1.net eligible
   for cache, with Browser TTL set to respect the origin (otherwise the zone's 4-hour Browser
   Cache TTL would replace `max-age=60`).
 - Open pages re-request the snapshot every minute while visible, and when you switch back to
@@ -73,7 +73,7 @@ npm test
   in `config.widgets` that isn't on the tab), change their order (arrows, or drag a row by its
   ⠿ handle, which works with touch too) and number of stories (up to 15), add your own RSS or
   Atom feeds (up to 20), choose whether cards are fitted to the screen, and export or import
-  the settings as `start-page-settings.json`. On the page itself you can drag any card (press
+  the settings as `tab1.net-settings.json`. On the page itself you can drag any card (press
   and move with a mouse; press and hold, then move, on a touch screen; Escape cancels): it
   lifts and follows the pointer, a dashed outline shows where it will land, and the other
   cards slide out of the way. Dropping a card keeps every card in the column it's in, with no
@@ -115,15 +115,38 @@ npm test
   sources (origin Cache-Control)", which covers `/api/feeds.json`, `/api/catalogue.json` and
   `/api/sources`. Catalogue feeds that are also on the default page (BBC News top stories, BBC
   Science, BBC Football, Six Colors) are read from its cache rather than fetched twice.
-- First visit (no settings in this browser): `public/setup.js` opens the setup page at
-  `/settings/topics-and-sources` (shareable, like `/settings`), over the default page: region (guessed from the time zone), topics, news sources, one card per
-  topic or per source, pictures or headlines only, and weather and daily photo on or off. "Build my
-  page" saves the choices as `profile` in the settings and lays out cards from them
-  (`public/topics.js`); "Skip for now", Escape or Back just remembers it was seen. Settings has an
-  "Edit topics and sources…" button that opens it on top of Settings, with "← Settings" (or
-  Back) to return; cards already on the page keep their place and
-  settings, and unwanted ones are hidden. "Reset cards" clears the profile too.
-  "Start over…" (`public/start-over.js`) asks first, offering an export, then clears the
-  settings and history from this browser and reloads the home page, so the setup screen opens
-  as on a first visit, over a blank page (the cards show again once it's built or skipped).
-  It can't be undone.
+- A reader who hasn't chosen anything sees the suggested page for their region: the
+  catalogue's `defaults` (for the UK, Top stories, Hacker News, World, Tech and Football from
+  BBC News, The Guardian and Sky News). The server draws the UK's (so it also works without
+  JavaScript); elsewhere the early script hides it until `page.js` draws the region's, guessed
+  from the time zone.
+- The setup bar (`public/setup-bar.js`) sits between the masthead and the cards. It opens by
+  itself on a first visit and stays, on later visits too, until the reader presses Done; after
+  that the masthead's Customise button opens it (as does `/settings/topics-and-sources`).
+  Compact, it shows the pillars News, Tech and Sport (then More and Display) with what's
+  chosen in each; each opens a drawer: news topics, sources, region and one card per topic or
+  per source; tiles for Tech, Sport and More topics showing where their stories come from; and
+  pictures, density, weather and the daily photo. On phones a drawer is a sheet from the
+  bottom. Every choice is saved as `profile` straight away and the cards change underneath
+  (`public/topics.js`): new cards go at the end and glow briefly, and each change can be
+  undone. A card's × turns its topic off, so the bar always matches the page. Each topic
+  names its pillar in `config/catalogue.json`.
+- Settings (`/settings`) is now "Advanced settings", opened from the bar: card order and
+  stories per card, fill and arrangement, temperature unit, your own feeds, import/export,
+  History and "Start over…". Its "Edit topics and sources…" button goes back to the bar.
+  "Reset cards" goes back to the suggested page. "Start over…" (`public/start-over.js`) asks
+  first, offering an export, then clears the settings and history from this browser and
+  reloads the home page as on a first visit. It can't be undone.
+
+## Production deployment
+
+The official address is https://tab1.net. Deploy with
+`/Users/mwagstaff/dev/server-tooling/deploy/node_project.zsh tab1.net --no-tail`.
+The service runs on Mini at port 3060 as `com.tab1.net.web`; Sky routes
+Cloudflare Tunnel traffic through Caddy to Mini over Tailscale.
+The Caddy setup script also configures redirects from `www.tab1.net` and
+`start.skynolimit.dev` to the official address, preserving paths and queries.
+
+Browser storage keys retain the `start-page:` prefix for compatibility. Settings
+are origin-specific: export settings from an existing open tab on the old address before
+refreshing it, then import that JSON file on tab1.net to carry your layout across. Existing exports remain supported.

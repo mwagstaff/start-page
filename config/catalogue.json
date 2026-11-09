@@ -257,38 +257,42 @@
   "topics": {
     "top": {
       "label": "Top stories",
+      "pillar": "news",
       "section": "top"
     },
     "politics": {
       "label": "Politics",
+      "pillar": "news",
       "section": "politics"
     },
     "world": {
       "label": "World",
+      "pillar": "news",
       "section": "world"
     },
     "business": {
       "label": "Business",
+      "pillar": "news",
       "section": "business"
     },
     "science": {
       "label": "Science & environment",
+      "pillar": "news",
       "section": "science"
     },
     "health": {
       "label": "Health",
+      "pillar": "news",
       "section": "health"
-    },
-    "sport": {
-      "label": "Sport",
-      "section": "sport"
     },
     "culture": {
       "label": "Culture",
+      "pillar": "news",
       "section": "culture"
     },
     "football": {
       "label": "Football",
+      "pillar": "sport",
       "sources": [
         {
           "name": "BBC Sport",
@@ -306,6 +310,7 @@
     },
     "nfl": {
       "label": "NFL",
+      "pillar": "sport",
       "region": "us",
       "sources": [
         {
@@ -324,6 +329,7 @@
     },
     "nba": {
       "label": "NBA",
+      "pillar": "sport",
       "region": "us",
       "sources": [
         {
@@ -338,6 +344,7 @@
     },
     "mlb": {
       "label": "MLB",
+      "pillar": "sport",
       "region": "us",
       "sources": [
         {
@@ -352,6 +359,7 @@
     },
     "cricket": {
       "label": "Cricket",
+      "pillar": "sport",
       "region": "uk",
       "sources": [
         {
@@ -366,6 +374,7 @@
     },
     "rugby": {
       "label": "Rugby",
+      "pillar": "sport",
       "region": "uk",
       "sources": [
         {
@@ -380,6 +389,7 @@
     },
     "f1": {
       "label": "Formula 1",
+      "pillar": "sport",
       "sources": [
         {
           "name": "BBC Sport",
@@ -391,16 +401,29 @@
         }
       ]
     },
+    "sport": {
+      "label": "Sport",
+      "pillar": "sport",
+      "section": "sport"
+    },
+    "hacker-news": {
+      "label": "Hacker News",
+      "pillar": "tech",
+      "widget": "hacker-news"
+    },
     "tech": {
       "label": "Tech",
+      "pillar": "tech",
       "widget": "tech"
     },
     "ai": {
       "label": "AI",
+      "pillar": "tech",
       "widget": "ai"
     },
     "apple": {
       "label": "Apple",
+      "pillar": "tech",
       "sources": [
         {
           "name": "9to5Mac",
@@ -422,6 +445,7 @@
     },
     "gaming": {
       "label": "Gaming",
+      "pillar": "tech",
       "sources": [
         {
           "name": "Eurogamer",
@@ -439,14 +463,64 @@
     },
     "space": {
       "label": "Space",
+      "pillar": "tech",
       "widget": "space"
     },
-    "hacker-news": {
-      "label": "Hacker News",
-      "widget": "hacker-news"
+    "hn-top": {
+      "label": "HN 300+",
+      "pillar": "tech",
+      "sources": [
+        {
+          "name": "Hacker News",
+          "url": "https://hnrss.org/newest?points=300"
+        }
+      ]
+    },
+    "lobsters": {
+      "label": "Lobsters",
+      "pillar": "tech",
+      "sources": [
+        {
+          "name": "Lobsters",
+          "url": "https://lobste.rs/rss"
+        }
+      ]
+    },
+    "techmeme": {
+      "label": "Techmeme",
+      "pillar": "tech",
+      "sources": [
+        {
+          "name": "Techmeme",
+          "url": "https://www.techmeme.com/feed.xml"
+        }
+      ]
+    },
+    "ai-analysis": {
+      "label": "AI analysis",
+      "pillar": "tech",
+      "sources": [
+        {
+          "name": "Import AI",
+          "url": "https://jack-clark.net/feed/"
+        },
+        {
+          "name": "Interconnects",
+          "url": "https://www.interconnects.ai/feed"
+        },
+        {
+          "name": "Latent Space",
+          "url": "https://www.latent.space/feed"
+        },
+        {
+          "name": "One Useful Thing",
+          "url": "https://www.oneusefulthing.org/feed"
+        }
+      ]
     },
     "film-tv": {
       "label": "Film & TV",
+      "pillar": "more",
       "sources": [
         {
           "name": "Variety",
@@ -464,6 +538,7 @@
     },
     "food": {
       "label": "Food",
+      "pillar": "more",
       "sources": [
         {
           "name": "Guardian Food",
@@ -477,6 +552,7 @@
     },
     "travel": {
       "label": "Travel",
+      "pillar": "more",
       "sources": [
         {
           "name": "Guardian Travel",
@@ -490,6 +566,7 @@
     },
     "money": {
       "label": "Personal finance",
+      "pillar": "more",
       "region": "uk",
       "sources": [
         {
@@ -512,10 +589,10 @@
       ],
       "topics": [
         "top",
-        "politics",
+        "hacker-news",
         "world",
-        "football",
-        "tech"
+        "tech",
+        "football"
       ]
     },
     "us": {
@@ -526,10 +603,10 @@
       ],
       "topics": [
         "top",
-        "politics",
+        "hacker-news",
         "world",
-        "business",
-        "tech"
+        "tech",
+        "nfl"
       ]
     }
   }

@@ -36,11 +36,67 @@ const inRegion = (item, region) => region === 'both' || !item.region || item.reg
 export const regionOutlets = (catalogue, region) => Object.keys(catalogue.outlets).filter((id) => inRegion(catalogue.outlets[id], region));
 export const regionTopics = (catalogue, region) => Object.keys(catalogue.topics).filter((id) => inRegion(catalogue.topics[id], region));
 
-// What the setup screen starts with for a region.
+// The page a reader has before choosing anything (and what the server draws first), for a region.
 export function defaultProfile(catalogue, region) {
   const regions = region === 'both' ? catalogue.regions : [region];
   const pick = (key) => [...new Set(regions.flatMap((r) => catalogue.defaults[r]?.[key] ?? []))];
   return { outlets: pick('outlets'), topics: pick('topics'), style: 'topics', pictures: true, weather: true, backdrop: true };
+}
+
+// The setup bar's groups of topics, in the order it shows them. Each catalogue topic names
+// its pillar; the first three are always on show, More is quieter.
+export const PILLARS = [
+  { id: 'news', label: 'News' },
+  { id: 'tech', label: 'Tech' },
+  { id: 'sport', label: 'Sport' },
+  { id: 'more', label: 'More' },
+];
+
+export const pillarTopics = (catalogue, region, pillar) => regionTopics(catalogue, region).filter((id) => catalogue.topics[id].pillar === pillar);
+
+// The region a profile's sources come from: one region, or both. A profile with no
+// sources goes by `fallback` (the reader's guessed region).
+export function profileRegion(profile, catalogue, fallback = 'uk') {
+  const regions = new Set(profile.outlets.map((id) => catalogue.outlets[id]?.region).filter(Boolean));
+  return regions.size === 1 ? [...regions][0] : regions.size ? 'both' : fallback;
+}
+
+// A topic turned on or off. New topics go at the end, so their cards do too.
+export function withTopic(profile, topic, on) {
+  const topics = profile.topics.filter((id) => id !== topic);
+  return { ...profile, topics: on ? [...topics, topic] : topics };
+}
+
+// An outlet turned on or off, kept in the catalogue's order.
+export function withOutlet(profile, outlet, on, catalogue) {
+  const order = Object.keys(catalogue.outlets);
+  const outlets = profile.outlets.filter((id) => id !== outlet);
+  if (on) outlets.push(outlet);
+  return { ...profile, outlets: outlets.sort((a, b) => order.indexOf(a) - order.indexOf(b)) };
+}
+
+// Moving to another region: if the reader still has the old region's suggested sources, they
+// get the new region's; otherwise they keep those of theirs the new region lists. Topics the
+// new region doesn't offer are dropped.
+export function withRegion(profile, catalogue, from, to) {
+  const same = (a, b) => a.length === b.length && a.every((id) => b.includes(id));
+  const outlets = new Set(regionOutlets(catalogue, to));
+  const topics = new Set(regionTopics(catalogue, to));
+  return {
+    ...profile,
+    outlets: same(profile.outlets, defaultProfile(catalogue, from).outlets) ? defaultProfile(catalogue, to).outlets : profile.outlets.filter((id) => outlets.has(id)),
+    topics: profile.topics.filter((id) => topics.has(id)),
+  };
+}
+
+// The card a topic makes (see profileCards), and the topic or outlet a card comes from.
+export const topicCardId = (catalogue, topic) => catalogue.topics[topic]?.widget ?? `topic-${topic}`;
+
+export function cardChoice(catalogue, cardId) {
+  if (cardId.startsWith('topic-') && catalogue.topics[cardId.slice(6)]) return { topic: cardId.slice(6) };
+  if (cardId.startsWith('outlet-') && catalogue.outlets[cardId.slice(7)]) return { outlet: cardId.slice(7) };
+  const topic = Object.keys(catalogue.topics).find((id) => catalogue.topics[id].widget === cardId);
+  return topic ? { topic } : null;
 }
 
 // The cards a profile makes, in order: { id, title, sources: [{ id, name }], limit,

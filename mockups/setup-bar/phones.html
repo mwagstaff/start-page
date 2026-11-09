@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Setup bar on a phone</title>
+  <style>
+    body {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 44px;
+      margin: 0;
+      padding: 36px 24px;
+      color: #c9c5bd;
+      background: #121211;
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    }
+    figure { display: grid; justify-items: center; gap: 14px; margin: 0; }
+    iframe {
+      width: 390px;
+      height: 844px;
+      border: 0;
+      border-radius: 46px;
+      background: #000;
+      box-shadow: 0 0 0 9px #1f1f1e, 0 0 0 10px #3a3a38, 0 30px 60px -24px #000;
+    }
+    figcaption { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <figure><iframe src="./?review=0" title="First visit"></iframe><figcaption>First visit: pillars scroll sideways</figcaption></figure>
+  <figure><iframe src="./?open=sport&amp;add=cricket&amp;review=0" title="Sport sheet"></iframe><figcaption>Sport opens as a sheet; Cricket just added</figcaption></figure>
+  <figure><iframe src="./?state=returning&amp;review=0" title="After Done"></iframe><figcaption>After Done: tucked into Customise</figcaption></figure>
+</body>
+</html>

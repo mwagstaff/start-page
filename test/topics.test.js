@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { publicCatalogue } from '../lib/catalogue.js';
 import { validSettings } from '../public/settings.js';
-import { defaultProfile, guessRegion, layoutForProfile, profileCards, profileSourceIds, profileWidgets, validProfile } from '../public/topics.js';
+import { PILLARS, cardChoice, defaultProfile, guessRegion, layoutForProfile, pillarTopics, profileCards, profileRegion, profileSourceIds, profileWidgets, topicCardId, validProfile, withOutlet, withRegion, withTopic } from '../public/topics.js';
 
 const catalogue = publicCatalogue(JSON.parse(await readFile(new URL('../config/catalogue.json', import.meta.url), 'utf8')));
 const profile = (overrides) => ({ outlets: ['bbc', 'guardian'], topics: ['politics', 'football', 'ai'], style: 'topics', pictures: true, weather: true, backdrop: true, ...overrides });
@@ -97,4 +97,54 @@ test('settings keep a profile, and having one or skipping marks the reader as on
   assert.equal(withProfile.onboarded, true);
   assert.deepEqual(validSettings({ v: 1, tabs: {}, onboarded: true }), { v: 1, tabs: {}, custom: [], onboarded: true });
   assert.deepEqual(validSettings({ v: 1, tabs: {} }), { v: 1, tabs: {}, custom: [] });
+});
+
+test('a new reader in the UK starts with top stories, Hacker News, world, tech and football', () => {
+  const suggested = defaultProfile(catalogue, 'uk');
+  assert.deepEqual(suggested.topics, ['top', 'hacker-news', 'world', 'tech', 'football']);
+  assert.deepEqual(profileCards(suggested, catalogue).map((card) => card.id), ['topic-top', 'hacker-news', 'topic-world', 'tech', 'topic-football']);
+  assert.deepEqual(defaultProfile(catalogue, 'us').topics, ['top', 'hacker-news', 'world', 'tech', 'nfl']);
+});
+
+test('every topic sits in one of the setup bar\'s pillars, and each region lists its own', () => {
+  const pillars = PILLARS.map((pillar) => pillar.id);
+  for (const [id, topic] of Object.entries(catalogue.topics)) assert.ok(pillars.includes(topic.pillar), id);
+  assert.deepEqual(pillarTopics(catalogue, 'uk', 'news'), ['top', 'politics', 'world', 'business', 'science', 'health', 'culture']);
+  assert.deepEqual(pillarTopics(catalogue, 'uk', 'tech'), ['hacker-news', 'tech', 'ai', 'apple', 'gaming', 'space', 'hn-top', 'lobsters', 'techmeme', 'ai-analysis']);
+  assert.deepEqual(pillarTopics(catalogue, 'uk', 'sport'), ['football', 'cricket', 'rugby', 'f1', 'sport']);
+  assert.deepEqual(pillarTopics(catalogue, 'us', 'sport'), ['football', 'nfl', 'nba', 'mlb', 'f1', 'sport']);
+  assert.deepEqual(pillarTopics(catalogue, 'uk', 'more'), ['film-tv', 'food', 'travel', 'money']);
+});
+
+test('turning topics on puts them last, and sources stay in the catalogue\'s order', () => {
+  const start = profile({ topics: ['top', 'football'] });
+  assert.deepEqual(withTopic(start, 'cricket', true).topics, ['top', 'football', 'cricket']);
+  assert.deepEqual(withTopic(start, 'top', false).topics, ['football']);
+  assert.deepEqual(withTopic(start, 'top', true).topics, ['football', 'top']);
+  assert.deepEqual(withOutlet(profile({ outlets: ['sky'] }), 'bbc', true, catalogue).outlets, ['bbc', 'sky']);
+  assert.deepEqual(withOutlet(profile({ outlets: ['bbc', 'sky'] }), 'bbc', false, catalogue).outlets, ['sky']);
+});
+
+test('changing region swaps suggested sources, keeps chosen ones the region lists, and drops its missing topics', () => {
+  const uk = defaultProfile(catalogue, 'uk');
+  assert.deepEqual(withRegion(uk, catalogue, 'uk', 'us').outlets, ['nyt', 'npr', 'cbs']);
+  assert.deepEqual(withRegion(profile({ outlets: ['bbc', 'inews'] }), catalogue, 'uk', 'both').outlets, ['bbc', 'inews']);
+  assert.deepEqual(withRegion(profile({ outlets: ['bbc', 'inews'] }), catalogue, 'uk', 'us').outlets, []);
+  assert.deepEqual(withRegion(profile({ topics: ['top', 'cricket', 'football'] }), catalogue, 'uk', 'us').topics, ['top', 'football']);
+  assert.equal(profileRegion(profile({ outlets: ['bbc', 'nyt'] }), catalogue), 'both');
+  assert.equal(profileRegion(profile({ outlets: ['nyt'] }), catalogue), 'us');
+  assert.equal(profileRegion(profile({ outlets: [] }), catalogue, 'us'), 'us');
+});
+
+test('a card leads back to the topic or source that made it', () => {
+  for (const topic of ['top', 'football', 'hacker-news', 'tech']) assert.deepEqual(cardChoice(catalogue, topicCardId(catalogue, topic)), { topic });
+  assert.equal(topicCardId(catalogue, 'tech'), 'tech');
+  assert.deepEqual(cardChoice(catalogue, 'outlet-bbc'), { outlet: 'bbc' });
+  assert.equal(cardChoice(catalogue, 'custom-abc'), null);
+  assert.equal(cardChoice(catalogue, 'science'), null); // a feeds.json card no topic borrows
+});
+
+test('settings keep the setup bar open for a new reader only while asked to', () => {
+  assert.equal(validSettings({ v: 1, tabs: {}, welcome: true }).welcome, true);
+  assert.equal(validSettings({ v: 1, tabs: {}, welcome: 'yes' }).welcome, undefined);
 });

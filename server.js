@@ -4,7 +4,7 @@ import { watch } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { createBackdrop } from './lib/backdrop.js';
-import { createCache } from './lib/cache.js';
+import { MAX_CARD_ITEMS, createCache } from './lib/cache.js';
 import { catalogueProblems, catalogueSources, publicCatalogue } from './lib/catalogue.js';
 import { createCustomFeeds } from './lib/custom.js';
 import { createImageFinder } from './lib/images.js';
@@ -12,6 +12,8 @@ import { renderPage } from './lib/render.js';
 import { createSources } from './lib/sources.js';
 import { createThumbnailer } from './lib/thumbs.js';
 import { createWeather, unitForLocale } from './lib/weather.js';
+import { buildCards } from './public/stories.js';
+import { defaultProfile, profileCards, profileSourceIds, profileWidgets } from './public/topics.js';
 
 const PORT = Number(process.env.PORT ?? 3060);
 const ROOT = import.meta.dirname;
@@ -28,7 +30,8 @@ const sources = createSources(catalogueSources(catalogue), { refreshMinutes: con
   thumbs, images, shared: cache.source, sharedVersion: () => cache.snapshot().version,
 });
 sources.start();
-const catalogueBody = JSON.stringify(publicCatalogue(catalogue));
+const clientCatalogue = publicCatalogue(catalogue);
+const catalogueBody = JSON.stringify(clientCatalogue);
 const catalogueEtag = `"${createHash('sha256').update(catalogueBody).digest('hex').slice(0, 16)}"`;
 const weather = createWeather(config.weather);
 const weatherReady = weather.refresh();
@@ -37,6 +40,18 @@ setInterval(weather.refresh, (config.weather.refreshMinutes ?? 15) * 60_000).unr
 const backdrop = createBackdrop(config.backdrop);
 const backdropReady = backdrop.refresh();
 setInterval(backdrop.refresh, 60 * 60_000).unref();
+
+// The home page a reader sees before choosing anything: the UK's suggested topics and sources,
+// built just as page.js builds them (it draws other regions' suggestions in their place).
+const suggestedCards = profileCards(defaultProfile(clientCatalogue, 'uk'), clientCatalogue);
+const suggestedSources = profileSourceIds(suggestedCards);
+let suggested = null; // { etag, loaded } from the latest /api/sources answer for those feeds
+async function suggestedPage() {
+  const { body, etag } = await sources.get(suggestedSources);
+  if (suggested?.etag !== etag) suggested = { etag, loaded: JSON.parse(body).sources };
+  return suggested;
+}
+suggestedPage().catch((error) => console.warn(`Suggested page: ${error.message}`)); // fetch its feeds now
 
 // Static files are cached by browsers, so their URLs carry a content hash.
 const assetVersion = async (name) => createHash('sha256').update(await readFile(join(ROOT, 'public', name))).digest('hex').slice(0, 10);
@@ -185,8 +200,8 @@ const server = createServer(async (req, res) => {
     return send(res, 200, JSON.stringify({ lastRefresh: cache.lastRefresh }), 'application/json');
   }
 
-  // /settings and /settings/topics-and-sources are the home page with the Settings or setup
-  // screen open (settings-screen.js, setup.js).
+  // /settings and /settings/topics-and-sources are the home page with Settings or the setup
+  // bar open (settings-screen.js, setup-bar.js).
   const tabId = ['/', '/settings', '/settings/topics-and-sources'].includes(pathname) ? 'home' : pathname.slice(1);
   const tab = config.tabs.find((t) => t.id === tabId);
   if (!tab) return send(res, 404, 'Not found', 'text/plain');
@@ -195,19 +210,27 @@ const server = createServer(async (req, res) => {
   // The weather and photo load separately, so wait for those too (instant once loaded).
   await Promise.all([cache.ready || cache.pending, weatherReady, backdropReady]);
   const { version } = feedsData();
+  const home = tab.id === 'home' ? await suggestedPage() : null;
   // The page shows the date and links hashed assets, so those are part of its ETag too.
   const today = new Date().toLocaleDateString('en-GB', { timeZone: 'Europe/London' });
   // Temperatures in the unit of the browser's language, as the browser itself would choose
   // (forecast.js); one saved in Settings is put right in the browser.
   const unit = unitForLocale(req.headers['accept-language']?.split(/[,;]/)[0].trim());
   res.setHeader('Vary', 'Accept-Language');
-  const etag = `"${createHash('sha256').update(JSON.stringify([tab.id, version, today, versions, unit])).digest('hex').slice(0, 16)}"`;
+  const etag = `"${createHash('sha256').update(JSON.stringify([tab.id, version, home?.etag, today, versions, unit])).digest('hex').slice(0, 16)}"`;
   if (notModified(req, res, etag, 'no-cache')) return;
-  const widgets = tab.widgets.map((id) => cache.widget(id));
+  let widgets;
+  if (home) {
+    const snapshot = cache.snapshot();
+    const all = { ...snapshot.widgets, ...profileWidgets(suggestedCards, home.loaded) };
+    widgets = buildCards(all, suggestedCards.map(({ id }) => ({ id })), snapshot.defaultLimit, MAX_CARD_ITEMS);
+  } else {
+    widgets = tab.widgets.map((id) => cache.widget(id));
+  }
   const html = renderPage({ tabs: config.tabs, activeTab: tab, versions, version, weather: weather.current, backdrop: backdrop.current, widgets, unit });
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
 });
 
 cache.start();
-server.listen(PORT, () => console.log(`start-page listening on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`tab1.net listening on http://localhost:${PORT}`));

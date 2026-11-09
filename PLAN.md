@@ -6,7 +6,7 @@ the existing sky Caddy + Cloudflare tunnel setup.
 ## 1. Architecture
 
 ```
-Browser ──► Cloudflare (start.skynolimit.dev)
+Browser ──► Cloudflare (tab1.net)
           ──► cloudflared tunnel on sky
           ──► Caddy :4080 on sky (host matcher)
           ──► Tailscale ──► mini :3060  (Node app, launchd)
@@ -83,7 +83,7 @@ Reuse the existing Top Scores API on sky (`127.0.0.1:3011`, served publicly at
 ## 4. Project layout
 
 ```
-start-page/
+tab1.net/
   server.js            # http server, routes
   lib/feeds.js         # fetch + parse (fast-xml-parser), normalise items
   lib/cache.js         # refresh scheduler, last-good fallback, disk snapshot
@@ -97,17 +97,17 @@ Dependencies: `fast-xml-parser` (and maybe nothing else).
 
 ## 5. Deployment (server-tooling)
 
-1. `deploy/config/node_projects.json`: add a `start-page` entry with port **3060**
-   (free), `node_binary: /opt/homebrew/bin/node`, `service_label: com.start-page.web`,
+1. `deploy/config/node_projects.json`: add a `tab1.net` entry with port **3060**
+   (free), `node_binary: /opt/homebrew/bin/node`, `service_label: com.tab1.net.web`,
    `healthcheck_path: /healthcheck`, and `public_url`.
-2. `deploy/lib/project_default_hosts.zsh`: add `start-page mini`.
-3. `caddy/setup-caddy-cloudflare-tunnel.zsh`: add a host block for `start.skynolimit.dev`
+2. `deploy/lib/project_default_hosts.zsh`: add `tab1.net mini`.
+3. `caddy/setup-caddy-cloudflare-tunnel.zsh`: add a host block for `tab1.net`
    that proxies to mini:3060 over Tailscale.
 4. Add the Cloudflare tunnel ingress and DNS record for the hostname. The page is
    **public**, with no Cloudflare Access in front of it.
 5. Monitoring: register the healthcheck as described in `monitoring/ALERTING.md`
    (sky watches mini apps).
-6. Deploy with `node_project.zsh start-page`.
+6. Deploy with `node_project.zsh tab1.net`.
 
 ## 6. Phases
 
@@ -123,7 +123,7 @@ Dependencies: `fast-xml-parser` (and maybe nothing else).
 - Customisation: edit `config/feeds.json` and redeploy.
 - Extras: weather and search.
 
-- Hostname: `start.skynolimit.dev`.
+- Hostname: `tab1.net`.
 - Weather: Beckenham (lat 51.408, lon -0.025), Open-Meteo, Europe/London.
 - Search: Google (`https://www.google.com/search?q=`).
 - Top Scores is reached over Tailscale (`sky:3011`), not the public URL.

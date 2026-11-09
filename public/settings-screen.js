@@ -3,23 +3,23 @@
 // whether cards are fitted to the screen or stay in the columns they were put in, show
 // temperatures in °C or °F (or whichever is usual where you are), add your
 // own RSS or Atom feeds, and export or import the settings as a file. Changes apply straight
-// away and are saved in this browser (see settings.js); no account needed. "Edit topics and
-// sources" reopens the setup screen (setup.js). Every change can be undone, or rewound in
-// History (undo.js), except "Start over", which clears everything and goes back to the setup
-// screen (start-over.js).
+// away and are saved in this browser (see settings.js); no account needed. It's the
+// "Advanced settings" of the setup bar (setup-bar.js), which opens it with a `settings:open`
+// event; "Edit topics and sources" goes back to the bar. Every change can be undone, or
+// rewound in History (undo.js), except "Start over", which clears everything and goes back to
+// the suggested page (start-over.js).
 // While it's open the address is /settings, so it can be bookmarked or shared, and a page
 // loaded at /settings opens it straight away. Done, Escape or Back closes it.
 
 import { escapeHtml } from './cards.js';
 import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setDensity, setFill, setSolid, setTabCards, setTemperature, tabCards, widgetFor } from './page.js';
 import { unitForLocale } from './forecast.js';
-import { openSetup } from './setup.js';
 import { openHistory } from './undo.js';
 import { askStartOver } from './start-over.js';
 import { DENSITIES, MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, moveCard, stepCard, validSettings } from './settings.js';
 
 const PATH = '/settings';
-const opener = document.querySelector('.settings-open');
+const opener = document.querySelector('.customise-open'); // focus goes back there on closing
 let dialog = null;
 let cards = []; // this tab's cards in the screen's order, hidden ones included
 let pushed = false; // opening added /settings to the history, so closing goes back over it
@@ -37,7 +37,7 @@ function build() {
   dialog.innerHTML = `
     <div class="settings-content">
       <header class="settings-head">
-        <h1 id="settings-title">Settings</h1>
+        <h1 id="settings-title">Advanced settings</h1>
         <p class="settings-saved">Changes are saved automatically in this browser.</p>
         <p class="settings-status" role="status"></p>
         <button type="button" data-action="close" class="primary">Done<kbd aria-hidden="true">Esc</kbd></button>
@@ -208,7 +208,8 @@ async function onClick(event) {
       break;
     }
     case 'setup':
-      openSetup(); // on top of Settings, which it comes back to
+      dialog.close();
+      document.dispatchEvent(new CustomEvent('setup:open'));
       break;
     case 'history':
       openHistory();
@@ -345,10 +346,10 @@ function exportSettings() {
   const blob = new Blob([`${JSON.stringify(currentSettings(), null, 2)}\n`], { type: 'application/json' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'start-page-settings.json';
+  link.download = 'tab1.net-settings.json';
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-  status('Exported to start-page-settings.json.');
+  status('Exported to tab1.net-settings.json.');
 }
 
 async function onImport(event) {
@@ -374,7 +375,7 @@ const isSettingsPath = () => location.pathname === PATH;
 async function open() {
   if (dialog?.open) return;
   if (!currentFeeds() && !(await fetchFeeds())) return;
-  if (currentSettings()?.profile) await fetchCatalogue(); // so the profile's cards are listed
+  await fetchCatalogue(); // so the cards made from topics are listed
   if (!dialog) build();
   cards = tabCards();
   status('');
@@ -404,15 +405,6 @@ document.addEventListener('history:change', ({ detail: { type } }) => {
   renderList();
 });
 
-// Back from the setup screen: show the cards it made.
-document.addEventListener('setup:close', ({ detail: { saved } }) => {
-  if (!dialog?.open) return;
-  cards = tabCards();
-  renderList();
-  status(saved ? 'Topics and sources saved.' : '');
-  dialog.querySelector('[data-action="setup"]').focus();
-});
-
 // Back and Forward, or /settings reached without reloading.
 addEventListener('popstate', () => {
   if (isSettingsPath()) open();
@@ -422,9 +414,7 @@ addEventListener('popstate', () => {
   }
 });
 
-if (opener) {
-  opener.hidden = false;
-  opener.addEventListener('click', open);
-}
+// "Advanced settings" in the setup bar.
+document.addEventListener('settings:open', open);
 
 if (isSettingsPath()) open();

@@ -15,9 +15,9 @@ const tiny = () => ({
     d: { name: 'D', region: 'us', sections: { top: 'https://d.example/top', politics: 'https://d.example/politics' } },
   },
   topics: {
-    politics: { label: 'Politics', section: 'politics' },
-    chess: { label: 'Chess', sources: [{ name: 'Chess', url: 'https://chess.example/feed' }] },
-    hn: { label: 'Hacker News', widget: 'hacker-news' },
+    politics: { label: 'Politics', pillar: 'news', section: 'politics' },
+    chess: { label: 'Chess', pillar: 'more', sources: [{ name: 'Chess', url: 'https://chess.example/feed' }] },
+    hn: { label: 'Hacker News', pillar: 'tech', widget: 'hacker-news' },
   },
   defaults: { uk: { outlets: ['a'], topics: ['politics'] }, us: { outlets: ['c'], topics: ['politics', 'chess'] } },
 });

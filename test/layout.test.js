@@ -86,14 +86,26 @@ test('storySpread shares a column\'s spare room between its stories, within a li
   assert.equal(storySpread(800, 100, 0), 0);
 });
 
-test('overflows: the page scrolls only when a column can\'t fit, even with its cards squeezed', async () => {
+test('fitCount keeps most of a card\'s stories, and at least a few', async () => {
+  const { fitCount } = await import('../public/layout.js');
+  assert.equal(fitCount(8), 4); // half of 8
+  assert.equal(fitCount(9), 5); // rounded up
+  assert.equal(fitCount(4), 3); // the floor
+  assert.equal(fitCount(2), 2); // never more than it has
+  assert.equal(fitCount(0), 0);
+});
+
+test('overflows: the page scrolls once a column can\'t fit with its cards still useful', async () => {
   const { overflows } = await import('../public/layout.js');
-  // Each card: 30 + 40 a story. Squeezed to two stories, a card is 110 tall.
-  const cards = [card(6, 15), card(6, 15), card(6, 15), card(6, 15)];
-  // Filling: two cards squeezed need 220.
-  assert.equal(overflows([[0, 1], [2, 3]], cards, 220, true), false);
-  assert.equal(overflows([[0, 1], [2, 3]], cards, 219, true), true);
-  // Not filling: every card but the last keeps its own six stories (270), the last needs 110.
-  assert.equal(overflows([[0, 1]], cards, 380, false), false);
-  assert.equal(overflows([[0, 1]], cards, 379, false), true);
+  // Each card: 30 + 40 a story. Squeezed to four of its eight stories, a card is 190 tall.
+  const cards = [card(8, 15), card(8, 15), card(8, 15), card(8, 15)];
+  // Filling: two cards squeezed need 380.
+  assert.equal(overflows([[0, 1], [2, 3]], cards, 380, true), false);
+  assert.equal(overflows([[0, 1], [2, 3]], cards, 379, true), true);
+  // Not filling: every card but the last keeps its own eight stories (350), the last needs 190.
+  assert.equal(overflows([[0, 1]], cards, 540, false), false);
+  assert.equal(overflows([[0, 1]], cards, 539, false), true);
+  // A margin keeps that much spare: a scrolling page needs room to go back to fitting.
+  assert.equal(overflows([[0, 1], [2, 3]], cards, 400, true, 40), true);
+  assert.equal(overflows([[0, 1], [2, 3]], cards, 420, true, 40), false);
 });

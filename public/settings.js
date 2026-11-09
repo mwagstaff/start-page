@@ -5,8 +5,10 @@
 // custom lists the feeds the reader added, { id: 'custom-…', url, title }. Without
 // `arrange`, cards are packed into columns to fit the screen; with 'manual', each card stays
 // in the column it was put in (`col`, counted from the left) and page order runs down each
-// column in turn. `profile` holds the choices made on the setup screen (see topics.js), and
-// `onboarded` records that the reader has seen it, so it isn't offered again. `fill: false`
+// column in turn. `profile` holds the choices made in the setup bar (see topics.js), and
+// `onboarded` records that the reader has finished with it. `welcome: true` keeps the setup
+// bar open on later visits for a new reader who has changed something but not pressed Done
+// (a reader with no settings at all gets it anyway). `fill: false`
 // turns off showing more or fewer stories in each card to fill the window (layout.js), and
 // `solid: true` makes the cards opaque instead of letting the background photo through.
 // `density` packs more onto the page: 'balanced' or 'compact' (see DENSITIES); without it
@@ -16,9 +18,6 @@
 import { validProfile } from './topics.js';
 
 export const SETTINGS_KEY = 'start-page:settings'; // the early script in lib/render.js reads it too
-// Set (for this tab only) by "Start over", so the setup screen opens on a blank page rather
-// than over the default cards; lib/render.js reads it too.
-export const STARTING_OVER_KEY = 'start-page:starting-over';
 export const MAX_CARD_ITEMS = 15; // keep in step with lib/cache.js
 export const MAX_CUSTOM_FEEDS = 20;
 export const MAX_COLUMNS = 12;
@@ -69,7 +68,7 @@ export function validSettings(value) {
     .filter((feed) => !ids.has(feed.id) && ids.add(feed.id))
     .slice(0, MAX_CUSTOM_FEEDS);
   const profile = validProfile(value.profile);
-  return { v: 1, tabs, custom, ...(profile && { profile }), ...((value.onboarded === true || profile) && { onboarded: true }), ...(value.fill === false && { fill: false }), ...(value.solid === true && { solid: true }), ...(DENSITIES.includes(value.density) && value.density !== DENSITIES[0] && { density: value.density }), ...(TEMPERATURE_UNITS.includes(value.temperature) && { temperature: value.temperature }) };
+  return { v: 1, tabs, custom, ...(profile && { profile }), ...((value.onboarded === true || profile) && { onboarded: true }), ...(value.welcome === true && { welcome: true }), ...(value.fill === false && { fill: false }), ...(value.solid === true && { solid: true }), ...(DENSITIES.includes(value.density) && value.density !== DENSITIES[0] && { density: value.density }), ...(TEMPERATURE_UNITS.includes(value.temperature) && { temperature: value.temperature }) };
 }
 
 // Every card for a tab, in page order: the reader's saved order first, then any of the
@@ -123,7 +122,7 @@ export function loadSettings() {
 
 export function saveSettings(settings) {
   try {
-    if (settings && (Object.keys(settings.tabs).length || settings.onboarded || settings.fill === false || settings.solid || settings.density || settings.temperature)) localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    if (settings && (Object.keys(settings.tabs).length || settings.onboarded || settings.welcome || settings.fill === false || settings.solid || settings.density || settings.temperature)) localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     else localStorage.removeItem(SETTINGS_KEY);
   } catch {
     // Storage blocked (private window, site data off): the change lasts until the page reloads.

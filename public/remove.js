@@ -1,7 +1,8 @@
 // The small × in each card's top-right corner takes the card off the page, after asking.
-// Nothing is deleted: the card stays in Settings to tick again, and the change can be
-// undone or rewound (undo.js). The buttons are in every card's markup (cards.js) but only
-// show once this script has run, since without it they'd do nothing.
+// Nothing is deleted: a card from the reader's topics is turned off in the setup bar, any
+// other stays in Settings to tick again, and the change can be undone or rewound (undo.js).
+// The buttons are in every card's markup (cards.js) but only show once this script has run,
+// since without it they'd do nothing.
 
 import { escapeHtml } from './cards.js';
 import { hideCard, widgetFor, currentFeeds, fetchFeeds } from './page.js';
@@ -54,7 +55,7 @@ function ask(card) {
       <ul class="remove-ways">
         <li><kbd>${key}</kbd><span><strong>Undo</strong> straight away, or press Undo in the message that appears.</span></li>
         <li><span class="remove-icon">${HISTORY_ICON}</span><span><strong>History</strong> in the top bar lists every change, so you can rewind to any point.</span></li>
-        <li><span class="remove-icon">${SETTINGS_ICON}</span><span><strong>Settings</strong> in the top bar: tick “${escapeHtml(title)}” to show it again.</span></li>
+        <li><span class="remove-icon">${SETTINGS_ICON}</span><span><strong>Customise</strong> in the top bar: turn “${escapeHtml(title)}” back on, or tick it in Advanced settings.</span></li>
       </ul>
     </div>
     <div class="customise-actions">

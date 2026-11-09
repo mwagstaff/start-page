@@ -1,6 +1,6 @@
 // "Start over" in Settings: after asking, forgets everything saved in this browser (the
 // layout, topics & sources, added feeds, page options and the history of changes) and
-// reloads the home page, where the setup screen opens as on a first visit. Unlike a
+// reloads the home page, which shows the suggested cards and the setup bar as on a first visit. Unlike a
 // removed card, this can't be undone, so the dialog says so and offers an export first.
 
 import { startOver } from './page.js';
@@ -16,7 +16,7 @@ function build() {
   dialog.innerHTML = `
     <h2 id="start-over-title">Start over?</h2>
     <div id="start-over-about">
-      <p class="remove-lead">This clears everything saved for your page in this browser and takes you back to the setup screen:</p>
+      <p class="remove-lead">This clears everything saved for your page in this browser and takes you back to the suggested page:</p>
       <ul class="start-over-list">
         <li>Your topics &amp; sources</li>
         <li>Cards you’ve moved, hidden or resized</li>
@@ -39,7 +39,7 @@ function build() {
     else if (action === 'cancel') dialog.close();
     else if (action === 'export') {
       exportFirst?.();
-      dialog.querySelector('.customise-status').textContent = 'Settings saved as start-page-settings.json.';
+      dialog.querySelector('.customise-status').textContent = 'Settings saved as tab1.net-settings.json.';
     }
   });
   dialog.addEventListener('pointerdown', (event) => { if (event.target === dialog) dialog.close(); });

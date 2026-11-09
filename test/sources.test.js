@@ -106,17 +106,17 @@ test('the public catalogue names feeds by id and leaves out their addresses', ()
   const shown = publicCatalogue({
     outlets: { ft: { name: 'FT', region: 'uk', paywall: 'hard', sections: { top: 'https://ft/top', world: 'https://ft/world' } } },
     topics: {
-      world: { label: 'World', section: 'world' },
-      nfl: { label: 'NFL', region: 'us', sources: [{ name: 'ESPN', url: 'https://espn/nfl' }] },
-      ai: { label: 'AI', widget: 'ai' },
+      world: { label: 'World', pillar: 'news', section: 'world' },
+      nfl: { label: 'NFL', pillar: 'sport', region: 'us', sources: [{ name: 'ESPN', url: 'https://espn/nfl' }] },
+      ai: { label: 'AI', pillar: 'tech', widget: 'ai' },
     },
     defaults: { uk: { outlets: ['ft'], topics: ['world'] } },
   });
   assert.deepEqual(shown.outlets, { ft: { name: 'FT', region: 'uk', paywall: 'hard', sections: ['top', 'world'] } });
   assert.deepEqual(shown.topics, {
-    world: { label: 'World', section: 'world' },
-    nfl: { label: 'NFL', region: 'us', sources: [{ id: 'nfl.1', name: 'ESPN' }] },
-    ai: { label: 'AI', widget: 'ai' },
+    world: { label: 'World', pillar: 'news', section: 'world' },
+    nfl: { label: 'NFL', pillar: 'sport', region: 'us', sources: [{ id: 'nfl.1', name: 'ESPN' }] },
+    ai: { label: 'AI', pillar: 'tech', widget: 'ai' },
   });
   assert.ok(!JSON.stringify(shown).includes('https://'));
 });
