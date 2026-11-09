@@ -1,4 +1,4 @@
-// Keeps an open page current, and runs the masthead's refresh button.
+// Keeps an open page current, and fetches every feed afresh when the page is reloaded.
 // The server refetches feeds every few minutes; this page re-requests /api/feeds.json (a
 // 304 when nothing changed) and, when it has changed, redraws the cards in place — but
 // only while visible and not in the middle of use.
@@ -30,26 +30,21 @@ setInterval(check, CHECK_EVERY_MS);
 // Coming back to the tab is a natural moment to catch up, even if the pointer moved.
 document.addEventListener('visibilitychange', () => check({ evenIfBusy: !document.querySelector('.search input')?.value.trim() }));
 
-const button = document.querySelector('.refresh');
-button?.addEventListener('click', async () => {
-  button.disabled = true;
-  button.classList.add('is-spinning');
+// Reloading the page in the browser asks the server to fetch every feed now (at most once a
+// minute; a 429 means someone just did), then swaps in anything new. The page itself shows
+// the server's latest straight away, so this only adds what the refetch brings.
+async function refreshNow() {
   try {
-    // 429 means someone refreshed in the last minute: the latest content is already there.
     await fetch('/api/refresh', { method: 'POST' });
   } catch {
-    // Fall through: the server still has whatever it last fetched.
+    return; // the server still has whatever it last fetched
   }
   const data = await fetchFeeds({ fresh: true });
-  if (data) {
-    show(data);
-    await Promise.all([refreshCustomFeeds(), refreshProfileFeeds()]);
-  } else {
-    location.reload();
-  }
-  button.disabled = false;
-  button.classList.remove('is-spinning');
-});
+  if (data && data.version !== currentVersion()) show(data);
+  await Promise.all([refreshCustomFeeds(), refreshProfileFeeds()]);
+}
+
+if (performance.getEntriesByType('navigation')[0]?.type === 'reload') refreshNow();
 
 // Results open in a new tab, so empty the box afterwards: this page is ready for the next
 // search, and the half-typed check above doesn't hold back updates.

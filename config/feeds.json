@@ -96,7 +96,8 @@
         },
         {
           "name": "The Verge",
-          "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+          "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+          "paywall": "metered"
         }
       ],
       "thumbnails": true
@@ -112,7 +113,8 @@
         },
         {
           "name": "The Verge",
-          "url": "https://www.theverge.com/rss/index.xml"
+          "url": "https://www.theverge.com/rss/index.xml",
+          "paywall": "metered"
         },
         {
           "name": "The Register",
@@ -140,7 +142,8 @@
         },
         {
           "name": "New Scientist",
-          "url": "https://www.newscientist.com/feed/home/"
+          "url": "https://www.newscientist.com/feed/home/",
+          "paywall": "metered"
         },
         {
           "name": "Quanta",

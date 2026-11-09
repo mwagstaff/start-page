@@ -65,9 +65,9 @@ npm test
 - Open pages re-request the snapshot every minute while visible, and when you switch back to
   the tab (usually a 304). If it has changed, they redraw the cards in place, but only after
   30 seconds without scrolling, typing or moving the pointer, and not while a search is
-  half-typed or Settings is open. A new daily photo reloads the page. The ↻ button
-  in the masthead fetches every feed and the weather straight away (`POST /api/refresh`, at
-  most once a minute), then redraws.
+  half-typed or Settings is open. A new daily photo reloads the page. Reloading the page in the
+  browser fetches every feed and the weather straight away (`POST /api/refresh`, at most once
+  a minute), then redraws.
 - The sliders button in the masthead opens Settings, a full-window page at `/settings`
   (`public/settings-screen.js`; the address can be bookmarked or shared, and Back closes it): show or hide cards (including any card
   in `config.widgets` that isn't on the tab), change their order (arrows, or drag a row by its

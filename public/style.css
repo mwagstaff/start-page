@@ -241,24 +241,26 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: center;
+  color: inherit;
   font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  line-height: 1;
+  text-decoration: none;
 }
 
-.brand::before {
-  content: "";
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  margin-right: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-}
+.brand-mark { display: block; width: 25px; height: 24px; }
+
+/* ".net" sits back a little, as in the logo artwork. */
+.brand-name span { font-weight: 500; opacity: 0.72; }
 
 .date { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--masthead-muted); font-size: 13px; white-space: nowrap; }
 /* When space is short the date gives way, so the buttons never slide under the search box. */
-.brand, .title .refresh, .title .icon-button { flex: none; }
+.brand { flex: none; }
 
 /* Compact search box between the title and the weather; it takes the spare width. */
 .search { flex: 1 1 200px; max-width: 420px; min-width: 0; }
@@ -278,37 +280,6 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
 .search input::placeholder { color: var(--masthead-muted); }
 .search input:focus { outline: none; border-color: var(--accent); background: rgb(255 255 255 / 0.16); }
 
-.refresh,
-.icon-button {
-  display: grid;
-  place-items: center;
-  align-self: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  color: var(--masthead-muted);
-  background: transparent;
-  cursor: pointer;
-}
-
-.refresh:hover,
-.icon-button:hover { color: var(--masthead-text); background: rgb(255 255 255 / 0.1); }
-.icon-button[hidden] { display: none; }
-.refresh:disabled { cursor: progress; }
-.refresh svg,
-.icon-button svg { display: block; }
-
-/* The title row puts these two buttons close together. */
-.title .icon-button { margin-left: -10px; }
-.refresh.is-spinning svg { animation: spin 0.9s linear infinite; }
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-@media (prefers-reduced-motion: reduce) {
-  .refresh.is-spinning svg { animation-duration: 3s; }
-}
 
 .weather {
   display: flex;
@@ -1452,7 +1423,7 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
    static filter, so it costs nothing as the page scrolls). Settings also steps away while the
    setup screen is open over it. */
 html:has(:is(.settings-screen, .setup-screen)[open]) { overflow: hidden; }
-html:has(:is(.settings-screen, .setup-screen)[open]) body > :is(.masthead, main, .tabs, .peek) { visibility: hidden; }
+html:has(:is(.settings-screen, .setup-screen)[open]) body > :is(.masthead, main, .tabs, .peek, .setup-bar-wrap) { visibility: hidden; }
 html:has(:is(.settings-screen, .setup-screen)[open]) .backdrop { filter: blur(36px) saturate(1.2); transform: scale(1.1); }
 html:has(.setup-screen[open]) .settings-screen[open] { visibility: hidden; }
 /* Opened over the weather screen, they set that aside too, and bring the photo back to blur. */
@@ -1973,7 +1944,6 @@ kbd {
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
 /* The History dialog (undo.js) */
-.history-open.has-history { color: var(--masthead-text); }
 .history-dialog .customise-head p { line-height: 1.5; }
 
 .history-list {
@@ -2198,6 +2168,22 @@ body:has(.grid.packed) > .setup-bar-wrap { flex: none; }
 .sb-divider { flex: none; width: 1px; height: 20px; margin: 0 2px; background: var(--sb-line); }
 
 .sb-actions { display: flex; flex: none; align-items: center; gap: 4px; margin-left: auto; }
+
+.sb-history {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  background: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sb-history svg { display: block; flex: none; }
+.sb-history:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sb-history:hover { color: var(--text); background: var(--sb-field-hover); }
 
 .sb-advanced {
   padding: 8px 11px;
@@ -2455,6 +2441,8 @@ body:has(.grid.packed) > .setup-bar-wrap { flex: none; }
 @media (max-width: 1000px) {
   .sb-intro-text { display: none; }
   .sb-advanced { display: none; }
+  .sb-history span { display: none; }
+  .sb-history { padding: 8px; }
 }
 
 /* Phones: the pillars scroll sideways under the title, and a drawer is a sheet from the bottom. */

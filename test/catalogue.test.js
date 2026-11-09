@@ -60,8 +60,9 @@ test('catches topics that are ambiguous, empty or point nowhere', () => {
   c.topics.empty = { label: 'Empty', sources: [] };
   c.topics.missing = { label: 'Missing', widget: 'nope' };
   c.topics.unknown = { label: 'Unknown', section: 'gardening' };
+  c.topics.walled = { label: 'Walled', pillar: 'more', sources: [{ name: 'W', url: 'https://w.example/feed', paywall: 'always' }] };
   const problems = catalogueProblems(c, { 'hacker-news': {} });
-  for (const fragment of ['Topic both needs exactly one', 'Topic empty has no sources', 'borrows card "nope"', 'unknown section "gardening"']) {
+  for (const fragment of ['Topic both needs exactly one', 'Topic empty has no sources', 'borrows card "nope"', 'unknown section "gardening"', 'Topic walled source 1 has paywall "always"']) {
     assert.ok(problems.some((p) => p.includes(fragment)), `expected a problem mentioning ${fragment}: ${problems.join(' | ')}`);
   }
 });

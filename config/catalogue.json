@@ -397,7 +397,8 @@
         },
         {
           "name": "Autosport",
-          "url": "https://www.autosport.com/rss/f1/news/"
+          "url": "https://www.autosport.com/rss/f1/news/",
+          "paywall": "metered"
         }
       ]
     },
@@ -546,7 +547,8 @@
         },
         {
           "name": "NYT Cooking",
-          "url": "https://rss.nytimes.com/services/xml/rss/nyt/DiningandWine.xml"
+          "url": "https://rss.nytimes.com/services/xml/rss/nyt/DiningandWine.xml",
+          "paywall": "hard"
         }
       ]
     },
@@ -560,7 +562,8 @@
         },
         {
           "name": "NYT Travel",
-          "url": "https://rss.nytimes.com/services/xml/rss/nyt/Travel.xml"
+          "url": "https://rss.nytimes.com/services/xml/rss/nyt/Travel.xml",
+          "paywall": "metered"
         }
       ]
     },

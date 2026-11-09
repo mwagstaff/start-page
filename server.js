@@ -94,7 +94,7 @@ function notModified(req, res, etag, cacheControl) {
   return true;
 }
 
-const STATIC_TYPES = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
+const STATIC_TYPES = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 function send(res, status, body, type) {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-cache' });

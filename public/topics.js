@@ -1,10 +1,11 @@
 // Turns a reader's choices from the setup screen (their "profile") into cards, using the
 // catalogue from /api/catalogue.json. Shared by the browser and the tests. A profile is
-//   { outlets: [...], topics: [...], style: 'topics' | 'outlets', pictures, weather, backdrop }
+//   { outlets: [...], topics: [...], style: 'topics' | 'outlets', pictures, weather, backdrop, paywalls }
 // With style 'topics' each section topic is one card mixing the chosen outlets' feeds for
 // that section; with 'outlets' each outlet is one card mixing its feeds for the chosen
 // sections (its top stories if none). Topics with their own sources are always their own
-// card, and topics that borrow a card from feeds.json show that card.
+// card, and topics that borrow a card from feeds.json show that card. With `paywalls: false`
+// the reader leaves out sites that ask for a subscription (those with a `paywall` flag).
 
 export const STYLES = ['topics', 'outlets'];
 const MAX_IDS = 60;
@@ -20,6 +21,7 @@ export function validProfile(value) {
     pictures: value.pictures !== false,
     weather: value.weather !== false,
     backdrop: value.backdrop !== false,
+    paywalls: value.paywalls !== false,
   };
 }
 
@@ -40,7 +42,7 @@ export const regionTopics = (catalogue, region) => Object.keys(catalogue.topics)
 export function defaultProfile(catalogue, region) {
   const regions = region === 'both' ? catalogue.regions : [region];
   const pick = (key) => [...new Set(regions.flatMap((r) => catalogue.defaults[r]?.[key] ?? []))];
-  return { outlets: pick('outlets'), topics: pick('topics'), style: 'topics', pictures: true, weather: true, backdrop: true };
+  return { outlets: pick('outlets'), topics: pick('topics'), style: 'topics', pictures: true, weather: true, backdrop: true, paywalls: true };
 }
 
 // The setup bar's groups of topics, in the order it shows them. Each catalogue topic names
@@ -102,7 +104,8 @@ export function cardChoice(catalogue, cardId) {
 // The cards a profile makes, in order: { id, title, sources: [{ id, name }], limit,
 // maxPerSource } for cards built from catalogue feeds, or { id } for a feeds.json card.
 export function profileCards(profile, catalogue) {
-  const outlets = profile.outlets.filter((id) => catalogue.outlets[id]);
+  const free = (source) => profile.paywalls !== false || !source?.paywall;
+  const outlets = profile.outlets.filter((id) => catalogue.outlets[id] && free(catalogue.outlets[id]));
   const topics = profile.topics.filter((id) => catalogue.topics[id]);
   const sectionTopics = topics.filter((id) => catalogue.topics[id].section);
   const merged = (id, title, sources) => ({
@@ -126,7 +129,8 @@ export function profileCards(profile, catalogue) {
     if (topic.widget) {
       cards.push({ id: topic.widget });
     } else if (topic.sources) {
-      cards.push(merged(`topic-${id}`, topic.label, topic.sources));
+      const sources = topic.sources.filter(free).map(({ id: source, name }) => ({ id: source, name }));
+      if (sources.length) cards.push(merged(`topic-${id}`, topic.label, sources));
     } else if (profile.style !== 'outlets') {
       const sources = outlets.filter((outlet) => catalogue.outlets[outlet].sections.includes(topic.section))
         .map((outlet) => ({ id: `${outlet}.${topic.section}`, name: catalogue.outlets[outlet].name }));
@@ -134,6 +138,11 @@ export function profileCards(profile, catalogue) {
     }
   }
   return cards;
+}
+
+// A feeds.json card without the sources a reader who leaves out paywalled sites doesn't want.
+export function withoutPaywalls(widget) {
+  return widget.sources.some((source) => source.paywall) ? { ...widget, sources: widget.sources.filter((source) => !source.paywall) } : widget;
 }
 
 // Every catalogue feed a profile's cards need, sorted (the order /api/sources wants).

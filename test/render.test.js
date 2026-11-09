@@ -44,11 +44,11 @@ test('shows an empty state when every source failed', () => {
   assert.match(html, /Couldn't load this feed/);
 });
 
-test('the page carries its version, refresh and Customise buttons, the setup bar\'s place, and an import map', () => {
+test('the page carries its version, Customise button, the setup bar\'s place, and an import map', () => {
   const widgets = [{ id: 'hn', title: 'HN', link: null, thumbnails: false, merged: false, failedSources: [], items: [] }];
   const html = renderPage({ tabs: [{ id: 'home', label: 'Home', widgets: ['hn'] }], activeTab: { id: 'home' }, widgets, version: 'abc123', versions: { 'page.js': 'h1', 'cards.js': 'h2' } });
   assert.match(html, /data-tab="home" data-version="abc123"/);
-  assert.match(html, /<button class="refresh" type="button"/);
+  assert.doesNotMatch(html, /class="refresh"|class="history-open/);
   assert.match(html, /<button class="customise-open" type="button"[^>]* aria-controls="setup-bar" hidden>.*<span>Customise<\/span><\/button>/);
   assert.match(html, /<div class="setup-bar-wrap wrap" id="setup-bar" hidden><\/div>\s*<main class="wrap grid">/);
   assert.match(html, /<form class="search" action="https:\/\/www\.google\.com\/search" method="get" target="_blank" rel="noopener" role="search">\s*<input type="search" name="q"/);

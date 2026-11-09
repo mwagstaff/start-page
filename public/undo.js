@@ -12,7 +12,6 @@ const UNDO_KEY = isMac ? '⌘Z' : 'Ctrl+Z';
 const REDO_KEY = isMac ? '⇧⌘Z' : 'Ctrl+Y';
 const TOAST_MS = 7000;
 
-const opener = document.querySelector('.history-open');
 let toast = null;
 let toastTimer;
 let dialog = null;
@@ -56,7 +55,6 @@ function hideToast() {
 function onHistoryChange({ detail: { type, label } }) {
   const history = currentHistory();
   if (dialog?.open) renderHistory();
-  updateOpener();
   if (type === 'clear') return;
   const text = escapeHtml(label);
   const undoButton = ['undo', 'Undo', UNDO_KEY];
@@ -66,12 +64,6 @@ function onHistoryChange({ detail: { type, label } }) {
   else if (type === 'undo') showToast(`Undid <em>${text}</em>`, [...(canUndo(history) ? [undoButton] : []), redoButton, historyButton]);
   else if (type === 'redo') showToast(`Redid <em>${text}</em>`, [undoButton, ...(canRedo(history) ? [redoButton] : []), historyButton]);
   else showToast(`Went back to <em>${text}</em>`, [...(canUndo(history) ? [undoButton] : []), ...(canRedo(history) ? [redoButton] : []), historyButton]);
-}
-
-function updateOpener() {
-  if (!opener) return;
-  const count = currentHistory()?.entries.length ?? 0;
-  opener.classList.toggle('has-history', count > 1);
 }
 
 // ⌘Z / Ctrl+Z, except in a box with text to undo in, which keeps the browser's own undo.
@@ -173,8 +165,5 @@ export function openHistory() {
 
 document.addEventListener('history:change', onHistoryChange);
 document.addEventListener('keydown', onKey);
-if (opener) {
-  opener.hidden = false;
-  opener.addEventListener('click', openHistory);
-  updateOpener();
-}
+// The setup bar's History button.
+document.addEventListener('history:open', openHistory);

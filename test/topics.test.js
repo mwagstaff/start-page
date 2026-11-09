@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { publicCatalogue } from '../lib/catalogue.js';
 import { validSettings } from '../public/settings.js';
-import { PILLARS, cardChoice, defaultProfile, guessRegion, layoutForProfile, pillarTopics, profileCards, profileRegion, profileSourceIds, profileWidgets, topicCardId, validProfile, withOutlet, withRegion, withTopic } from '../public/topics.js';
+import { PILLARS, cardChoice, defaultProfile, guessRegion, layoutForProfile, pillarTopics, profileCards, profileRegion, profileSourceIds, profileWidgets, topicCardId, validProfile, withOutlet, withRegion, withTopic, withoutPaywalls } from '../public/topics.js';
 
 const catalogue = publicCatalogue(JSON.parse(await readFile(new URL('../config/catalogue.json', import.meta.url), 'utf8')));
-const profile = (overrides) => ({ outlets: ['bbc', 'guardian'], topics: ['politics', 'football', 'ai'], style: 'topics', pictures: true, weather: true, backdrop: true, ...overrides });
+const profile = (overrides) => ({ outlets: ['bbc', 'guardian'], topics: ['politics', 'football', 'ai'], style: 'topics', pictures: true, weather: true, backdrop: true, paywalls: true, ...overrides });
 
 test('guesses the region from the time zone', () => {
   assert.equal(guessRegion('Europe/London'), 'uk');
@@ -87,7 +87,7 @@ test('rebuilding keeps places and settings, hides what is no longer wanted and l
 test('profiles keep only sensible values', () => {
   assert.equal(validProfile(null), null);
   assert.deepEqual(validProfile({ outlets: ['bbc', 'bbc', 7, 'Bad Id'], topics: 'ai', style: 'columns', pictures: false }), {
-    outlets: ['bbc'], topics: [], style: 'topics', pictures: false, weather: true, backdrop: true,
+    outlets: ['bbc'], topics: [], style: 'topics', pictures: false, weather: true, backdrop: true, paywalls: true,
   });
 });
 
@@ -147,4 +147,25 @@ test('a card leads back to the topic or source that made it', () => {
 test('settings keep the setup bar open for a new reader only while asked to', () => {
   assert.equal(validSettings({ v: 1, tabs: {}, welcome: true }).welcome, true);
   assert.equal(validSettings({ v: 1, tabs: {}, welcome: 'yes' }).welcome, undefined);
+});
+
+test('leaving out paywalled sites drops their outlets and topic sources, and cards left with none', () => {
+  const cards = (overrides) => profileCards(profile({ outlets: ['bbc', 'ft', 'economist'], topics: ['world', 'food', 'f1'], ...overrides }), catalogue);
+  const sourceIds = (list) => profileSourceIds(list);
+  assert.ok(sourceIds(cards()).includes('ft.world'));
+  assert.ok(sourceIds(cards()).includes('food.2'));
+  const free = cards({ paywalls: false });
+  assert.deepEqual(free.find((card) => card.id === 'topic-world').sources, [{ id: 'bbc.world', name: 'BBC News' }]);
+  assert.deepEqual(free.find((card) => card.id === 'topic-food').sources.map((source) => source.name), ['Guardian Food']);
+  assert.deepEqual(free.find((card) => card.id === 'topic-f1').sources.map((source) => source.name), ['BBC Sport']);
+  assert.ok(!sourceIds(free).some((id) => /^(ft|economist)\./.test(id)));
+  assert.deepEqual(profileCards(profile({ outlets: ['ft', 'economist'], topics: ['world'], style: 'outlets', paywalls: false }), catalogue), []);
+  assert.equal(validProfile({ paywalls: false }).paywalls, false);
+});
+
+test('a server card loses its paywalled sources only when it has some', () => {
+  const tech = { title: 'Tech', sources: [{ name: 'Ars Technica', items: [] }, { name: 'The Verge', paywall: 'metered', items: [] }] };
+  assert.deepEqual(withoutPaywalls(tech).sources.map((source) => source.name), ['Ars Technica']);
+  const free = { title: 'Space', sources: [{ name: 'NASA', items: [] }] };
+  assert.equal(withoutPaywalls(free), free);
 });

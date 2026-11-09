@@ -10,7 +10,7 @@ import { renderWidget } from './cards.js';
 import { setTemperatureUnit, showWeather, shownWeather, temperatureUnit, unitForLocale } from './forecast.js';
 import { canRedo, canUndo, describeChange, loadHistory, moveTo, recordChange, saveHistory } from './history.js';
 import { DENSITIES, MAX_CARD_ITEMS, cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
-import { cardChoice, defaultProfile, guessRegion, layoutForProfile, profileCards, profileSourceIds, profileWidgets, withOutlet, withTopic } from './topics.js';
+import { cardChoice, defaultProfile, guessRegion, layoutForProfile, profileCards, profileSourceIds, profileWidgets, withOutlet, withTopic, withoutPaywalls } from './topics.js';
 
 const grid = document.querySelector('.grid');
 const { tab } = document.body.dataset;
@@ -64,7 +64,7 @@ const currentProfileCards = () => {
 // The setup bar opens by itself for a new reader until they press Done.
 export const welcoming = () => !settings || settings.welcome === true;
 
-// `fresh` skips any cached copy, straight after the refresh button made the server refetch.
+// `fresh` skips any cached copy, straight after a reload made the server refetch.
 export async function fetchFeeds({ fresh = false } = {}) {
   try {
     const response = await fetch(`/api/feeds.json${fresh ? `?fresh=${Date.now()}` : ''}`, { cache: 'no-cache' });
@@ -103,6 +103,11 @@ function allWidgets() {
       custom: true,
       sources: [{ name: feed.title, error: loaded?.error ?? null, items: loaded?.items ?? [] }],
     };
+  }
+  // Paywalled sites left out in the setup bar: drop them from the server's cards too (cards
+  // made from topics never ask for them; see profileCards).
+  if (settings?.profile?.paywalls === false) {
+    for (const id of Object.keys(feeds.widgets)) widgets[id] = withoutPaywalls(widgets[id]);
   }
   // "Headlines only" in the setup bar: no pictures on any card.
   if (settings?.profile?.pictures === false) {

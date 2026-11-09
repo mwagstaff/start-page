@@ -5,7 +5,7 @@
 // then More and Display) with what's chosen in each; a pillar opens a drawer of choices
 // under the bar (a sheet from the bottom on phones). Every choice is saved and shown on the
 // page straight away (page.js), so it can be undone like any change (undo.js). Settings is
-// one step further in, as "Advanced settings".
+// one step further in, as "Advanced settings", next to History (undo.js).
 
 import { escapeHtml } from './cards.js';
 import { currentFeeds, currentProfile, currentSettings, fetchCatalogue, fetchFeeds, finishSetup, guessedRegion, setDensity, setProfile, welcoming } from './page.js';
@@ -38,6 +38,7 @@ const ICONS = {
   chevron: '<path d="m4.5 6.5 3.5 3.5 3.5-3.5"/>',
   spark: '<path d="M8 1.6c.45 3.2 1.9 5.25 6.4 6.4-4.5 1.15-5.95 3.2-6.4 6.4-.45-3.2-1.9-5.25-6.4-6.4 4.5-1.15 5.95-3.2 6.4-6.4z" fill="currentColor" stroke="none"/>',
   close: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  history: '<path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8"/><path d="M2.4 2.6v2.6H5"/><path d="M8 5.2V8l2 1.3"/>',
 };
 const icon = (name, size = 15) => `<svg viewBox="0 0 16 16" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
@@ -97,9 +98,10 @@ const TOPIC_BLURBS = {
 function topicSources(topic) {
   const t = catalogue.topics[topic];
   if (TOPIC_BLURBS[topic]) return TOPIC_BLURBS[topic];
-  if (t.widget) return list(currentFeeds()?.widgets[t.widget]?.sources.map((source) => source.name) ?? []);
-  if (t.sources) return list(t.sources.map((source) => source.name));
-  const outlets = choice.outlets.filter((id) => catalogue.outlets[id]?.sections.includes(t.section));
+  const free = (source) => choice.paywalls !== false || !source.paywall;
+  if (t.widget) return list(currentFeeds()?.widgets[t.widget]?.sources.filter(free).map((source) => source.name) ?? []);
+  if (t.sources) return list(t.sources.filter(free).map((source) => source.name));
+  const outlets = choice.outlets.filter((id) => catalogue.outlets[id]?.sections.includes(t.section) && (choice.paywalls !== false || !catalogue.outlets[id].paywall));
   return outlets.length ? `From ${list(outlets.map(outletName))}` : 'Choose a news source first';
 }
 
@@ -116,13 +118,14 @@ const ADVANCED = '<button type="button" class="sb-link" data-action="advanced">A
 function panel(id) {
   if (id === 'news') {
     const topics = pillarTopics(catalogue, region, 'news');
-    const outlets = regionOutlets(catalogue, region).map((outlet) => {
+    // Paywalled outlets aren't offered while the reader leaves paywalled sites out.
+    const outlets = regionOutlets(catalogue, region).filter((outlet) => choice.paywalls !== false || !catalogue.outlets[outlet].paywall).map((outlet) => {
       const { paywall } = catalogue.outlets[outlet];
       const tag = paywall ? ` <small class="paywall" title="${paywall === 'hard' ? 'Most stories need a subscription' : 'Some stories need a subscription'}">paywall</small>` : '';
       return chip('outlet', outlet, outletName(outlet), choice.outlets.includes(outlet), tag);
     }).join('');
     const newsTopics = choice.topics.filter((topic) => catalogue.topics[topic]?.section);
-    const warning = newsTopics.length && !choice.outlets.length ? '<p class="sb-hint sb-warning" role="status">Choose at least one source for your news topics.</p>' : '';
+    const warning = newsTopics.length && !choice.outlets.some((id) => choice.paywalls !== false || !catalogue.outlets[id]?.paywall) ? '<p class="sb-hint sb-warning" role="status">Choose at least one source for your news topics.</p>' : '';
     return `
       <div class="sb-field"><span class="sb-label" id="sb-news-topics">Topics</span><div class="chips" role="group" aria-labelledby="sb-news-topics">${topics.map((topic) => chip('topic', topic, label(topic), choice.topics.includes(topic))).join('')}</div></div>
       <div class="sb-field"><span class="sb-label" id="sb-news-from">From</span><div class="chips" role="group" aria-labelledby="sb-news-from">${outlets}</div></div>
@@ -144,6 +147,7 @@ function panel(id) {
       <div class="sb-field sb-field-inline">
         <label class="sb-switch"><input type="checkbox" name="weather"${choice.weather ? ' checked' : ''}><span></span>Weather in the top bar</label>
         <label class="sb-switch"><input type="checkbox" name="backdrop"${choice.backdrop ? ' checked' : ''}><span></span>A new background photo each day</label>
+        <label class="sb-switch" title="Sites such as The Verge, the FT and The New York Times, where some or most stories need a subscription"><input type="checkbox" name="paywalls"${choice.paywalls !== false ? ' checked' : ''}><span></span>Stories from paywalled sites</label>
       </div>
       <p class="sb-hint">Card order, stories per card, your own RSS feeds and import/export are in ${ADVANCED}.</p>`;
   }
@@ -183,6 +187,7 @@ function render() {
           ${pillarButton({ id: 'display', label: 'Display' }, true)}
         </div>
         <div class="sb-actions">
+          <button type="button" class="sb-history" data-action="history" title="Undo or rewind changes">${icon('history', 14)}<span>History</span></button>
           <button type="button" class="sb-advanced" data-action="advanced">Advanced settings</button>
           <button type="button" class="sb-done" data-action="done">Done</button>
         </div>
@@ -325,6 +330,8 @@ function onChange(event) {
     choose({ ...choice, weather: checked }, checked ? 'Showed the weather' : 'Hid the weather');
   } else if (name === 'backdrop') {
     choose({ ...choice, backdrop: checked }, checked ? 'Showed a background photo' : 'Hid the background photo');
+  } else if (name === 'paywalls') {
+    choose({ ...choice, paywalls: checked }, checked ? 'Showed stories from paywalled sites' : 'Left out paywalled sites');
   } else if (name === 'density') {
     setDensity(value);
   }
@@ -339,6 +346,7 @@ container.addEventListener('click', (event) => {
   if (action === 'done') done();
   else if (action === 'close') setOpen(open);
   else if (action === 'advanced') document.dispatchEvent(new CustomEvent('settings:open'));
+  else if (action === 'history') document.dispatchEvent(new CustomEvent('history:open'));
 });
 
 opener.addEventListener('click', () => {
