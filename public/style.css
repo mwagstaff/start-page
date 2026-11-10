@@ -253,7 +253,7 @@ body:has(.peek:hover, .peek:focus-within) :is(.masthead, .tabs, .grid) {
   text-decoration: none;
 }
 
-.brand-mark { display: block; width: 25px; height: 24px; }
+.brand-mark { display: block; width: 32px; height: 24px; }
 
 /* ".net" sits back a little, as in the logo artwork. */
 .brand-name span { font-weight: 500; opacity: 0.72; }

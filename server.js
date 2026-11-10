@@ -56,7 +56,7 @@ suggestedPage().catch((error) => console.warn(`Suggested page: ${error.message}`
 // Static files are cached by browsers, so their URLs carry a content hash.
 const assetVersion = async (name) => createHash('sha256').update(await readFile(join(ROOT, 'public', name))).digest('hex').slice(0, 10);
 const assetVersions = async () => {
-  const names = (await readdir(join(ROOT, 'public'))).filter((name) => ['.css', '.js'].includes(extname(name)));
+  const names = (await readdir(join(ROOT, 'public'))).filter((name) => ['.css', '.js', '.svg', '.png'].includes(extname(name)));
   return Object.fromEntries(await Promise.all(names.map(async (name) => [name, await assetVersion(name)])));
 };
 // Worked out again whenever a file in public/ changes, so pages never point at old copies.
