@@ -12,11 +12,13 @@
 // loaded at /settings opens it straight away. Done, Escape or Back closes it.
 
 import { escapeHtml } from './cards.js';
-import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setDensity, setFill, setSolid, setTabCards, setTemperature, tabCards, widgetFor } from './page.js';
+import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setDensity, setFill, setSolid, setSearch, setShortcuts, setTabCards, setTemperature, tabCards, widgetFor } from './page.js';
 import { unitForLocale } from './forecast.js';
 import { openHistory } from './undo.js';
 import { askStartOver } from './start-over.js';
 import { DENSITIES, MAX_CARD_ITEMS, MAX_CUSTOM_FEEDS, moveCard, stepCard, validSettings } from './settings.js';
+
+import { SEARCH_PROVIDERS, searchProvider, validCustomSearch } from './search.js';
 
 const PATH = '/settings';
 const opener = document.querySelector('.customise-open'); // focus goes back there on closing
@@ -86,6 +88,31 @@ function build() {
               <span>Solid cards<small>Hides the background photo behind the cards.</small></span>
             </label>
           </section>
+          <section class="settings-section search-settings" aria-labelledby="settings-search-title">
+            <h2 id="settings-search-title">Search</h2>
+            <label for="search-provider">Search provider</label>
+            <select id="search-provider" data-field="search-provider">
+              ${SEARCH_PROVIDERS.map(({ id, name }) => `<option value="${id}">${name}${id === 'google' ? ' (default)' : ''}</option>`).join('')}
+              <option value="custom">Custom…</option>
+            </select>
+            <form class="custom-search" hidden>
+              <label for="search-name">Provider name</label>
+              <input id="search-name" maxlength="80" required placeholder="My search">
+              <label for="search-url">Search URL</label>
+              <input id="search-url" type="text" inputmode="url" maxlength="2000" spellcheck="false" required aria-describedby="search-url-hint" placeholder="https://example.com/search?q={query}">
+              <p id="search-url-hint" class="settings-hint">Paste a search URL and replace the search words with {query}. Use an http:// or https:// address.</p>
+              <button type="submit">Save custom provider</button>
+            </form>
+            <p class="settings-hint search-current"></p>
+          </section>
+          <section class="settings-section" aria-labelledby="settings-keyboard-title">
+            <h2 id="settings-keyboard-title">Keyboard</h2>
+            <label class="arrange-toggle">
+              <input type="checkbox" data-field="shortcuts">
+              <span>Single-key shortcuts<small>Ready by default. Press a number to choose a card and reveal its story letters. / focuses search, C opens comments and W opens weather. Command-. (Mac) or Ctrl-. opens Customise.</small></span>
+            </label>
+            <p class="settings-hint">Single-key shortcuts pause while typing. Turn them off to use arrows and Tab instead. Command-. / Ctrl-. remains available. Esc returns from search or closes page controls.</p>
+          </section>
           <section class="settings-section" aria-labelledby="settings-weather-title">
             <h2 id="settings-weather-title">Weather</h2>
             <fieldset class="density">
@@ -125,6 +152,7 @@ function build() {
   dialog.addEventListener('close', closed);
   dialog.querySelector('input[type=file]').addEventListener('change', onImport);
   dialog.querySelector('.add-feed').addEventListener('submit', onAddFeed);
+  dialog.querySelector('.custom-search').addEventListener('submit', onCustomSearch);
   dialog.querySelector('.card-list').addEventListener('pointerdown', startDrag);
 }
 
@@ -133,10 +161,12 @@ function status(message) {
 }
 
 function renderList(focus) {
+  renderSearch();
   const { defaultLimit } = currentFeeds();
   dialog.querySelector('[data-field="arrange"]').checked = arrangement() === 'auto';
   dialog.querySelector('[data-field="fill"]').checked = currentSettings()?.fill !== false;
   dialog.querySelector('[data-field="solid"]').checked = currentSettings()?.solid === true;
+  dialog.querySelector('[data-field="shortcuts"]').checked = currentSettings()?.shortcuts !== false;
   dialog.querySelector(`[data-field="density"][value="${currentSettings()?.density ?? DENSITIES[0]}"]`).checked = true;
   dialog.querySelector(`[data-field="temperature"][value="${currentSettings()?.temperature ?? ''}"]`).checked = true;
   dialog.querySelector('.card-list').innerHTML = cards.map((card, i) => {
@@ -226,6 +256,20 @@ async function onClick(event) {
 function onChange(event) {
   const field = event.target.dataset.field;
   if (!field) return;
+  if (field === 'shortcuts') {
+    setShortcuts(event.target.checked);
+    status(event.target.checked ? 'Single-key shortcuts are on.' : 'Single-key shortcuts are off. Arrows and Tab still work.');
+    return;
+  }
+  if (field === 'search-provider') {
+    const provider = event.target.value;
+    if (provider !== 'custom' || currentSettings()?.search?.custom) {
+      setSearch({ ...currentSettings()?.search, provider });
+      status(`Search set to ${searchProvider(currentSettings()?.search).name}.`);
+    }
+    renderSearch(provider);
+    return;
+  }
   if (field === 'arrange') {
     setArrange(event.target.checked ? 'auto' : 'manual');
     cards = tabCards();
@@ -339,6 +383,29 @@ async function onAddFeed(event) {
   cards = tabCards();
   renderList();
   status(`Added ${widgetFor(cards[0].id).title} to the top of the list.`);
+}
+
+function renderSearch(selected = currentSettings()?.search?.provider ?? 'google') {
+  const search = currentSettings()?.search;
+  dialog.querySelector('#search-provider').value = selected;
+  dialog.querySelector('.custom-search').hidden = selected !== 'custom';
+  dialog.querySelector('#search-name').value = search?.custom?.name ?? '';
+  dialog.querySelector('#search-url').value = search?.custom?.url ?? '';
+  dialog.querySelector('.search-current').textContent = `Currently using ${searchProvider(search).name}. Results open in a new tab.`;
+}
+
+function onCustomSearch(event) {
+  event.preventDefault();
+  const input = dialog.querySelector('#search-url');
+  const custom = validCustomSearch({ name: dialog.querySelector('#search-name').value, url: input.value });
+  if (!custom) {
+    status('Enter a provider name and a valid http:// or https:// search URL with {query} in its path or search parameters.');
+    input.focus();
+    return;
+  }
+  setSearch({ provider: 'custom', custom });
+  renderSearch();
+  status(`Search set to ${custom.name}.`);
 }
 
 function exportSettings() {

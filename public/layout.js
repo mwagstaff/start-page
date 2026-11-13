@@ -176,51 +176,56 @@ function initGrid(grid) {
     if (grid.clientWidth === laidOutWidth && window.innerHeight === laidOutHeight) return;
     laidOutWidth = grid.clientWidth;
     laidOutHeight = window.innerHeight;
-    // Measure in the CSS column layout, where each card already has the column width.
-    grid.classList.remove('packed', 'filled', 'scrolls');
-    grid.replaceChildren(...cards);
-    const count = columnCountFor(grid);
-    const fill = filling() && count > 1;
-    resetStories(grid);
-    if (count === 1) return;
-    if (fill) grid.querySelectorAll('.item.extra').forEach((item) => item.classList.add('show'));
-    const measured = cards.map(measureCard);
-    // Packed by the height each card has at its own number of stories.
-    const heights = measured.map(({ start, sizes }) => sizes[start]);
-    const manual = grid.dataset.arrange === 'manual';
-    const groups = manual
-      ? placeColumns(cards.map((card) => (card.dataset.col ? Number(card.dataset.col) : null)), heights, count)
-      : packColumns(heights, count);
-    while (groups.length < count) groups.push([]); // keep every column the same width
-    grid.replaceChildren(...groups.map((group) => {
-      const column = document.createElement('div');
-      column.className = 'column';
-      column.append(...group.map((i) => cards[i]));
-      return column;
-    }));
-    grid.classList.add('packed');
-    const style = getComputedStyle(grid);
-    // The room the cards would have without the Customise bar, so the bar coming and going
-    // doesn't change the layout: with it open, the cards are as they'll be after, pushed down.
-    const barHeight = bar?.getBoundingClientRect().height ?? 0;
-    let space = grid.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) + barHeight;
-    scrolling = overflows(groups, measured, space, fill, scrolling ? FIT_MARGIN : 0);
-    if (scrolling) {
-      // Filled to the tallest column at its cards' own numbers of stories.
-      space = Math.max(...groups.map((group) => group.reduce((sum, i) => sum + heights[i], 0)));
+    grid.dispatchEvent(new Event('layout:beforechange'));
+    try {
+      // Measure in the CSS column layout, where each card already has the column width.
+      grid.classList.remove('packed', 'filled', 'scrolls');
+      grid.replaceChildren(...cards);
+      const count = columnCountFor(grid);
+      const fill = filling() && count > 1;
+      resetStories(grid);
+      if (count === 1) return;
+      if (fill) grid.querySelectorAll('.item.extra').forEach((item) => item.classList.add('show'));
+      const measured = cards.map(measureCard);
+      // Packed by the height each card has at its own number of stories.
+      const heights = measured.map(({ start, sizes }) => sizes[start]);
+      const manual = grid.dataset.arrange === 'manual';
+      const groups = manual
+        ? placeColumns(cards.map((card) => (card.dataset.col ? Number(card.dataset.col) : null)), heights, count)
+        : packColumns(heights, count);
+      while (groups.length < count) groups.push([]); // keep every column the same width
+      grid.replaceChildren(...groups.map((group) => {
+        const column = document.createElement('div');
+        column.className = 'column';
+        column.append(...group.map((i) => cards[i]));
+        return column;
+      }));
+      grid.classList.add('packed');
+      const style = getComputedStyle(grid);
+      // The room the cards would have without the Customise bar, so the bar coming and going
+      // doesn't change the layout: with it open, the cards are as they'll be after, pushed down.
+      const barHeight = bar?.getBoundingClientRect().height ?? 0;
+      let space = grid.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) + barHeight;
+      scrolling = overflows(groups, measured, space, fill, scrolling ? FIT_MARGIN : 0);
+      if (scrolling) {
+        // Filled to the tallest column at its cards' own numbers of stories.
+        space = Math.max(...groups.map((group) => group.reduce((sum, i) => sum + heights[i], 0)));
+      }
+      if (scrolling || barHeight) grid.classList.add('scrolls');
+      if (!fill) return;
+      // Whatever space is left is shared between the stories, and the last card in each
+      // column stretches over any remainder (style.css), so every column ends level.
+      groups.forEach((group, c) => {
+        const counts = fillColumn(group.map((i) => measured[i]), space);
+        group.forEach((i, j) => showStories(measured[i].items, counts[j]));
+        const height = group.reduce((sum, i, j) => sum + measured[i].sizes[counts[j]], 0);
+        const spread = storySpread(space, height, counts.reduce((sum, k) => sum + k, 0));
+        grid.children[c].style.setProperty('--story-spread', `${spread.toFixed(2)}px`);
+      });
+      grid.classList.add('filled');
+    } finally {
+      grid.dispatchEvent(new Event('layout:change'));
     }
-    if (scrolling || barHeight) grid.classList.add('scrolls');
-    if (!fill) return;
-    // Whatever space is left is shared between the stories, and the last card in each
-    // column stretches over any remainder (style.css), so every column ends level.
-    groups.forEach((group, c) => {
-      const counts = fillColumn(group.map((i) => measured[i]), space);
-      group.forEach((i, j) => showStories(measured[i].items, counts[j]));
-      const height = group.reduce((sum, i, j) => sum + measured[i].sizes[counts[j]], 0);
-      const spread = storySpread(space, height, counts.reduce((sum, k) => sum + k, 0));
-      grid.children[c].style.setProperty('--story-spread', `${spread.toFixed(2)}px`);
-    });
-    grid.classList.add('filled');
   };
 
   layout();

@@ -6,7 +6,9 @@ import { escapeHtml } from './cards.js';
 
 const HOURS_AHEAD = 6;
 const DETAIL_HOURS = 24; // hour by hour in the forecast popover, from now
-const WEEK_DAYS = 7; // days after today in the popover
+const FORECAST_DAYS = 16; // today plus the next 15 days, Open-Meteo's maximum
+const VISIBLE_DAYS = 10;
+let upcomingExpanded = false;
 const RAIN_SLOTS = 24; // 15-minute steps: the next 6 hours
 // Tomorrow's day in parts, as [name, first hour, hour after the last].
 const DAY_PARTS = [['Morning', 6, 12], ['Afternoon', 12, 18], ['Evening', 18, 24]];
@@ -68,20 +70,24 @@ export function unitForLocale(locale) {
 let shownUnit = 'C'; // in the browser, set by page.js
 export const setTemperatureUnit = (unit) => { shownUnit = unit === 'F' ? 'F' : 'C'; };
 export const temperatureUnit = () => shownUnit;
-const deg = (celsius, unit) => (unit === 'F' ? Math.round(celsius * 9 / 5 + 32) : celsius);
+const deg = (celsius, unit) => Number.isFinite(celsius) ? (unit === 'F' ? Math.round(celsius * 9 / 5 + 32) : celsius) : '—';
+const rounded = (value) => Number.isFinite(value) ? Math.round(value) : null;
+let feelsLikeMode = false;
+export const setFeelsLikeMode = (enabled) => { feelsLikeMode = Boolean(enabled); };
+export const isFeelsLikeMode = () => feelsLikeMode;
 
 export function forecastUrl({ latitude, longitude }) {
   const params = new URLSearchParams({
     latitude,
     longitude,
     current: 'temperature_2m,apparent_temperature,weather_code,is_day,relative_humidity_2m,wind_speed_10m',
-    hourly: 'temperature_2m,weather_code,precipitation_probability,is_day,precipitation,wind_speed_10m',
-    daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,precipitation_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max',
+    hourly: 'apparent_temperature,wind_gusts_10m,temperature_2m,weather_code,precipitation_probability,is_day,precipitation,wind_speed_10m',
+    daily: 'apparent_temperature_max,apparent_temperature_min,temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,precipitation_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max',
     minutely_15: 'precipitation,precipitation_probability',
     forecast_minutely_15: String(RAIN_SLOTS),
     wind_speed_unit: 'mph',
     timezone: 'auto', // the location's own time zone, so the hours read as local time
-    forecast_days: String(WEEK_DAYS + 1),
+    forecast_days: String(FORECAST_DAYS),
   });
   return `https://api.open-meteo.com/v1/forecast?${params}`;
 }
@@ -143,6 +149,8 @@ function dayPart(hourly, name, indexes) {
   const middle = indexes[Math.floor(indexes.length / 2)];
   return {
     name,
+    feelsLow: indexes.every((i) => Number.isFinite(hourly.apparent_temperature?.[i])) ? rounded(Math.min(...indexes.map((i) => hourly.apparent_temperature[i]))) : null,
+    feelsHigh: indexes.every((i) => Number.isFinite(hourly.apparent_temperature?.[i])) ? rounded(Math.max(...indexes.map((i) => hourly.apparent_temperature[i]))) : null,
     low: Math.round(Math.min(...temperatures)),
     high: Math.round(Math.max(...temperatures)),
     rainChance: Math.max(...indexes.map((i) => hourly.precipitation_probability[i] ?? 0)),
@@ -159,16 +167,19 @@ function dayPart(hourly, name, indexes) {
 function parseDay({ hourly, daily }, day, i) {
   const hoursOf = (from, to) => hourly.time.flatMap((time, index) => {
     const hour = Number(time.slice(11, 13));
-    return time.startsWith(day.date) && hour >= from && hour < to ? [index] : [];
+    return time.startsWith(day.date) && hour >= from && hour < to
+      && [hourly.temperature_2m[index], hourly.weather_code[index], hourly.precipitation?.[index]].every(Number.isFinite) ? [index] : [];
   });
   const parts = DAY_PARTS.flatMap(([name, from, to]) => {
     const indexes = hoursOf(from, to);
     return indexes.length === to - from ? [dayPart(hourly, name, indexes)] : [];
   });
-  const hourlyWind = hourly.wind_speed_10m && hoursOf(0, 24).map((index) => hourly.wind_speed_10m[index]);
+  const hourlyWind = hourly.wind_speed_10m && hoursOf(0, 24).map((index) => hourly.wind_speed_10m[index]).filter(Number.isFinite);
   const wind = daily.wind_speed_10m_max?.[i] ?? (hourlyWind?.length ? Math.max(...hourlyWind) : null);
   return {
     ...day,
+    feelsHigh: rounded(daily.apparent_temperature_max?.[i]),
+    feelsLow: rounded(daily.apparent_temperature_min?.[i]),
     weekday: weekday(day.date),
     sunrise: daily.sunrise[i]?.slice(11, 16) ?? null,
     sunset: daily.sunset[i]?.slice(11, 16) ?? null,
@@ -178,9 +189,11 @@ function parseDay({ hourly, daily }, day, i) {
     hours: hoursOf(0, 24).map((index) => ({
       time: hourly.time[index].slice(11, 16),
       temperature: Math.round(hourly.temperature_2m[index]),
+      feelsLike: rounded(hourly.apparent_temperature?.[index]),
+      gust: rounded(hourly.wind_gusts_10m?.[index]),
       rainChance: hourly.precipitation_probability[index] ?? null,
       rain: round1(hourly.precipitation?.[index] ?? 0),
-      wind: hourly.wind_speed_10m ? Math.round(hourly.wind_speed_10m[index]) : null,
+      wind: Number.isFinite(hourly.wind_speed_10m?.[index]) ? Math.round(hourly.wind_speed_10m[index]) : null,
       code: hourly.weather_code[index],
       isDay: hourly.is_day[index] === 1,
     })),
@@ -200,25 +213,29 @@ function parseOutlook(json, currentHour) {
       // Midnight is named for the day it starts, so the day change stands out.
       time: offset === 0 ? 'Now' : newDay ? weekday(time.slice(0, 10)) : time.slice(11, 16),
       newDay,
+      feelsLike: rounded(hourly.apparent_temperature?.[i]),
+      gust: rounded(hourly.wind_gusts_10m?.[i]),
       temperature: Math.round(hourly.temperature_2m[i]),
       rainChance: hourly.precipitation_probability[i] ?? null,
       rain: round1(hourly.precipitation?.[i] ?? 0),
-      wind: hourly.wind_speed_10m ? Math.round(hourly.wind_speed_10m[i]) : null,
+      wind: rounded(hourly.wind_speed_10m?.[i]),
       ...describe(hourly.weather_code[i], hourly.is_day[i] === 1),
     };
   });
-  const days = daily.time.slice(1, WEEK_DAYS + 1).map((date, offset) => {
+  const days = daily.time.slice(1, FORECAST_DAYS).flatMap((date, offset) => {
     const i = offset + 1;
-    return {
+    // The API can include dates beyond model coverage with null daily values.
+    if (![daily.temperature_2m_max[i], daily.temperature_2m_min[i], daily.weather_code[i], daily.precipitation_sum?.[i]].every(Number.isFinite)) return [];
+    return [parseDay(json, {
       date,
-      day: offset === 0 ? 'Tomorrow' : weekday(date),
+      day: offset === 0 ? 'Tomorrow' : `${weekday(date)} ${Number(date.slice(8, 10))}`,
       high: Math.round(daily.temperature_2m_max[i]),
       low: Math.round(daily.temperature_2m_min[i]),
       rainChance: daily.precipitation_probability_max[i] ?? null,
       rain: round1(daily.precipitation_sum?.[i] ?? 0),
       ...describe(daily.weather_code[i]),
-    };
-  }).map((day, offset) => parseDay(json, day, offset + 1));
+    }, i)];
+  });
   // Today from midnight, for the rain chart. Hours gone stay (shown dimmed) so the day reads whole.
   const rainHours = hourly.time.flatMap((time, i) => (time.startsWith(daily.time[0]) ? [{
     time: time.slice(11, 16),
@@ -228,7 +245,7 @@ function parseOutlook(json, currentHour) {
     now: time === currentHour,
   }] : []));
   return {
-    tomorrow: days[0],
+    tomorrow: days.find((day) => day.date === daily.time[1]),
     today: {
       ...describe(daily.weather_code[0]),
       sunrise: daily.sunrise[0].slice(11, 16),
@@ -262,7 +279,9 @@ export function parseWeather(json, name) {
   return {
     name,
     temperature: Math.round(current.temperature_2m),
-    feelsLike: Math.round(current.apparent_temperature),
+    feelsLike: rounded(current.apparent_temperature),
+    feelsHigh: rounded(daily.apparent_temperature_max?.[0]),
+    feelsLow: rounded(daily.apparent_temperature_min?.[0]),
     ...describe(current.weather_code, current.is_day === 1),
     code: current.weather_code,
     isDay: current.is_day === 1,
@@ -360,7 +379,7 @@ function renderRainDay(day) {
   const headline = total > 0
     ? `${capitalise(rainLevel(peak.mm) === 'none' ? 'light' : rainLevel(peak.mm))} rain: ${total} mm, heaviest at ${peak.time}`
     : 'No rain expected';
-  return renderRainChart(hours, `Rain · ${weekday(day.date)}`, headline);
+  return renderRainChart(hours, `Rain · ${weekday(day.date)}`, headline, hours.length < 24 ? 'Partial forecast: available hours only' : '');
 }
 
 function renderRainChart(hours, title, headline, note = '') {
@@ -432,29 +451,60 @@ function renderTomorrow(tomorrow, unit, picked = false) {
 
 // The week, compact: each day's range of temperatures drawn on one scale for the whole week.
 // A day with its hours can be picked, to show it in detail; picked again, it's back to today.
-function renderWeek(days, unit, picked) {
-  const lowest = Math.min(...days.map((day) => day.low));
-  const span = Math.max(1, Math.max(...days.map((day) => day.high)) - lowest);
-  const rows = days.map((day) => `<li>
-          ${day.hours?.length ? `<button class="ws-day-pick" type="button" data-day="${day.date === picked ? '' : day.date}" aria-pressed="${day.date === picked}" aria-label="${escapeHtml(`${longDate(day.date)}: ${day.label}, ${deg(day.high, unit)}° / ${deg(day.low, unit)}°`)}"></button>` : ''}
+function renderWeek(days, unit, picked, today, expanded) {
+  if (today?.date) days = [{ ...today, day: 'Today', isToday: true }, ...days];
+  const lowest = Math.min(...days.map((day) => day.low).filter(Number.isFinite));
+  const span = Math.max(1, Math.max(...days.map((day) => day.high).filter(Number.isFinite)) - lowest);
+  const rows = days.map((day, index) => `<li${!expanded && index >= VISIBLE_DAYS ? ' hidden' : ''}>
+          ${day.isToday || day.hours?.length ? `<button class="ws-day-pick" type="button" data-day="${day.isToday || day.date === picked ? '' : day.date}" aria-pressed="${day.isToday ? !picked : day.date === picked}" aria-label="${escapeHtml(`${longDate(day.date)}: ${day.label}, ${deg(day.high, unit)}° / ${deg(day.low, unit)}°`)}"></button>` : ''}
           <span class="ws-day">${escapeHtml(day.day)}</span>
           <span class="ws-icon" title="${escapeHtml(day.label)}">${day.icon}</span>
           <span class="ws-rain-text">${escapeHtml(rainText(day))}</span>
           <span class="ws-low">${deg(day.low, unit)}°</span>
-          <span class="ws-range" aria-hidden="true"><span style="left:${((day.low - lowest) / span * 100).toFixed(1)}%;right:${(100 - (day.high - lowest) / span * 100).toFixed(1)}%"></span></span>
+          <span class="ws-range" aria-hidden="true"><span ${Number.isFinite(day.low) && Number.isFinite(day.high) ? '' : 'hidden'} style="left:${(Number.isFinite(day.low) ? (day.low - lowest) / span * 100 : 0).toFixed(1)}%;right:${(Number.isFinite(day.high) ? 100 - (day.high - lowest) / span * 100 : 100).toFixed(1)}%"></span></span>
           <span class="ws-high">${deg(day.high, unit)}°</span>
         </li>`).join('');
-  return `<section class="ws-section ws-week" aria-label="Next ${days.length} days">
-        <h3>Next ${days.length} days${days.some((day) => day.hours?.length) ? '<span class="ws-h3-note">Pick a day for its detail</span>' : ''}</h3>
-        <ol>${rows}</ol>
+  return `<section class="ws-section ws-week" aria-label="Upcoming">
+        <h3>Upcoming${days.some((day) => day.hours?.length) ? '<span class="ws-h3-note">Pick a day · ↑ ↓ to change</span>' : ''}</h3>
+        <ol id="ws-upcoming-days">${rows}</ol>
+        ${days.length > VISIBLE_DAYS ? `<button type="button" class="ws-more" data-upcoming-toggle aria-expanded="${expanded}" aria-controls="ws-upcoming-days">${expanded ? 'Less' : 'More'}</button>` : ''}
       </section>`;
+}
+
+// Project display values without mutating the shared forecast or its masthead.
+function apparentValues(value) {
+  if (!value) return value;
+  return { ...value, temperature: value.feelsLike, high: value.feelsHigh, low: value.feelsLow,
+    hours: value.hours?.map(apparentValues), parts: value.parts?.map(apparentValues),
+    days: value.days?.map(apparentValues), today: apparentValues(value.today), tomorrow: apparentValues(value.tomorrow) };
+}
+
+export function windSummary(hours = []) {
+  const valid = hours.filter((hour) => Number.isFinite(hour.wind) && hour.wind >= 0);
+  if (!valid.length) return 'Wind forecast unavailable';
+  const peak = valid.reduce((a, b) => b.wind > a.wind ? b : a);
+  const low = Math.min(...valid.map((hour) => hour.wind));
+  const gusts = hours.map((hour) => hour.gust).filter((gust) => Number.isFinite(gust) && gust >= 0);
+  const strength = peak.wind < 4 ? 'Light winds' : peak.wind < 13 ? 'A gentle breeze' : peak.wind < 25 ? 'Breezy' : 'Windy';
+  const speed = low === peak.wind ? `${low}` : `${low}–${peak.wind}`;
+  return `${strength} · ${speed} mph${low !== peak.wind ? `, strongest ${peak.time === 'Now' ? 'now' : `at ${peak.time}`}` : ''}${gusts.length ? ` · gusts up to ${Math.max(...gusts)} mph` : ''}${valid.length < hours.length ? ' · partial wind forecast' : ''}`;
+}
+
+function renderWind(hours, title) {
+  return `<section class="ws-section ws-wind-summary" aria-label="${escapeHtml(title)}"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(windSummary(hours))}</p></section>`;
 }
 
 // What the weather screen shows: now on one side, large, with the week under it; today's
 // rain, the next 24 hours and tomorrow on the other. Forecasts cached before some of this was fetched show
 // what they have.
-export function renderScreenContent(weather, unit = shownUnit, date = pickedDay) {
-  const { today, tomorrow, days } = weather;
+export function renderScreenContent(weather, unit = shownUnit, date = pickedDay, expanded = upcomingExpanded, feels = feelsLikeMode) {
+  const regularTemperature = weather.temperature;
+  const validDays = weather.days?.filter((day) => day.label !== 'Unknown' && Number.isFinite(day.low) && Number.isFinite(day.high));
+  weather = { ...weather, days: validDays };
+  if (feels) weather = apparentValues(weather);
+  const { today, tomorrow } = weather;
+  // Also reject the old cached parser's Unknown/0-degree placeholder days.
+  const days = weather.days;
   const picked = days?.find((day) => day.date === date && day.hours?.length);
   const facts = today ? [
     fact('Rain', escapeHtml(rainText({ rainChance: weather.rainChance, rain: today.rain }) || 'None expected')),
@@ -466,20 +516,27 @@ export function renderScreenContent(weather, unit = shownUnit, date = pickedDay)
   ].filter(Boolean).join('') : '';
   return `<header class="ws-top">
       <p class="ws-place"><strong>${escapeHtml(weather.name)}</strong>${today?.date ? `<span>${escapeHtml(longDate(today.date))}</span>` : ''}</p>
+      <div class="ws-temperature-control" role="group" aria-label="Forecast temperatures">
+        <button type="button" data-temperature-mode="regular" aria-pressed="${!feels}">Regular</button>
+        <button type="button" data-temperature-mode="feels" aria-pressed="${feels}">Feels like</button>
+        <kbd title="Toggle temperatures with T">T</kbd>
+      </div>
     </header>
     <div class="ws-layout">
       <section class="ws-now" aria-label="Now">
         <p class="ws-big">${deg(weather.temperature, unit)}<span>°</span></p>
         <p class="ws-condition"><span aria-hidden="true">${weather.icon}</span> ${escapeHtml(weather.label)}</p>
-        <p class="ws-range-text">High ${deg(weather.high, unit)}° · Low ${deg(weather.low, unit)}° · Feels like ${deg(weather.feelsLike, unit)}°</p>
+        <p class="ws-range-text">High ${deg(weather.high, unit)}° · Low ${deg(weather.low, unit)}° · ${feels ? 'Regular' : 'Feels like'} ${deg(feels ? regularTemperature : weather.feelsLike, unit)}°</p>
         ${facts ? `<dl class="ws-facts">${facts}</dl>` : ''}
-        ${days?.length ? renderWeek(days, unit, picked?.date) : ''}
+        ${days?.length ? renderWeek(days, unit, picked?.date, today && { ...today, high: weather.high, low: weather.low, rainChance: weather.rainChance }, expanded) : ''}
       </section>
       ${picked ? `<div class="ws-detail is-picked">
         ${renderTomorrow(picked, unit, true)}
+        ${renderWind(picked.hours, `Wind · ${weekday(picked.date)}`)}
         ${renderRainDay(picked)}
         ${renderHours(picked.hours.map((hour) => ({ ...hour, ...describe(hour.code, hour.isDay) })), unit, 'Hour by hour')}
       </div>` : `<div class="ws-detail">
+        ${renderWind(today?.hours, 'Wind · next 24 hours')}
         ${today ? renderRainToday(weather) : ''}
         ${today?.hours?.length ? renderHours(today.hours, unit) : ''}
         ${tomorrow ? renderTomorrow(tomorrow, unit) : ''}
@@ -570,4 +627,22 @@ export function showWeather(weather) {
     document.body.insertAdjacentHTML('beforeend', renderWeatherScreen(weather));
   }
   document.dispatchEvent(new Event('weather:shown'));
+}
+
+// Keep expansion across day picks and forecast refreshes; collapse returns to Today
+// if the selected day would otherwise be hidden.
+export function toggleUpcoming(weather = lastShown) {
+  upcomingExpanded = !upcomingExpanded;
+  if (!upcomingExpanded && weather?.days?.slice(VISIBLE_DAYS - 1).some((day) => day.date === pickedDay)) pickedDay = null;
+  pickDay(pickedDay, weather);
+}
+
+export function changeTemperatureMode(enabled, weather = lastShown) {
+  setFeelsLikeMode(enabled);
+  const screen = document.getElementById('weather-screen');
+  if (!screen || !weather) return;
+  screen.dataset.refreshed = '';
+  delete screen.dataset.picking;
+  const content = screen.querySelector('.ws-content');
+  content.innerHTML = content.dataset.html = renderScreenContent(weather);
 }

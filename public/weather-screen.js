@@ -1,3 +1,6 @@
+import { changeTemperatureMode, isFeelsLikeMode, setFeelsLikeMode } from './forecast.js';
+
+try { setFeelsLikeMode(localStorage.getItem('start-page:feels-like') === 'true'); } catch {}
 // The weather screen: clicking the weather in the masthead opens it over the page, below the
 // masthead, which stays in view. Close, Escape, the weather again, or Back closes it. While
 // it's open the address ends in #weather, so it can be bookmarked or shared, and a page
@@ -12,7 +15,8 @@
 // A day picked from the week shows in detail in place of today, until another is picked, or
 // back to today, or the screen is opened again.
 
-import { pickDay, shownWeather } from './forecast.js';
+import { pickDay, shownWeather, toggleUpcoming } from './forecast.js';
+import { weatherShortcutCommand } from './keyboard-shortcuts.js';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const random = (low, high) => low + Math.random() * (high - low);
@@ -26,14 +30,17 @@ const RAIN = {
 };
 
 // A soft cloud, drawn once and reused: overlapping radial puffs along a flattened band.
+// Puffs can reach 40px above or 20px below the original 260px band. Keep their
+// transparent edges inside the sprite so the bitmap never crops a visible puff.
+const CLOUD_PADDING_Y = 48;
 function cloudSprite(shade) {
   const sprite = document.createElement('canvas');
   sprite.width = 640;
-  sprite.height = 260;
+  sprite.height = 260 + CLOUD_PADDING_Y * 2;
   const ctx = sprite.getContext('2d');
   for (let i = 0; i < 14; i++) {
     const x = random(120, 520);
-    const y = random(110, 170) - Math.sin(((x - 120) / 400) * Math.PI) * 40;
+    const y = CLOUD_PADDING_Y + random(110, 170) - Math.sin(((x - 120) / 400) * Math.PI) * 40;
     const r = random(60, 110);
     const puff = ctx.createRadialGradient(x, y, 0, x, y, r);
     puff.addColorStop(0, `rgb(${shade} / 0.55)`);
@@ -63,7 +70,8 @@ function clouds({ w, h, count, shade, alpha, top = 0.05, bottom = 0.55, stretch 
       cloud.x += cloud.speed * dt;
       if (cloud.x > w) cloud.x = -width;
       ctx.globalAlpha = cloud.alpha;
-      ctx.drawImage(cloud.sprite, cloud.x, cloud.y - 130 * cloud.scale, width, 260 * cloud.scale);
+      ctx.drawImage(cloud.sprite, cloud.x, cloud.y - (130 + CLOUD_PADDING_Y) * cloud.scale,
+        width, cloud.sprite.height * cloud.scale);
     }
     ctx.globalAlpha = 1;
   };
@@ -331,6 +339,7 @@ function open() {
 
 // However it closed (Close is a form on the dialog), tidy up after it.
 function closed() {
+  pickRequest++;
   setCovered(false);
   syncTrigger();
   if (isWeatherHash()) {
@@ -348,14 +357,39 @@ document.addEventListener('close', (event) => {
 // The page as the server drew it has no forecast to hand, so the first day picked fetches it
 // (page.js only when needed: the screen shouldn't wait for it to load).
 let fetched = null;
-async function pick(date) {
+let pickRequest = 0;
+async function pick(date, { scroll = false } = {}) {
+  const request = ++pickRequest;
   fetched = shownWeather() ? null : fetched ?? (await (await import('./page.js')).fetchFeeds())?.weather;
+  if (request !== pickRequest || !screen()?.open) return;
   pickDay(date, shownWeather() ?? fetched);
   // Focus stays on the day picked (now drawn afresh), or on the week once back to today.
-  screen().querySelector(date ? '.ws-day-pick[aria-pressed="true"]' : '.ws-day-pick')?.focus({ preventScroll: true });
+  const selected = screen().querySelector(date ? '.ws-day-pick[aria-pressed="true"]' : '.ws-day-pick');
+  selected?.focus({ preventScroll: true });
+  if (scroll) selected?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
-document.addEventListener('click', (event) => {
+async function temperatureMode(enabled) {
+  const active = document.activeElement;
+  const mode = active?.dataset.temperatureMode;
+  const day = active?.classList.contains('ws-day-pick');
+  fetched = shownWeather() ? null : fetched ?? (await (await import('./page.js')).fetchFeeds())?.weather;
+  changeTemperatureMode(enabled, shownWeather() ?? fetched);
+  try { localStorage.setItem('start-page:feels-like', String(enabled)); } catch {}
+  if (day) screen()?.querySelector('.ws-day-pick[aria-pressed="true"]')?.focus({ preventScroll: true });
+  if (mode) screen()?.querySelector(`[data-temperature-mode="${mode}"]`)?.focus({ preventScroll: true });
+}
+
+document.addEventListener('click', async (event) => {
+  const temperature = event.target.closest('.weather-screen [data-temperature-mode]');
+  if (temperature) { temperatureMode(temperature.dataset.temperatureMode === 'feels'); return; }
+
+  if (event.target.closest('.weather-screen [data-upcoming-toggle]')) {
+    fetched = shownWeather() ? null : fetched ?? (await (await import('./page.js')).fetchFeeds())?.weather;
+    toggleUpcoming(shownWeather() ?? fetched);
+    screen().querySelector('[data-upcoming-toggle]')?.focus({ preventScroll: true });
+    return;
+  }
   const day = event.target.closest('.weather-screen [data-day]');
   if (day) {
     pick(day.dataset.day);
@@ -367,8 +401,25 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
-  // A dialog opened over the screen (Settings, say) takes Escape for itself.
-  if (event.key === 'Escape' && screen()?.open && !document.querySelector('dialog:modal')) screen().close();
+  const dialog = screen();
+  if (!dialog?.open) return;
+  // Text fields and a dialog opened over the forecast keep their own keys.
+  const command = weatherShortcutCommand(event, {
+    enabled: !document.body.classList.contains('keyboard-no-characters'),
+    editing: event.target.isContentEditable || Boolean(event.target.closest('input, textarea, select, [role="textbox"], [role="combobox"]')),
+    blocked: Boolean(document.querySelector('dialog:modal')),
+  });
+  if (!command) return;
+  event.preventDefault();
+  if (command.type === 'close') { dialog.close(); return; }
+  if (command.type === 'temperature') { temperatureMode(!isFeelsLikeMode()); return; }
+  const days = [...dialog.querySelectorAll('.ws-day-pick')];
+  const selected = Math.max(0, days.findIndex((day) => day.getAttribute('aria-pressed') === 'true'));
+  const next = days[selected + command.step];
+  if (!next) return; // stop at Today and the last available day
+  const date = next.dataset.day;
+  if (next.closest('[hidden]')) toggleUpcoming(shownWeather() ?? fetched);
+  pick(date, { scroll: true });
 });
 
 // Back and Forward, or #weather (with or without a test) typed into the address.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createWeather, describe, parsePlaceName, parseRain, parseWeather, rainLevel, unitForLocale } from '../lib/weather.js';
 import { renderPage } from '../lib/render.js';
-import { rainHeight, renderScreenContent, skyFor } from '../public/forecast.js';
+import { windSummary, pickDay, toggleUpcoming, forecastUrl, rainHeight, renderScreenContent, skyFor } from '../public/forecast.js';
 
 const json = JSON.parse(await readFile(new URL('./fixtures/open-meteo.json', import.meta.url), 'utf8'));
 
@@ -93,23 +93,23 @@ test('parses today in detail and the week ahead for the weather screen', () => {
   const weather = parseWeather(json, 'Beckenham');
   assert.equal(weather.today.hours.length, 24);
   assert.deepEqual(weather.today.hours.slice(0, 3).map((h) => h.time), ['Now', '13:00', '14:00']);
-  assert.deepEqual(weather.today.hours[2], { time: '14:00', newDay: false, temperature: 16, rainChance: 60, rain: 0.6, wind: 12, label: 'Rain', icon: '🌧️' });
+  assert.deepEqual(weather.today.hours[2], { time: '14:00', newDay: false, feelsLike: null, gust: null, temperature: 16, rainChance: 60, rain: 0.6, wind: 12, label: 'Rain', icon: '🌧️' });
   assert.deepEqual(weather.today.hours.slice(11, 14).map((h) => [h.time, h.newDay]), [['23:00', false], ['Fri', true], ['01:00', false]]);
   assert.equal(weather.today.hours.at(-1).time, '11:00');
   assert.deepEqual([weather.today.sunrise, weather.today.sunset, weather.today.uv, weather.today.rain, weather.today.humidity, weather.today.wind], ['07:52', '17:41', 2, 3.2, 72, 9]);
   assert.equal(weather.days.length, 7);
   const { date, day, high, low, rainChance, rain, label, icon } = weather.days[0];
   assert.deepEqual({ date, day, high, low, rainChance, rain, label, icon }, { date: '2026-10-30', day: 'Tomorrow', high: 15, low: 8, rainChance: 40, rain: 0.9, label: 'Rain', icon: '🌧️' });
-  assert.deepEqual(weather.days.slice(1).map((d) => d.day), ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu']);
+  assert.deepEqual(weather.days.slice(1).map((d) => d.day), ['Sat 31', 'Sun 1', 'Mon 2', 'Tue 3', 'Wed 4', 'Thu 5']);
 });
 
 test('parses tomorrow in more detail, in parts of the day', () => {
   const { tomorrow } = parseWeather(json, 'Beckenham');
   assert.deepEqual([tomorrow.day, tomorrow.weekday, tomorrow.wind, tomorrow.uv, tomorrow.sunrise, tomorrow.sunset], ['Tomorrow', 'Fri', 14, 2, '07:52', '17:41']);
   assert.deepEqual(tomorrow.parts, [
-    { name: 'Morning', low: 8, high: 12, rainChance: 0, rain: 0, wind: 7, label: 'Mostly clear', icon: '🌤️' },
-    { name: 'Afternoon', low: 13, high: 15, rainChance: 0, rain: 0, wind: 14, label: 'Mostly clear', icon: '🌤️' },
-    { name: 'Evening', low: 10, high: 13, rainChance: 40, rain: 0.9, wind: 7, label: 'Rain', icon: '🌧️' },
+    { name: 'Morning', feelsLow: null, feelsHigh: null, low: 8, high: 12, rainChance: 0, rain: 0, wind: 7, label: 'Mostly clear', icon: '🌤️' },
+    { name: 'Afternoon', feelsLow: null, feelsHigh: null, low: 13, high: 15, rainChance: 0, rain: 0, wind: 14, label: 'Mostly clear', icon: '🌤️' },
+    { name: 'Evening', feelsLow: null, feelsHigh: null, low: 10, high: 13, rainChance: 40, rain: 0.9, wind: 7, label: 'Rain', icon: '🌧️' },
   ]);
 });
 
@@ -147,7 +147,7 @@ test('clicking the masthead weather opens the weather screen', () => {
   assert.match(html, /<form class="ws-close-form" method="dialog">\s*<button class="ws-close"/);
   assert.match(html, /<strong>Beckenham<\/strong><span>Thursday 29 October<\/span>/);
   assert.match(html, /<p class="ws-big">15<span>°<\/span><\/p>/);
-  assert.match(html, /<section class="ws-now"[\s\S]*?<section class="ws-section ws-week" aria-label="Next 7 days">[\s\S]*?<\/section>\s*<\/section>\s*<div class="ws-detail">/); // the week sits under now
+  assert.match(html, /<section class="ws-now"[\s\S]*?<section class="ws-section ws-week" aria-label="Upcoming">[\s\S]*?<\/section>\s*<\/section>\s*<div class="ws-detail">/); // the week sits under now
   assert.match(html, /<span class="ws-day">Tomorrow<\/span>\s*<span class="ws-icon" title="Rain">/);
   assert.match(html, /Next 24 hours/);
   assert.match(html, /<li class="is-new-day">\s*<span class="ws-time">Fri<\/span>/);
@@ -213,4 +213,120 @@ test('temperatures show in Fahrenheit where that is usual, or when asked', () =>
   assert.match(html, /H 61° L 52° · feels 59°/);
   assert.match(html, /<p class="ws-big">59<span>°<\/span><\/p>/);
   assert.match(renderScreenContent(weather), /<p class="ws-big">15<span>°<\/span><\/p>/); // Celsius unless told
+});
+
+
+test('Upcoming starts with a selected Today row and can return from another day', () => {
+  const weather = parseWeather(json, 'Beckenham');
+  const upcoming = (date) => renderScreenContent(weather, 'C', date).match(/<section class="ws-section ws-week"[\s\S]*?<\/section>/)[0];
+  assert.match(upcoming(null), /<h3>Upcoming/);
+  assert.match(upcoming(null), /<ol id="ws-upcoming-days"><li>\s*<button[^>]*data-day="" aria-pressed="true"[^>]*><\/button>\s*<span class="ws-day">Today<\/span>/);
+  assert.match(upcoming(weather.days[0].date), /<ol id="ws-upcoming-days"><li>\s*<button[^>]*data-day="" aria-pressed="false"/);
+  assert.match(renderScreenContent(weather, 'C', ''), /Rain today/);
+  assert.match(upcoming(null), /Today[\s\S]*?70% · 3.2 mm[\s\S]*?11°[\s\S]*?16°/);
+});
+
+test('requests and retains all 16 forecast days with selectable detail for the final day', () => {
+  assert.equal(new URL(forecastUrl({ latitude: 51.4, longitude: 0 })).searchParams.get('forecast_days'), '16');
+  const extended = structuredClone(json);
+  const dates = Array.from({ length: 16 }, (_, i) => new Date(Date.UTC(2026, 9, 29 + i)).toISOString().slice(0, 10));
+  extended.daily = Object.fromEntries(Object.entries(json.daily).map(([key, values]) => [key, dates.map((date) => key === 'time' ? date : ['sunrise', 'sunset'].includes(key) ? date + values[0].slice(10) : values[0])]));
+  extended.hourly = Object.fromEntries(Object.entries(json.hourly).map(([key, values]) => [key, dates.flatMap((date) => Array.from({ length: 24 }, (_, hour) => key === 'time' ? `${date}T${String(hour).padStart(2, '0')}:00` : values[0]))]));
+  const weather = parseWeather(extended, 'Beckenham');
+  assert.equal(weather.days.length, 15);
+  assert.equal(weather.days.at(-1).hours.length, 24);
+  assert.equal(weather.days.at(-1).day, 'Fri 13');
+  const html = renderScreenContent(weather, 'C', dates.at(-1));
+  assert.match(html, /Friday 13 November/);
+  assert.match(html, /Hour by hour/);
+  assert.equal((html.match(/class="ws-day-pick"/g) || []).length, 16);
+  assert.equal((html.match(/<li hidden>/g) || []).length, 6);
+  assert.match(html, /aria-expanded="false"[^>]*>More<\/button>/);
+  const expanded = renderScreenContent(weather, 'C', dates.at(-1), true);
+  assert.doesNotMatch(expanded, /<li hidden>/);
+  assert.match(expanded, /aria-expanded="true"[^>]*>Less<\/button>/);
+});
+
+
+test('omits null daily forecasts without shifting later daily details', () => {
+  const missing = structuredClone(json);
+  missing.daily.temperature_2m_max[1] = null;
+  missing.daily.weather_code[7] = null;
+  const weather = parseWeather(missing, 'Beckenham');
+  assert.equal(weather.days.length, 5);
+  assert.equal(weather.tomorrow, undefined);
+  assert.equal(weather.days[0].date, json.daily.time[2]);
+  assert.equal(weather.days[0].sunrise, json.daily.sunrise[2].slice(11, 16));
+  assert.doesNotMatch(renderScreenContent(weather), /Unknown|🌡️|data-upcoming-toggle/);
+});
+
+test('null hourly values do not become freezing temperatures or clear day parts', () => {
+  const missing = structuredClone(json);
+  const date = missing.daily.time[1];
+  const bad = missing.hourly.time.findIndex((time) => time === `${date}T07:00`);
+  missing.hourly.temperature_2m[bad] = null;
+  missing.hourly.weather_code[bad] = null;
+  const weather = parseWeather(missing, 'Beckenham');
+  assert.equal(weather.tomorrow.hours.length, 23);
+  assert.ok(!weather.tomorrow.hours.some((hour) => hour.time === '07:00'));
+  assert.deepEqual(weather.tomorrow.parts.map((part) => part.name), ['Afternoon', 'Evening']);
+  assert.match(renderScreenContent(weather, 'C', date), /Partial forecast: available hours only/);
+});
+
+
+test('More and Less preserve expansion across selection and reset a hidden selection on collapse', () => {
+  const weather = parseWeather(json, 'Beckenham');
+  weather.days = Array.from({ length: 15 }, (_, i) => ({ ...weather.days[0], date: new Date(Date.UTC(2026, 9, 30 + i)).toISOString().slice(0, 10) }));
+  const content = { innerHTML: '', dataset: {} };
+  const originalDocument = globalThis.document;
+  globalThis.document = { getElementById: () => ({ dataset: {}, querySelector: () => content }) };
+  try {
+    toggleUpcoming(weather);
+    assert.match(content.innerHTML, /aria-expanded="true"/);
+    pickDay(weather.days.at(-1).date, weather);
+    assert.match(content.innerHTML, /aria-expanded="true"/);
+    assert.match(content.innerHTML, /Hour by hour/);
+    toggleUpcoming(weather);
+    assert.match(content.innerHTML, /aria-expanded="false"/);
+    assert.match(content.innerHTML, /Rain today/);
+  } finally {
+    pickDay(null, weather);
+    globalThis.document = originalDocument;
+  }
+});
+
+
+test('requests and parses apparent temperatures throughout the forecast', () => {
+  const source = structuredClone(json);
+  source.hourly.apparent_temperature = source.hourly.temperature_2m.map((t) => t - 5);
+  source.hourly.wind_gusts_10m = source.hourly.time.map(() => 30);
+  source.daily.apparent_temperature_max = source.daily.temperature_2m_max.map((t) => t - 5);
+  source.daily.apparent_temperature_min = source.daily.temperature_2m_min.map((t) => t - 5);
+  const weather = parseWeather(source, 'Test');
+  assert.equal(weather.today.hours[0].feelsLike, weather.today.hours[0].temperature - 5);
+  assert.equal(weather.tomorrow.feelsHigh, weather.tomorrow.high - 5);
+  assert.equal(weather.tomorrow.parts[0].feelsLow, weather.tomorrow.parts[0].low - 5);
+  const regular = renderScreenContent(weather, 'C', weather.tomorrow.date, false, false);
+  const feels = renderScreenContent(weather, 'C', weather.tomorrow.date, false, true);
+  assert.notEqual(regular, feels);
+  assert.match(feels, /data-temperature-mode="feels" aria-pressed="true"/);
+  assert.match(feels, /gusts up to 30 mph/);
+  assert.match(feels, new RegExp(`${weather.tomorrow.feelsHigh}°`));
+  assert.match(renderScreenContent(weather, 'F', null, false, true), /High 52°/);
+  assert.equal(weather.tomorrow.high, Math.round(source.daily.temperature_2m_max[1]));
+  const url = new URL(forecastUrl({ latitude: 51, longitude: 0 }));
+  assert.match(url.searchParams.get('hourly'), /apparent_temperature/);
+  assert.match(url.searchParams.get('daily'), /apparent_temperature_min/);
+});
+
+test('missing apparent temperatures remain unavailable, including range bars', () => {
+  const html = renderScreenContent(parseWeather(json, 'Test'), 'F', null, false, true);
+  assert.match(html, /High —°/);
+  assert.doesNotMatch(html, /NaN|Infinity/);
+});
+
+test('wind summaries handle calm, gusts, missing data and partial coverage', () => {
+  assert.equal(windSummary([{ wind: null }]), 'Wind forecast unavailable');
+  assert.equal(windSummary([{ wind: 0 }]), 'Light winds · 0 mph');
+  assert.equal(windSummary([{ time: 'Now', wind: 5, gust: null }, { time: '15:00', wind: 28, gust: 40 }, { wind: null }]), 'Windy · 5–28 mph, strongest at 15:00 · gusts up to 40 mph · partial wind forecast');
 });

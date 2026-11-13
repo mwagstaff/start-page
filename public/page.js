@@ -5,6 +5,7 @@
 // Readers who haven't chosen any yet get their region's suggested ones.
 // Every change to the settings is recorded (history.js), so it can be undone.
 
+import { searchProvider, updateSearchForm, validSearch } from './search.js';
 import { buildCards } from './stories.js';
 import { renderWidget } from './cards.js';
 import { setTemperatureUnit, showWeather, shownWeather, temperatureUnit, unitForLocale } from './forecast.js';
@@ -142,6 +143,7 @@ function drawCards() {
   if (onSuggestedPage() && !catalogue) return;
   const layout = tabCards().filter((card) => !card.hidden);
   const html = buildCards(allWidgets(), layout, feeds.defaultLimit, MAX_CARD_ITEMS).map((card) => renderWidget(card)).join('');
+  grid.dispatchEvent(new Event('cards:beforechange'));
   grid.classList.remove('packed');
   grid.innerHTML = html;
   // layout.js reads these to keep each card in the reader's column.
@@ -205,6 +207,8 @@ function applyPageOptions() {
   root.classList.toggle('no-backdrop', profile?.backdrop === false);
   document.body.classList.toggle('has-backdrop', profile?.backdrop !== false && Boolean(document.querySelector('.backdrop')));
   applyTemperatureUnit();
+  updateSearchForm(document.querySelector('.search'), settings?.search);
+  document.dispatchEvent(new CustomEvent('keyboard:settings', { detail: { enabled: settings?.shortcuts !== false } }));
 }
 
 // Temperatures in °C or °F: the one chosen in Settings, or else the usual one for the
@@ -331,6 +335,22 @@ export function setSolid(on) {
 export function setTemperature(unit) {
   const { temperature, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
   save(unit ? { ...rest, temperature: unit } : rest, unit ? `Showed temperatures in °${unit}` : 'Showed temperatures in the local unit');
+  applyPageOptions();
+}
+
+export function setShortcuts(enabled) {
+  const { shortcuts, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  // This preference must not turn the suggested page into a customised card layout.
+  record(`${enabled ? 'Enabled' : 'Disabled'} single-key shortcuts`);
+  settings = { ...rest, ...(!settings && { welcome: true }), ...(!enabled && { shortcuts: false }) };
+  saveSettings(settings);
+  applyPageOptions();
+}
+
+export function setSearch(value) {
+  const { search, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  const next = validSearch(value);
+  save({ ...rest, ...(next && { search: next }) }, `Changed search to ${searchProvider(next).name}`);
   applyPageOptions();
 }
 

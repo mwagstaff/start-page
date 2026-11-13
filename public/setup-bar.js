@@ -10,6 +10,7 @@
 import { escapeHtml } from './cards.js';
 import { currentFeeds, currentProfile, currentSettings, fetchCatalogue, fetchFeeds, finishSetup, guessedRegion, setDensity, setProfile, welcoming } from './page.js';
 import { DENSITIES } from './settings.js';
+import { barCommand, spatialNeighbor } from './keyboard-navigation.js';
 import { PILLARS, defaultProfile, pillarTopics, profileRegion, regionOutlets, topicCardId, withOutlet, withRegion, withTopic } from './topics.js';
 
 const PATH = '/settings/topics-and-sources'; // an older address for choosing topics: opens the bar
@@ -26,6 +27,34 @@ let choice = null; // the profile as last chosen here (changes save one after an
 let saving = Promise.resolve();
 let busy = 0;
 let toast = null;
+let focusRequest = null;
+
+const controlFace = (element) => element.closest('label') ?? element;
+const usable = (element) => !element.matches(':disabled') && element.tabIndex >= 0 && !element.closest('[hidden], [inert]') && controlFace(element).getClientRects().length && getComputedStyle(controlFace(element)).visibility !== 'hidden';
+const controls = (scope) => [...(scope?.querySelectorAll('button, input, select, textarea, a[href]') ?? [])].filter(usable);
+const mainControls = () => controls(container.querySelector('.sb-main'));
+const drawerControls = () => controls(container.querySelector('.sb-drawer')).filter((element, _, all) => element.type !== 'radio' || element.checked || !all.some((other) => other.type === 'radio' && other.name === element.name && other.checked));
+
+function focusControl(element) {
+  if (!element || !usable(element)) return;
+  element.focus({ preventScroll: true });
+  controlFace(element).scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+function focusBookmark() {
+  const element = document.activeElement;
+  if (!container.contains(element)) return null;
+  return { main: Boolean(element.closest('.sb-main')), name: element.name, value: element.value, pillar: element.dataset.pillar, action: element.dataset.action };
+}
+
+function restoreControl(saved) {
+  if (!saved) return;
+  const candidates = controls(container.querySelector(saved.main ? '.sb-main' : '.sb-drawer'));
+  const match = candidates.find((element) => saved.pillar ? element.dataset.pillar === saved.pillar
+    : saved.action ? element.dataset.action === saved.action
+      : element.name === saved.name && element.value === saved.value);
+  focusControl(match);
+}
 
 const REGIONS = [['uk', 'UK'], ['us', 'US'], ['both', 'UK and US']];
 const TILE_LABELS = { sport: 'All sport' }; // the card itself is just "Sport"
@@ -160,6 +189,9 @@ function panel(id) {
 }
 
 function render() {
+  const savedFocus = focusBookmark();
+  const request = focusRequest?.owner === document.activeElement ? focusRequest : null;
+  focusRequest = null;
   const welcome = mode === 'welcome';
   const openLabel = open === 'display' ? 'Display' : PILLARS.find((p) => p.id === open)?.label ?? '';
   container.hidden = !shown;
@@ -169,6 +201,7 @@ function render() {
   opener.classList.toggle('is-active', shown);
   if (!shown) {
     container.replaceChildren();
+    document.dispatchEvent(new CustomEvent('setup:change', { detail: { shown: false } }));
     return;
   }
   container.innerHTML = `
@@ -198,6 +231,10 @@ function render() {
         <div class="sb-sheet-foot"><button type="button" class="sb-done" data-action="done">Done</button></div>
       </div>
     </section>`;
+  if (request?.drawer) focusControl(drawerControls()[0]);
+  else if (request?.pillar) focusControl(mainControls().find((element) => element.dataset.pillar === request.pillar));
+  else restoreControl(savedFocus);
+  document.dispatchEvent(new CustomEvent('setup:change', { detail: { shown: true } }));
 }
 
 // ---- showing and hiding -------------------------------------------------------------------
@@ -241,8 +278,9 @@ async function show({ pillar = null } = {}) {
   redraw();
 }
 
-function setOpen(pillar) {
+function setOpen(pillar, enter = false) {
   open = open === pillar ? null : pillar;
+  focusRequest = { owner: document.activeElement, ...(open && enter ? { drawer: true } : { pillar }) };
   redraw();
 }
 
@@ -296,7 +334,9 @@ function glow({ scroll = false } = {}) {
 
 function highlight(topic) {
   glowing = { id: topicCardId(catalogue, topic), start: Date.now() };
-  glow({ scroll: true });
+  // Keep the selected control visible while someone is still choosing with keys.
+  const navigating = document.body.classList.contains('keyboard-input') && container.contains(document.activeElement);
+  glow({ scroll: !navigating });
 }
 
 grid?.addEventListener('cards:change', () => glow());
@@ -354,8 +394,55 @@ opener.addEventListener('click', () => {
   else show();
 });
 
+container.addEventListener('keydown', (event) => {
+  if (document.querySelector('dialog[open]')) return;
+  const target = event.target;
+  const inMain = Boolean(target.closest('.sb-main'));
+  const command = barCommand(event, {
+    inMain,
+    checkable: target.matches('input[type="checkbox"], input[type="radio"]'),
+    nativeArrows: target.isContentEditable || target.matches('select, textarea, input:not([type="checkbox"])'),
+  });
+  if (!command) return;
+  if (command === 'back') {
+    event.preventDefault();
+    if (open) setOpen(open);
+    else done();
+    return;
+  }
+  if (command === 'toggle') { event.preventDefault(); target.click(); return; }
+  if (inMain) {
+    const buttons = mainControls();
+    const index = buttons.indexOf(target.closest('button'));
+    if (index < 0) return;
+    event.preventDefault();
+    if (command === 'ArrowDown') {
+      const pillar = target.closest('[data-pillar]')?.dataset.pillar;
+      if (pillar && open !== pillar) setOpen(pillar, true);
+      else if (open) focusControl(drawerControls()[0]);
+    } else {
+      const next = command === 'Home' ? 0 : command === 'End' ? buttons.length - 1
+        : command === 'ArrowLeft' ? index - 1 : command === 'ArrowRight' ? index + 1 : index;
+      focusControl(buttons[Math.max(0, Math.min(buttons.length - 1, next))]);
+    }
+    return;
+  }
+  const items = drawerControls();
+  const index = items.indexOf(target);
+  if (index < 0) return;
+  event.preventDefault();
+  const rects = items.map((item) => controlFace(item).getBoundingClientRect());
+  const next = spatialNeighbor(rects, index, command, rects[index], true);
+  if (next >= 0) focusControl(items[next]);
+  else if (command === 'ArrowUp') focusControl(mainControls().find((element) => element.dataset.pillar === open));
+});
+
+// Escape still closes an open drawer when focus is elsewhere on the page.
 addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && shown && open && !document.querySelector('dialog[open]')) setOpen(open);
+  if (!event.defaultPrevented && !event.isComposing && !event.altKey && !event.ctrlKey && !event.metaKey && event.key === 'Escape' && shown && open && !document.querySelector('dialog[open]')) {
+    event.preventDefault();
+    setOpen(open);
+  }
 });
 
 // Undo, redo or a change made elsewhere (a card's ×, Settings): show the page's choices.

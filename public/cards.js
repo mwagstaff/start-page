@@ -26,7 +26,7 @@ function renderMeta(item, widget, now) {
   if (item.points != null) parts.push(`${item.points} points`);
   if (item.commentsUrl) {
     const label = item.comments != null ? `${item.comments} comments` : 'comments';
-    parts.push(`<a href="${escapeHtml(item.commentsUrl)}" target="_blank" rel="noopener">${label}</a>`);
+    parts.push(`<a class="comments-link" href="${escapeHtml(item.commentsUrl)}" target="_blank" rel="noopener" aria-label="${escapeHtml(`${label} on ${item.title}`)}">${label}</a>`);
   }
   return parts.length ? `<div class="meta">${parts.join('<span aria-hidden="true"> · </span>')}</div>` : '';
 }

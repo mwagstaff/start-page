@@ -92,6 +92,13 @@ npm test
   2MB, gives up after 10 seconds, and fetches at most 30 new feeds a minute. Each feed is kept
   for `refreshMinutes` and shared by everyone who adds it; its stories use the feed's own
   images, loaded by the browser.
+- **Advanced settings → Search** chooses Google (the default), Bing, DuckDuckGo,
+  Yahoo, Brave Search or Ecosia. A custom provider needs a name and an http(s) search
+  URL containing `{query}`, for example `https://example.com/search?q={query}`.
+  Search words are URL-encoded, results open in a new tab, and the masthead names
+  the active provider. The choice and custom URL are saved in this browser and
+  included in settings export/import and undo/history. Switching to a preset keeps
+  the custom provider available for later.
 - Modules in `public/` import each other by plain path; the page's import map adds each file's
   content hash, so browsers never mix old and new versions after a deploy. The server works the
   hashes out again whenever a file in `public/` changes.
@@ -137,6 +144,36 @@ npm test
   "Reset cards" goes back to the suggested page. "Start over…" (`public/start-over.js`) asks
   first, offering an export, then clears the settings and history from this browser and
   reloads the home page as on a first visit. It can't be undone.
+
+## Keyboard navigation
+
+Keyboard navigation is on by default, without moving focus on page load. Global
+badges use the logo's blue/violet finish; story hints and the detailed guide stay
+hidden until needed. Number badges choose cards (`1`–`9`, then `0` for the tenth)
+and reveal that card's letter shortcuts: A, B, D, E… skip C, S and W. Left/right
+arrows move to the adjacent column, choosing the card and story closest to the
+current reading height. At the first/last story, up/down moves to the last/first
+story in the card directly above/below, when one exists. Arrows do not wrap or
+jump diagonally. Home/End goes to the first/last story in the current card.
+Enter opens the focused link and C opens that story's comments. `/` focuses search
+(S also works); Command-. on Mac or Ctrl-. opens Customise, and W opens weather.
+Keyboard focus has a soft halo; pointer interaction clears it and the story hints.
+
+In Customise, left/right and Home/End move between the bar's buttons. Down on a
+section opens its choices; arrows move between tiles and checkboxes, while radio
+groups, selects and text fields keep their native keys. Enter or Space activates
+a button or choice. Escape closes the drawer and returns to its section, then
+closes the bar and returns to the story. Tab remains available throughout, and
+changing an option preserves focus even when the bar redraws.
+
+Typing, browser shortcuts, dialogs and normal Tab navigation keep their usual behaviour.
+Escape returns from search or page controls without disabling keyboard navigation. Card numbers
+stay stable during a reading session; story focus follows its URL through refreshes
+and layout changes. Hidden stories have no shortcuts. **Advanced settings → Keyboard**
+turns off single-key shortcuts; arrows, Tab and Command-. / Ctrl-. remain available.
+In the weather screen, **↑ / ↓** select the previous/next forecast day (revealing more
+days when needed); **W** or **Escape** closes it without changing keyboard mode.
+This preference is included in settings export/import and undo/history.
 
 ## Production deployment
 

@@ -50,12 +50,18 @@ test('the page carries its version, Customise button, the setup bar\'s place, an
   assert.match(html, /data-tab="home" data-version="abc123"/);
   assert.doesNotMatch(html, /class="refresh"|class="history-open/);
   assert.match(html, /<button class="customise-open" type="button"[^>]* aria-controls="setup-bar" hidden>.*<span>Customise<\/span><\/button>/);
-  assert.match(html, /<div class="setup-bar-wrap wrap" id="setup-bar" hidden><\/div>\s*<main class="wrap grid">/);
+  assert.match(html, /<div class="setup-bar-wrap wrap" id="setup-bar" hidden><\/div>\s*<main class="wrap grid" id="stories" tabindex="-1">/);
   assert.match(html, /<form class="search" action="https:\/\/www\.google\.com\/search" method="get" target="_blank" rel="noopener" role="search">\s*<input type="search" name="q"/);
   assert.match(html, /<script type="importmap">\{"imports":\{"\/static\/page\.js":"\/static\/page\.js\?v=h1","\/static\/cards\.js":"\/static\/cards\.js\?v=h2"\}\}<\/script>/);
   assert.match(html, /src="\/static\/page\.js\?v=h1"/);
   assert.match(html, /localStorage\.getItem\("start-page:settings"\)\)/);
   assert.match(html, /settings\?\.tabs\?\.\["home"\]/);
   assert.match(html, /<script type="module" src="\/static\/setup-bar\.js">/);
+  assert.match(html, /<script type="module" src="\/static\/keyboard\.js">/);
+  assert.match(html, /class="skip-stories" href="#stories"/);
+  assert.doesNotMatch(html, /class="keyboard-open"|Keyboard on/);
+  assert.doesNotMatch(html, /autofocus/); // Keyboard mode must not steal focus on load.
+  assert.doesNotMatch(html, /class="date"/);
+  assert.doesNotMatch(html, /Keyboard navigation \(\/\)/);
   assert.match(html, /settings\.welcome === true\)\) root\.classList\.add\('setup-pending'\)/);
 });
