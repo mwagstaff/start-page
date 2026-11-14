@@ -9,7 +9,7 @@ const command = (key, options = {}, extra = {}) => shortcutCommand({ key, ...ext
 
 test('keyboard navigation is enabled by default', () => {
   assert.deepEqual(shortcutCommand({ key: '1' }), { type: 'card', index: 0 });
-  assert.equal(shortcutCommand({ key: 'Escape' }), null);
+  assert.deepEqual(shortcutCommand({ key: 'Escape' }), { type: 'reset' });
   assert.deepEqual(shortcutCommand({ key: 'ArrowDown' }), { type: 'move', key: 'ArrowDown' });
 });
 
@@ -34,12 +34,12 @@ test('slash focuses search even after leaving mode; letters and arrows require m
   assert.equal(command('Tab'), null); // native focus order
 });
 
-test('Escape never toggles navigation, and search Escape only returns focus', () => {
+test('Escape resets selection even while typing or opted out', () => {
   for (const enabled of [true, false]) {
-    assert.equal(command('Escape', { enabled }), null);
-    assert.equal(command('Escape', { enabled, active: false }), null);
+    assert.deepEqual(command('Escape', { enabled }), { type: 'reset' });
+    assert.deepEqual(command('Escape', { enabled, active: false }), { type: 'reset' });
     for (const active of [true, false]) {
-      assert.deepEqual(command('Escape', { enabled, active, editing: true }), { type: 'return' });
+      assert.deepEqual(command('Escape', { enabled, active, editing: true }), { type: 'reset' });
       assert.equal(command('Escape', { enabled, active }, { repeat: true }), null);
       assert.equal(command('Escape', { enabled, active, blocked: true }), null);
       for (const flag of ['ctrlKey', 'metaKey', 'altKey', 'shiftKey', 'isComposing', 'defaultPrevented']) assert.equal(command('Escape', { enabled, active }, { [flag]: true }), null);
@@ -85,7 +85,7 @@ test('typing, IME, browser combinations and existing handlers keep their keys', 
     assert.equal(command(key, { blocked: true }), null);
     for (const flag of ['ctrlKey', 'metaKey', 'altKey', 'isComposing', 'defaultPrevented']) assert.equal(command(key, {}, { [flag]: true }), null);
   }
-  assert.deepEqual(command('Escape', { editing: true }), { type: 'return' });
+  assert.deepEqual(command('Escape', { editing: true }), { type: 'reset' });
   assert.equal(command('a', {}, { shiftKey: true }), null);
   assert.equal(command('c', {}, { repeat: true }), null);
   assert.deepEqual(command('ArrowDown', {}, { repeat: true }), { type: 'move', key: 'ArrowDown' });
@@ -94,7 +94,7 @@ test('typing, IME, browser combinations and existing handlers keep their keys', 
 test('opting out disables every character shortcut but retains arrows and Escape', () => {
   for (const key of ['/', 'a', 'c', 'u', 's', 'w', '1', '0']) assert.equal(command(key, { enabled: false }), null);
   assert.deepEqual(command('ArrowDown', { enabled: false }), { type: 'move', key: 'ArrowDown' });
-  assert.equal(command('Escape', { enabled: false }), null);
+  assert.deepEqual(command('Escape', { enabled: false }), { type: 'reset' });
 });
 
 test('a refresh follows the focused story URL rather than its former index', () => {
@@ -136,4 +136,12 @@ test('T toggles forecast temperatures and respects shortcut guards', () => {
   assert.deepEqual(weatherShortcutCommand({ key: 't' }), { type: 'temperature' });
   for (const options of [{ enabled: false }, { editing: true }, { blocked: true }]) assert.equal(weatherShortcutCommand({ key: 't' }, options), null);
   for (const flag of ['repeat', 'ctrlKey', 'metaKey', 'altKey', 'shiftKey', 'isComposing', 'defaultPrevented']) assert.equal(weatherShortcutCommand({ key: 't', [flag]: true }), null);
+});
+
+test('question mark toggles help, including Shift+/ keyboards, while typing and opt-out win', () => {
+  assert.deepEqual(command('?'), { type: 'help' });
+  assert.deepEqual(command('?', {}, { shiftKey: true }), { type: 'help' });
+  for (const options of [{ editing: true }, { enabled: false }, { blocked: true }]) assert.equal(command('?', options), null);
+  for (const flag of ['repeat', 'ctrlKey', 'metaKey', 'altKey', 'isComposing', 'defaultPrevented']) assert.equal(command('?', {}, { [flag]: true }), null);
+  assert.deepEqual(command('Escape'), { type: 'reset' });
 });

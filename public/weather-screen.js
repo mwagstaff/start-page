@@ -364,7 +364,7 @@ async function pick(date, { scroll = false } = {}) {
   if (request !== pickRequest || !screen()?.open) return;
   pickDay(date, shownWeather() ?? fetched);
   // Focus stays on the day picked (now drawn afresh), or on the week once back to today.
-  const selected = screen().querySelector(date ? '.ws-day-pick[aria-pressed="true"]' : '.ws-day-pick');
+  const selected = screen().querySelector('.ws-day-pick[aria-pressed="true"]');
   selected?.focus({ preventScroll: true });
   if (scroll) selected?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
@@ -416,7 +416,7 @@ document.addEventListener('keydown', (event) => {
   const days = [...dialog.querySelectorAll('.ws-day-pick')];
   const selected = Math.max(0, days.findIndex((day) => day.getAttribute('aria-pressed') === 'true'));
   const next = days[selected + command.step];
-  if (!next) return; // stop at Today and the last available day
+  if (!next) return; // stop at the first and last available day
   const date = next.dataset.day;
   if (next.closest('[hidden]')) toggleUpcoming(shownWeather() ?? fetched);
   pick(date, { scroll: true });

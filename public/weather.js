@@ -47,12 +47,12 @@ async function forecastFor(coords) {
   const cached = stored(FORECAST_KEY);
   // A forecast cached before the weather screen showed today's rain, or the days ahead hour by
   // hour: fetch it again.
-  if (cached?.version === 3 && cached?.spot === spot && cached.weather.today?.rainHours && cached.weather.days?.[0]?.hours && Date.now() - cached.fetchedAt < REFRESH_MS) return cached.weather;
+  if (cached?.version === 4 && cached?.spot === spot && cached.weather.today?.rainHours && cached.weather.days?.[0]?.hours && Date.now() - cached.fetchedAt < REFRESH_MS) return cached.weather;
   try {
     const [response, name] = await Promise.all([fetch(forecastUrl(coords)), placeName(spot, coords)]);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const weather = { ...parseWeather(await response.json(), name), stale: false };
-    store(FORECAST_KEY, { version: 3, spot, fetchedAt: Date.now(), weather });
+    store(FORECAST_KEY, { version: 4, spot, fetchedAt: Date.now(), weather });
     return weather;
   } catch {
     return cached?.spot === spot ? { ...cached.weather, stale: true } : null;

@@ -330,3 +330,44 @@ test('wind summaries handle calm, gusts, missing data and partial coverage', () 
   assert.equal(windSummary([{ wind: 0 }]), 'Light winds · 0 mph');
   assert.equal(windSummary([{ time: 'Now', wind: 5, gust: null }, { time: '15:00', wind: 28, gust: 40 }, { wind: null }]), 'Windy · 5–28 mph, strongest at 15:00 · gusts up to 40 mph · partial wind forecast');
 });
+
+
+function withYesterday() {
+  const source = structuredClone(json);
+  const date = '2026-10-28';
+  for (const [key, values] of Object.entries(source.daily)) {
+    values.unshift(key === 'time' ? date : ['sunrise', 'sunset'].includes(key) ? date + values[0].slice(10) : values[0]);
+  }
+  source.daily.temperature_2m_max[0] = 22;
+  source.daily.temperature_2m_min[0] = 7;
+  for (const [key, values] of Object.entries(source.hourly)) {
+    values.unshift(...Array.from({ length: 24 }, (_, h) => key === 'time' ? `${date}T${String(h).padStart(2, '0')}:00` : values[0]));
+  }
+  return source;
+}
+
+test('yesterday precedes selected Today without shifting current or future weather', () => {
+  assert.equal(new URL(forecastUrl({ latitude: 51, longitude: 0 })).searchParams.get('past_days'), '1');
+  const weather = parseWeather(withYesterday(), 'Beckenham');
+  const baseline = parseWeather(json, 'Beckenham');
+  assert.deepEqual(weather.today, baseline.today);
+  assert.deepEqual(weather.tomorrow, baseline.tomorrow);
+  assert.deepEqual([weather.high, weather.low, weather.hours], [baseline.high, baseline.low, baseline.hours]);
+  assert.deepEqual(weather.days.slice(1), baseline.days);
+  assert.deepEqual([weather.days[0].day, weather.days[0].high, weather.days[0].hours.length], ['Yesterday', 22, 24]);
+  const html = renderScreenContent(weather, 'C', null);
+  assert.match(html, /data-day="2026-10-28" aria-pressed="false"[\s\S]*?Yesterday[\s\S]*?data-day="" aria-pressed="true"[\s\S]*?Today/);
+  const picked = renderScreenContent(weather, 'C', '2026-10-28');
+  assert.match(picked, /Wednesday 28 October<button/);
+  assert.match(picked, /Hour by hour/);
+  assert.doesNotMatch(picked, /Rain today/);
+  assert.match(renderScreenContent(weather, 'C', null), /Rain today/);
+});
+
+test('missing yesterday data is omitted without affecting Today', () => {
+  const source = withYesterday();
+  source.daily.temperature_2m_max[0] = null;
+  const weather = parseWeather(source, 'Beckenham');
+  assert.deepEqual(weather.days, parseWeather(json, 'Beckenham').days);
+  assert.doesNotMatch(renderScreenContent(weather), /Yesterday/);
+});

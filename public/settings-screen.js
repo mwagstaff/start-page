@@ -111,7 +111,7 @@ function build() {
               <input type="checkbox" data-field="shortcuts">
               <span>Single-key shortcuts<small>Ready by default. Press a number to choose a card and reveal its story letters. / focuses search, C opens comments and W opens weather. Command-. (Mac) or Ctrl-. opens Customise.</small></span>
             </label>
-            <p class="settings-hint">Single-key shortcuts pause while typing. Turn them off to use arrows and Tab instead. Command-. / Ctrl-. remains available. Esc returns from search or closes page controls.</p>
+            <p class="settings-hint">Single-key shortcuts pause while typing. Turn them off to use arrows and Tab instead. Command-. / Ctrl-. remains available. Esc clears selection and closes page controls.</p>
           </section>
           <section class="settings-section" aria-labelledby="settings-weather-title">
             <h2 id="settings-weather-title">Weather</h2>

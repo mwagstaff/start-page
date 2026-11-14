@@ -88,6 +88,7 @@ export function forecastUrl({ latitude, longitude }) {
     wind_speed_unit: 'mph',
     timezone: 'auto', // the location's own time zone, so the hours read as local time
     forecast_days: String(FORECAST_DAYS),
+    past_days: '1',
   });
   return `https://api.open-meteo.com/v1/forecast?${params}`;
 }
@@ -202,7 +203,7 @@ function parseDay({ hourly, daily }, day, i) {
 
 // Today in detail and the week ahead, for the popover. Null for forecasts fetched before
 // these fields were asked for (a forecast cached in the browser).
-function parseOutlook(json, currentHour) {
+function parseOutlook(json, currentHour, todayIndex) {
   const { current, hourly, daily } = json;
   if (!daily.weather_code || !daily.sunrise) return null;
   const from = Math.max(0, hourly.time.findIndex((time) => time >= currentHour));
@@ -222,13 +223,16 @@ function parseOutlook(json, currentHour) {
       ...describe(hourly.weather_code[i], hourly.is_day[i] === 1),
     };
   });
-  const days = daily.time.slice(1, FORECAST_DAYS).flatMap((date, offset) => {
-    const i = offset + 1;
+  const yesterday = new Date(`${currentHour.slice(0, 10)}T12:00:00Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const yesterdayDate = yesterday.toISOString().slice(0, 10);
+  const days = daily.time.flatMap((date, i) => {
+    if (i === todayIndex || date < yesterdayDate || i >= todayIndex + FORECAST_DAYS) return [];
     // The API can include dates beyond model coverage with null daily values.
     if (![daily.temperature_2m_max[i], daily.temperature_2m_min[i], daily.weather_code[i], daily.precipitation_sum?.[i]].every(Number.isFinite)) return [];
     return [parseDay(json, {
       date,
-      day: offset === 0 ? 'Tomorrow' : `${weekday(date)} ${Number(date.slice(8, 10))}`,
+      day: date === yesterdayDate ? 'Yesterday' : i === todayIndex + 1 ? 'Tomorrow' : `${weekday(date)} ${Number(date.slice(8, 10))}`,
       high: Math.round(daily.temperature_2m_max[i]),
       low: Math.round(daily.temperature_2m_min[i]),
       rainChance: daily.precipitation_probability_max[i] ?? null,
@@ -237,7 +241,7 @@ function parseOutlook(json, currentHour) {
     }, i)];
   });
   // Today from midnight, for the rain chart. Hours gone stay (shown dimmed) so the day reads whole.
-  const rainHours = hourly.time.flatMap((time, i) => (time.startsWith(daily.time[0]) ? [{
+  const rainHours = hourly.time.flatMap((time, i) => (time.startsWith(daily.time[todayIndex]) ? [{
     time: time.slice(11, 16),
     mm: round1(hourly.precipitation?.[i] ?? 0),
     chance: hourly.precipitation_probability[i] ?? null,
@@ -245,16 +249,16 @@ function parseOutlook(json, currentHour) {
     now: time === currentHour,
   }] : []));
   return {
-    tomorrow: days.find((day) => day.date === daily.time[1]),
+    tomorrow: days.find((day) => day.date === daily.time[todayIndex + 1]),
     today: {
-      ...describe(daily.weather_code[0]),
-      sunrise: daily.sunrise[0].slice(11, 16),
-      sunset: daily.sunset[0].slice(11, 16),
-      uv: daily.uv_index_max ? Math.round(daily.uv_index_max[0]) : null,
-      rain: round1(daily.precipitation_sum?.[0] ?? 0),
+      ...describe(daily.weather_code[todayIndex]),
+      sunrise: daily.sunrise[todayIndex].slice(11, 16),
+      sunset: daily.sunset[todayIndex].slice(11, 16),
+      uv: daily.uv_index_max ? Math.round(daily.uv_index_max[todayIndex]) : null,
+      rain: round1(daily.precipitation_sum?.[todayIndex] ?? 0),
       humidity: current.relative_humidity_2m ?? null,
       wind: current.wind_speed_10m != null ? Math.round(current.wind_speed_10m) : null,
-      date: daily.time[0],
+      date: daily.time[todayIndex],
       hours,
       rainHours,
     },
@@ -266,6 +270,8 @@ function parseOutlook(json, currentHour) {
 export function parseWeather(json, name) {
   const { current, hourly, daily } = json;
   const currentHour = `${current.time.slice(0, 13)}:00`;
+  const todayIndex = daily.time.indexOf(current.time.slice(0, 10));
+  if (todayIndex === -1) throw new Error('Weather response is missing today');
   const start = hourly.time.findIndex((time) => time > currentHour);
   const hours = start === -1 ? [] : hourly.time.slice(start, start + HOURS_AHEAD).map((time, offset) => {
     const i = start + offset;
@@ -280,17 +286,17 @@ export function parseWeather(json, name) {
     name,
     temperature: Math.round(current.temperature_2m),
     feelsLike: rounded(current.apparent_temperature),
-    feelsHigh: rounded(daily.apparent_temperature_max?.[0]),
-    feelsLow: rounded(daily.apparent_temperature_min?.[0]),
+    feelsHigh: rounded(daily.apparent_temperature_max?.[todayIndex]),
+    feelsLow: rounded(daily.apparent_temperature_min?.[todayIndex]),
     ...describe(current.weather_code, current.is_day === 1),
     code: current.weather_code,
     isDay: current.is_day === 1,
-    high: Math.round(daily.temperature_2m_max[0]),
-    low: Math.round(daily.temperature_2m_min[0]),
-    rainChance: daily.precipitation_probability_max[0],
+    high: Math.round(daily.temperature_2m_max[todayIndex]),
+    low: Math.round(daily.temperature_2m_min[todayIndex]),
+    rainChance: daily.precipitation_probability_max[todayIndex],
     hours,
     rain: parseRain(json.minutely_15),
-    ...parseOutlook(json, currentHour),
+    ...parseOutlook(json, currentHour, todayIndex),
   };
 }
 
@@ -452,10 +458,11 @@ function renderTomorrow(tomorrow, unit, picked = false) {
 // The week, compact: each day's range of temperatures drawn on one scale for the whole week.
 // A day with its hours can be picked, to show it in detail; picked again, it's back to today.
 function renderWeek(days, unit, picked, today, expanded) {
-  if (today?.date) days = [{ ...today, day: 'Today', isToday: true }, ...days];
+  const visibleDays = VISIBLE_DAYS + days.filter((day) => day.date < today?.date).length;
+  if (today?.date) days = [{ ...today, day: 'Today', isToday: true }, ...days].sort((a, b) => a.date.localeCompare(b.date));
   const lowest = Math.min(...days.map((day) => day.low).filter(Number.isFinite));
   const span = Math.max(1, Math.max(...days.map((day) => day.high).filter(Number.isFinite)) - lowest);
-  const rows = days.map((day, index) => `<li${!expanded && index >= VISIBLE_DAYS ? ' hidden' : ''}>
+  const rows = days.map((day, index) => `<li${!expanded && index >= visibleDays ? ' hidden' : ''}>
           ${day.isToday || day.hours?.length ? `<button class="ws-day-pick" type="button" data-day="${day.isToday || day.date === picked ? '' : day.date}" aria-pressed="${day.isToday ? !picked : day.date === picked}" aria-label="${escapeHtml(`${longDate(day.date)}: ${day.label}, ${deg(day.high, unit)}° / ${deg(day.low, unit)}°`)}"></button>` : ''}
           <span class="ws-day">${escapeHtml(day.day)}</span>
           <span class="ws-icon" title="${escapeHtml(day.label)}">${day.icon}</span>
@@ -467,7 +474,7 @@ function renderWeek(days, unit, picked, today, expanded) {
   return `<section class="ws-section ws-week" aria-label="Upcoming">
         <h3>Upcoming${days.some((day) => day.hours?.length) ? '<span class="ws-h3-note">Pick a day · ↑ ↓ to change</span>' : ''}</h3>
         <ol id="ws-upcoming-days">${rows}</ol>
-        ${days.length > VISIBLE_DAYS ? `<button type="button" class="ws-more" data-upcoming-toggle aria-expanded="${expanded}" aria-controls="ws-upcoming-days">${expanded ? 'Less' : 'More'}</button>` : ''}
+        ${days.length > visibleDays ? `<button type="button" class="ws-more" data-upcoming-toggle aria-expanded="${expanded}" aria-controls="ws-upcoming-days">${expanded ? 'Less' : 'More'}</button>` : ''}
       </section>`;
 }
 
@@ -633,7 +640,7 @@ export function showWeather(weather) {
 // if the selected day would otherwise be hidden.
 export function toggleUpcoming(weather = lastShown) {
   upcomingExpanded = !upcomingExpanded;
-  if (!upcomingExpanded && weather?.days?.slice(VISIBLE_DAYS - 1).some((day) => day.date === pickedDay)) pickedDay = null;
+  if (!upcomingExpanded && weather?.days?.filter((day) => day.date > weather.today?.date).slice(VISIBLE_DAYS - 1).some((day) => day.date === pickedDay)) pickedDay = null;
   pickDay(pickedDay, weather);
 }
 

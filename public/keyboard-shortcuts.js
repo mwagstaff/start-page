@@ -10,8 +10,10 @@ export function shortcutCommand(event, { active = true, enabled = true, editing 
     return event.key === '.' && !event.shiftKey && !event.repeat && !(event.ctrlKey && event.metaKey)
       ? { type: 'page', key: 'customise' } : null;
   }
-  if (editing) return event.key === 'Escape' && !event.repeat ? { type: 'return' } : null;
+  if (event.key === 'Escape' && !event.shiftKey && !event.repeat) return { type: 'reset' };
+  if (editing) return null;
   if (enabled && event.key === '/' && !event.repeat) return { type: 'page', key: 's' };
+  if (enabled && event.key === '?' && !event.repeat) return { type: 'help' };
   if (!active) return null;
   if (event.shiftKey) return null;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return { type: 'move', key: event.key };

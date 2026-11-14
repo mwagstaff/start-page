@@ -10,7 +10,7 @@ const active = true;
 let enabled = currentSettings()?.shortcuts !== false;
 let keyboardInput = false;
 let pointerActive = false;
-let engaged = false;
+let helpOpen = false;
 let hintCardId = null;
 const customiseKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘.' : 'Ctrl+.';
 let last = null;
@@ -19,13 +19,14 @@ let cardOrder = [];
 let returningFrom = null;
 let focusSetup = false;
 const remembered = new Map();
+const resetOnClose = new WeakSet();
 
 const footer = document.createElement('footer');
 footer.className = 'keyboard-footer';
-footer.setAttribute('aria-label', 'Keyboard navigation');
+footer.setAttribute('aria-label', 'Keyboard help');
 footer.hidden = true;
 footer.innerHTML = `
-  <div class="keyboard-context"><span class="keyboard-mode-label">Keyboard mode</span><span class="keyboard-location"></span></div>
+  <div class="keyboard-context"><span class="keyboard-mode-label">Keyboard help</span><span class="keyboard-location"></span><button type="button" class="keyboard-help-close" aria-label="Close keyboard help">Close <kbd>?</kbd></button></div>
   <div class="keyboard-commands">
     <span class="keyboard-single"><kbd>1–9</kbd><kbd>0</kbd> Cards</span>
     <span class="keyboard-story-guide keyboard-single" title="C, S and W keep their page actions"><kbd>A</kbd><kbd>B</kbd><kbd>D</kbd> Select story</span>
@@ -95,8 +96,8 @@ function decorate() {
     for (const row of card.querySelectorAll('.item')) {
       const key = storyShortcut(shown.indexOf(row));
       badge(row, 'keyboard-story-key', key?.toUpperCase(), true);
-      badge(headline(row), 'keyboard-enter-key', '↵');
-      if (comments(row)) badge(comments(row), 'keyboard-comment-key', 'C');
+      badge(row, 'keyboard-enter-key', '↵');
+      if (comments(row)) badge(row, 'keyboard-comment-key', 'C');
       row.dataset.keyboardKey = key ?? '';
     }
   }
@@ -134,6 +135,8 @@ function restore(saved = last, scroll = true) {
 }
 
 function reflect() {
+  // Never change link geometry or re-pack cards between pointerdown and click.
+  if (pointerActive) return;
   const focus = document.activeElement;
   const saved = bookmark(focus);
   if (saved) { last = saved; remembered.set(saved.cardId, saved); }
@@ -143,7 +146,7 @@ function reflect() {
   document.body.classList.toggle('keyboard-typing', focus === search);
   const inSetup = Boolean(focus.closest('#setup-bar'));
   document.body.classList.toggle('keyboard-in-controls', inSetup);
-  footer.hidden = !active || !engaged || (!keyboardInput && !pointerActive) || modalOpen();
+  footer.hidden = !helpOpen || modalOpen();
   for (const card of grid.querySelectorAll('.card')) {
     const selected = active && keyboardInput && card.id === saved?.cardId;
     card.classList.toggle('keyboard-card', selected);
@@ -155,23 +158,20 @@ function reflect() {
     if (row.closest('.keyboard-card.keyboard-hints') && row.dataset.keyboardKey) link.setAttribute('aria-keyshortcuts', row.dataset.keyboardKey);
     else link.removeAttribute('aria-keyshortcuts');
   }
-  // Changing the guide's rows while a pointer is down can move the clicked button.
-  if (pointerActive) return;
   const card = focus.closest('.card');
   const row = focusedRow();
   footer.querySelector('.keyboard-story-guide').hidden = !card?.classList.contains('keyboard-hints');
   footer.querySelector('.keyboard-location').textContent = focus === search
-    ? 'Search · shortcuts paused · Esc returns to your story'
-    : inSetup ? 'Customise · ← → controls · ↓ choices · Enter / Space select · Esc back'
+    ? 'Search · shortcuts paused · Esc clears selection'
+    : inSetup ? 'Customise · ← → controls · ↓ choices · Enter / Space select · Esc resets'
       : card ? `${card.dataset.keyboardTitle} · ${row ? `Story ${rows(card).indexOf(row) + 1} of ${rows(card).length}` : 'No stories available'}`
-        : 'Choose a card or page shortcut';
+        : '';
   footer.querySelector('.keyboard-comments').hidden = !comments(row) || !enabled;
   footer.querySelector('.keyboard-enter-label').textContent = focus.matches('.comments-link') ? 'Open comments' : row ? 'Open story' : 'Activate';
 }
 
 function enter() {
   keyboardInput = true;
-  engaged = true;
   reflect();
   reserveFooter();
   decorate();
@@ -197,23 +197,52 @@ function pageAction(key) {
   }
 }
 
+function resetSelection() {
+  pointerActive = false;
+  keyboardInput = false;
+  helpOpen = false;
+  hintCardId = null;
+  last = null;
+  pendingFocus = null;
+  returningFrom = null;
+  focusSetup = false;
+  remembered.clear();
+  document.activeElement?.blur();
+  reflect();
+  reserveFooter();
+}
+
 function onKey(event) {
   const target = event.target;
+  const command = shortcutCommand(event, { active, enabled, editing: editing(target) });
+  if (command?.type === 'reset') {
+    resetSelection();
+    // Let an active drag's own Escape handler cancel it.
+    if (document.documentElement.classList.contains('is-reordering')) return;
+    event.preventDefault();
+    for (const dialog of document.querySelectorAll('dialog[open]')) {
+      resetOnClose.add(dialog);
+      dialog.close();
+    }
+    const bar = document.querySelector('#setup-bar');
+    if (bar && !bar.hidden) document.querySelector('.customise-open')?.click();
+    // Closing controls can synchronously return focus to their opener.
+    resetSelection();
+    return;
+  }
   if (!event.isComposing && !['Meta', 'Control', 'Alt', 'Shift'].includes(event.key)) {
     pointerActive = false;
     keyboardInput = true;
-    engaged = true;
     reflect();
   }
-  // Modal/native controls own their keys. Escape first closes a Customise drawer,
-  // then the bar; keyboard navigation stays enabled.
+  // Other keys remain owned by modal/native controls.
   if (modalOpen() || document.documentElement.classList.contains('is-reordering')) return;
-  if (target.closest('#setup-bar')) return; // the bar owns its navigation, including Escape
-  const command = shortcutCommand(event, { active, enabled, editing: editing(target) });
+  if (target.closest('#setup-bar')) return; // the bar owns its other navigation keys
   if (!command) return;
-  // Typing always wins, including slash characters. Escape returns from search.
-  if (command.type === 'return') {
-    if (target === search) { event.preventDefault(); restore(); }
+  if (command.type === 'help') {
+    event.preventDefault();
+    helpOpen = !helpOpen;
+    reflect();
     return;
   }
   if (command.type === 'page') { event.preventDefault(); pageAction(command.key); return; }
@@ -223,7 +252,6 @@ function onKey(event) {
       event.preventDefault();
       hintCardId = card.id;
       restore(remembered.get(card.id) ?? { cardId: card.id });
-      grid.dispatchEvent(new Event('layout:refresh'));
     }
     return;
   }
@@ -264,6 +292,8 @@ function onKey(event) {
           return Math.abs((rect.top + rect.bottom) / 2 - y) < Math.abs((previous.top + previous.bottom) / 2 - y) ? i : best;
         }, 0);
       }
+      // Arrow navigation reveals the destination's shortcuts just like its number key.
+      hintCardId = next.id;
       restore({ cardId: next.id, index: Math.max(0, nextIndex) });
       return;
     }
@@ -301,14 +331,14 @@ document.addEventListener('pointerdown', () => {
 function finishPointer() {
   // Keep layout stable between pointerdown and click, especially for footer buttons.
   setTimeout(() => {
-    const hadHints = hintCardId !== null;
     pointerActive = false;
     if (!keyboardInput) hintCardId = null;
     reflect();
-    if (hadHints && !keyboardInput) grid.dispatchEvent(new Event('layout:refresh'));
   }, 0);
 }
 document.addEventListener('click', () => { if (pointerActive) finishPointer(); }, true);
+// pointerup also covers releases that do not produce a click (e.g. a drag).
+document.addEventListener('pointerup', finishPointer, true);
 document.addEventListener('pointercancel', finishPointer, true);
 document.addEventListener('dragend', finishPointer, true);
 document.addEventListener('contextmenu', finishPointer, true);
@@ -328,16 +358,22 @@ document.addEventListener('setup:change', ({ detail }) => {
     }
   });
 });
-document.addEventListener('close', () => {
+document.addEventListener('close', (event) => {
   // Native close listeners can restore their own trigger after the capture phase.
   // Wait for them before returning to the saved story.
   setTimeout(() => {
+    if (resetOnClose.has(event.target)) {
+      resetOnClose.delete(event.target);
+      resetSelection();
+      return;
+    }
     decorate();
     if (!modalOpen() && active && returningFrom) { returningFrom = null; restore(); }
     reflect();
   }, 0);
 }, true);
 document.querySelector('.skip-stories')?.addEventListener('click', (event) => { event.preventDefault(); enter(); });
+footer.querySelector('.keyboard-help-close').addEventListener('click', () => { helpOpen = false; restore(last, false); reflect(); });
 footer.addEventListener('click', (event) => { const key = event.target.closest('[data-keyboard-action]')?.dataset.keyboardAction; if (key) pageAction(key); });
 
 // Reserve real room for the guide, so neither the window nor an internally scrolling

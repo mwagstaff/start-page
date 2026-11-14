@@ -149,8 +149,8 @@ npm test
 
 Keyboard navigation is on by default, without moving focus on page load. Global
 badges use the logo's blue/violet finish; story hints and the detailed guide stay
-hidden until needed. Number badges choose cards (`1`–`9`, then `0` for the tenth)
-and reveal that card's letter shortcuts: A, B, D, E… skip C, S and W. Left/right
+hidden until needed. Press `?` to show or hide Keyboard help; Escape never opens it. Number badges choose cards (`1`–`9`, then `0` for the tenth)
+and reveal letter shortcuts in the card gutters without resizing stories or changing how many fit: A, B, D, E… skip C, S and W. Left/right
 arrows move to the adjacent column, choosing the card and story closest to the
 current reading height. At the first/last story, up/down moves to the last/first
 story in the card directly above/below, when one exists. Arrows do not wrap or
@@ -162,12 +162,11 @@ Keyboard focus has a soft halo; pointer interaction clears it and the story hint
 In Customise, left/right and Home/End move between the bar's buttons. Down on a
 section opens its choices; arrows move between tiles and checkboxes, while radio
 groups, selects and text fields keep their native keys. Enter or Space activates
-a button or choice. Escape closes the drawer and returns to its section, then
-closes the bar and returns to the story. Tab remains available throughout, and
+a button or choice. Escape closes Customise and clears selection. Tab remains available throughout, and
 changing an option preserves focus even when the bar redraws.
 
 Typing, browser shortcuts, dialogs and normal Tab navigation keep their usual behaviour.
-Escape returns from search or page controls without disabling keyboard navigation. Card numbers
+Escape clears card/story selection, focus and story hints, hides Keyboard help, and closes page controls without disabling keyboard navigation. Card numbers
 stay stable during a reading session; story focus follows its URL through refreshes
 and layout changes. Hidden stories have no shortcuts. **Advanced settings → Keyboard**
 turns off single-key shortcuts; arrows, Tab and Command-. / Ctrl-. remain available.

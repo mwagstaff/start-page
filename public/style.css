@@ -64,6 +64,7 @@
   --gap: 22px;
   --column-width: 380px; /* layout.js reads this to count columns */
   --card-pad: 16px 20px 8px;
+  --card-inline-pad: 20px;
   --card-radius: 12px;
   --card-font: 15px;
   --item-pad: 10px;
@@ -74,6 +75,7 @@
   --gap: 16px;
   --column-width: 330px;
   --card-pad: 13px 16px 6px;
+  --card-inline-pad: 16px;
   --card-radius: 10px;
   --card-font: 14px;
   --item-pad: 8px;
@@ -84,6 +86,7 @@
   --gap: 12px;
   --column-width: 300px;
   --card-pad: 10px 12px 4px;
+  --card-inline-pad: 12px;
   --card-radius: 8px;
   --card-font: 14px;
   --item-pad: 6px;
@@ -2549,9 +2552,26 @@ body:has(.grid.packed) > .setup-bar-wrap { flex: none; }
 /* Quiet by default: global shortcuts are visible, story hints follow a number key. */
 :root {
   --keyboard-focus: #4778ed;
+  --keyboard-purple: #8555cd;
+  --keyboard-row-fill: rgb(123 73 191 / .13);
+  --keyboard-row-edge: rgb(123 73 191 / .65);
+  --keyboard-row-glow: rgb(123 73 191 / .18);
+  --keyboard-badge-face: linear-gradient(155deg, #9565df, #6634ac);
+  --keyboard-badge-selected: linear-gradient(155deg, #b98afa, #8047d0);
+  --keyboard-badge-size: 24px;
+  --keyboard-row-inset: 12px;
+  --keyboard-decoration-gutter: 30px;
   --key-face: radial-gradient(ellipse at 0 100%, rgb(239 92 255 / .8), transparent 70%), linear-gradient(160deg, #52e2ff -30%, #3a7dff 8%, #3635b9 55%, #5a24cf 100%);
 }
-@media (prefers-color-scheme: dark) { :root { --keyboard-focus: #8eafff; } }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --keyboard-focus: #8eafff;
+    --keyboard-purple: #bc92f4;
+    --keyboard-row-fill: rgb(151 96 224 / .19);
+    --keyboard-row-edge: rgb(188 146 244 / .72);
+    --keyboard-row-glow: rgb(157 103 231 / .22);
+  }
+}
 .skip-stories { position: fixed; top: -100px; left: 16px; z-index: 100; padding: 10px 14px; color: var(--text); background: var(--bg); border-radius: 6px; }
 .skip-stories:focus { top: 10px; }
 .keyboard-footer kbd, .keyboard-card-key, .keyboard-story-key, .keyboard-enter-key, .keyboard-comment-key, .keyboard-page-key {
@@ -2571,25 +2591,88 @@ body:has(.grid.packed) > .setup-bar-wrap { flex: none; }
 body:not(.keyboard-mode) :is(.keyboard-page-key, .keyboard-card-key, .keyboard-story-key, .keyboard-enter-key, .keyboard-comment-key), .keyboard-card-key[hidden], .keyboard-story-key[hidden] { display: none; }
 .keyboard-mode .card h2 { display: flex; align-items: center; gap: 10px; min-height: 31px; }
 .keyboard-card-key { position: static; min-width: 26px; height: 26px; font-size: 12px; }
-.keyboard-mode .item { position: relative; scroll-margin-block: 10px; }
-.keyboard-story-key { display: none; position: absolute; top: calc(var(--item-pad) + var(--story-spread, 0px) + 2px); left: 0; z-index: 1; }
-.keyboard-hints .item { padding-left: 32px; }
-.keyboard-card.keyboard-hints .keyboard-story-key:not([hidden]) { display: inline-grid; }
-.keyboard-mode .headline { position: relative; }
-.keyboard-hints .headline { padding-right: 26px; }
-.keyboard-enter-key { display: none; position: absolute; right: 1px; top: 1px; height: 20px; min-width: 20px; padding-inline: 3px; }
-.keyboard-hints .keyboard-row .keyboard-enter-key { display: inline-grid; }
-.keyboard-row { background: color-mix(in srgb, var(--keyboard-focus) 10%, var(--surface)); }
-.keyboard-comment-key { display: none; min-width: 18px; height: 18px; padding: 1px 3px; margin-left: 6px; border-radius: 4px; }
-.keyboard-hints .keyboard-row .keyboard-comment-key { display: inline-grid; }
-.keyboard-row .comments-link { color: var(--text); font-weight: 600; }
+.keyboard-mode .item { position: relative; isolation: isolate; scroll-margin-block: 10px; }
+.keyboard-mode .item::before {
+  content: '';
+  position: absolute;
+  inset: 0 -6px 0 calc(-1 * var(--keyboard-row-inset));
+  border: 1px solid var(--keyboard-row-edge);
+  border-radius: 10px;
+  background: linear-gradient(110deg, var(--keyboard-row-fill), transparent 90%), var(--keyboard-row-fill);
+  box-shadow: 0 0 8px var(--keyboard-row-glow), inset 0 1px 0 rgb(255 255 255 / .06);
+  opacity: 0;
+  transition: opacity 180ms cubic-bezier(.22, 1, .36, 1);
+  pointer-events: none;
+  z-index: -1;
+}
+.keyboard-mode .keyboard-row::before { opacity: 1; }
+/* Expand only the paint area: paired margins/padding preserve content geometry.
+   Story lists retain vertical scrolling; columns must not clip their edge badges. */
+.keyboard-mode .grid.packed .column { overflow: visible; }
+.keyboard-mode .items {
+  margin-inline: calc(-1 * var(--keyboard-decoration-gutter));
+  padding-inline: var(--keyboard-decoration-gutter);
+  margin-block: -8px;
+  padding-block: 8px;
+}
+.keyboard-story-key, .keyboard-enter-key, .keyboard-comment-key {
+  display: none;
+  position: absolute;
+  width: min(18px, var(--card-inline-pad));
+  min-width: 0;
+  height: 18px;
+  padding: 0;
+  border-radius: 4px;
+  font-size: 10px;
+  pointer-events: none;
+  z-index: 1;
+}
+.keyboard-story-key {
+  width: var(--keyboard-badge-size);
+  height: var(--keyboard-badge-size);
+  top: 50%;
+  left: calc(-1 * var(--keyboard-row-inset));
+  transform: translate(-50%, -50%);
+  border-radius: 7px;
+  font-size: 12px;
+  background: var(--keyboard-badge-face);
+  border-color: rgb(216 192 250 / .55);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .22), 0 2px 4px rgb(27 17 46 / .3);
+}
+.keyboard-story-key::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid rgb(237 220 255 / .9);
+  border-radius: inherit;
+  background: var(--keyboard-badge-selected);
+  box-shadow: 0 0 5px var(--keyboard-row-glow), inset 0 1px 0 rgb(255 255 255 / .25);
+  opacity: 0;
+  transition: opacity 180ms cubic-bezier(.22, 1, .36, 1);
+  z-index: -1;
+}
+.keyboard-story-key { isolation: isolate; }
+.keyboard-row .keyboard-story-key::before { opacity: 1; }
+.keyboard-enter-key, .keyboard-comment-key { right: calc(-1 * var(--card-inline-pad)); }
+.keyboard-enter-key { top: calc(var(--item-pad) + var(--story-spread, 0px) + 2px); }
+.keyboard-comment-key { bottom: calc(var(--item-pad) + var(--story-spread, 0px)); }
+.keyboard-card.keyboard-hints .keyboard-story-key:not([hidden]),
+.keyboard-hints .keyboard-row :is(.keyboard-enter-key, .keyboard-comment-key) { display: inline-grid; }
+
+.keyboard-row .comments-link { color: var(--text); }
+.comments-link { color: var(--text); font-weight: 600; }
 .comments-link { display: inline-block; white-space: nowrap; }
 /* Native focus plus a soft halo: mouse clicks never leave a keyboard selection behind. */
 body.keyboard-input :is(a, button, input, select, textarea, [tabindex]):focus {
   outline: 2px solid var(--keyboard-focus); outline-offset: 2px;
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--keyboard-focus) 15%, transparent), 0 0 20px color-mix(in srgb, var(--keyboard-focus) 28%, transparent);
 }
-body.keyboard-input .headline:focus { outline-offset: -1px; border-radius: 3px; box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--keyboard-focus) 12%, transparent), 0 0 12px color-mix(in srgb, var(--keyboard-focus) 20%, transparent); }
+/* The row is the headline's focus indicator; comments remain a distinct target. */
+body.keyboard-input .keyboard-row .headline:focus { outline: none; box-shadow: none; }
+body.keyboard-input .keyboard-row .comments-link:focus { outline: 1px solid var(--keyboard-purple); outline-offset: 2px; box-shadow: none; }
+@media (prefers-reduced-motion: reduce) {
+  .keyboard-mode .item::before, .keyboard-story-key::before { transition: none; }
+}
 /* Customise inputs are visually hidden inside their labels; light the actual tile. */
 body.keyboard-input #setup-bar label:has(input:focus) {
   outline: 2px solid var(--keyboard-focus); outline-offset: 2px; border-radius: 8px;
@@ -2597,14 +2680,14 @@ body.keyboard-input #setup-bar label:has(input:focus) {
 }
 body.keyboard-input #setup-bar label input:focus { outline: none; box-shadow: none; }
 .keyboard-mode .keyboard-card {
-  outline: 2px solid color-mix(in srgb, var(--keyboard-focus) 80%, transparent); outline-offset: 1px;
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--keyboard-focus) 12%, transparent), 0 0 26px color-mix(in srgb, var(--keyboard-focus) 30%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--keyboard-purple) 45%, transparent); outline-offset: 1px;
 }
 .keyboard-footer { position: fixed; z-index: 25; inset: auto 0 0; padding: 12px var(--gutter) max(12px, env(safe-area-inset-bottom)); color: var(--text); background: var(--bg); border-top: 1px solid var(--border); font-size: 12px; }
 .keyboard-footer[hidden], .keyboard-footer [hidden] { display: none !important; }
 .keyboard-context { display: flex; gap: 16px; align-items: center; margin-bottom: 10px; }
 .keyboard-mode-label { flex: none; color: var(--text); font-size: 11px; font-weight: 650; }
 .keyboard-mode-label::before { content: '●'; color: var(--keyboard-focus); font-size: 8px; margin-right: 6px; }
+.keyboard-help-close { margin-left: auto; white-space: nowrap; }
 .keyboard-location { font-size: 12px; }
 .keyboard-footer button { display: inline-flex; gap: 6px; align-items: center; border: 0; padding: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
 .keyboard-footer button:hover { color: var(--text); }
@@ -2629,6 +2712,8 @@ body:has(dialog[open]) > .keyboard-footer { display: none; }
   .masthead .wrap { gap: 10px; }
 }
 @media (forced-colors: active) {
+  .keyboard-mode .keyboard-row::before { border: 2px solid Highlight; background: none; box-shadow: none; }
+  .keyboard-story-key::before { display: none; }
   body.keyboard-input :focus, .keyboard-mode .keyboard-card { outline-color: Highlight; }
   .keyboard-footer kbd, .keyboard-card-key, .keyboard-story-key, .keyboard-enter-key, .keyboard-comment-key, .keyboard-page-key { color: ButtonText; background: ButtonFace; border-color: ButtonText; text-shadow: none; }
 }
