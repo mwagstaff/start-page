@@ -1,0 +1,38 @@
+
+Report:
+	* Time: 2026-11-16 01:56:24.108428904Z
+	* UDP: true
+	* IPv4: yes, 135.181.42.85:34615
+	* IPv6: yes, [2a01:4f9:c014:6e09::1]:37228
+	* MappingVariesByDestIP: false
+	* PortMapping: 
+	* Nearest DERP: Helsinki
+	* DERP latency:
+		- hel: 10.1ms  (Helsinki)
+		- nue: 35.6ms  (Nuremberg)
+		- waw: 36.8ms  (Warsaw)
+		- ams: 39.2ms  (Amsterdam)
+		- fra: 40.2ms  (Frankfurt)
+		- lhr: 46.5ms  (London)
+		- par: 50.3ms  (Paris)
+		- mad: 58.8ms  (Madrid)
+		- nyc: 102.4ms (New York City)
+		- iad: 104.8ms (Ashburn)
+		- tor: 107ms   (Toronto)
+		- ord: 113.9ms (Chicago)
+		- dbi: 124.8ms (Dubai)
+		- den: 133.6ms (Denver)
+		- mia: 136.6ms (Miami)
+		- dfw: 137.1ms (Dallas)
+		- bom: 155.8ms (Mumbai)
+		- lax: 165.8ms (Los Angeles)
+		- sea: 166.7ms (Seattle)
+		- sfo: 169.2ms (San Francisco)
+		- jnb: 185.2ms (Johannesburg)
+		- nai: 198.1ms (Nairobi)
+		- sin: 212.8ms (Singapore)
+		- hkg: 219.2ms (Hong Kong)
+		- sao: 227.7ms (São Paulo)
+		- syd:         (Sydney)
+		- tok:         (Tokyo)
+		- hnl:         (Honolulu)

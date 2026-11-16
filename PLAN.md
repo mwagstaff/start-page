@@ -1,5 +1,9 @@
 # Start Page: implementation plan (draft)
 
+Historical implementation plan. Production routing changed on 16 November 2026
+to a dedicated Cloudflare Tunnel directly on Mini; see
+[the current tunnel runbook](infrastructure/MINI-TUNNEL.md).
+
 A personal iGoogle/igHome-style homepage, self-hosted on `mini`, exposed through
 the existing sky Caddy + Cloudflare tunnel setup.
 

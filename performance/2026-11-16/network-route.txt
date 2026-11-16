@@ -1,0 +1,10 @@
+100.83.63.95     mikes-mac-mini     mike.wagstaff@  macOS  active; relay "lhr", tx 32175953060 rx 3124188252  
+  @tab1 host tab1.net
+  handle @tab1 {
+    reverse_proxy http://mikes-mac-mini.dog-rattlesnake.ts.net:3060 {
+      header_up Host {host}
+      header_up X-Forwarded-Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+    }
+  }

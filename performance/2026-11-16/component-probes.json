@@ -1,0 +1,11 @@
+{
+  "coldSourceRace": {
+    "upstreamFetches": 1,
+    "secondResponseItems": 0,
+    "firstResponseItems": 1
+  },
+  "customFeed100Distinct": {
+    "200": 30,
+    "429": 70
+  }
+}

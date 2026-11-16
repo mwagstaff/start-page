@@ -1,0 +1,53 @@
+[
+  {
+    "path": "/",
+    "status": "HTTP/2 200 ",
+    "headers": {
+      "cache-control": "no-cache",
+      "cf-cache-status": "DYNAMIC",
+      "content-encoding": "gzip"
+    }
+  },
+  {
+    "path": "/healthcheck",
+    "status": "HTTP/2 200 ",
+    "headers": {
+      "cache-control": "no-cache",
+      "cf-cache-status": "DYNAMIC",
+      "content-encoding": "gzip"
+    }
+  },
+  {
+    "path": "/api/feeds.json",
+    "status": "HTTP/2 200 ",
+    "headers": {
+      "cache-control": "public, max-age=60, stale-while-revalidate=600",
+      "cf-cache-status": "DYNAMIC",
+      "etag": "W/\"6ab18c9f4b12b022\"",
+      "content-encoding": "gzip"
+    },
+    "conditionalStatus": "HTTP/2 304 "
+  },
+  {
+    "path": "/api/catalogue.json",
+    "status": "HTTP/2 200 ",
+    "headers": {
+      "cache-control": "public, max-age=3600",
+      "cf-cache-status": "DYNAMIC",
+      "etag": "W/\"da6ff0b89d35842a\"",
+      "content-encoding": "gzip"
+    },
+    "conditionalStatus": "HTTP/2 304 "
+  },
+  {
+    "path": "/api/sources?ids=bbc.top,bbc.world",
+    "status": "HTTP/2 200 ",
+    "headers": {
+      "cache-control": "public, max-age=60, stale-while-revalidate=600",
+      "cf-cache-status": "DYNAMIC",
+      "etag": "W/\"567ec21502c6ef09\"",
+      "content-encoding": "gzip"
+    },
+    "conditionalStatus": "HTTP/2 304 "
+  }
+]

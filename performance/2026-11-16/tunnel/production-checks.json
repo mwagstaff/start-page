@@ -1,0 +1,81 @@
+[
+  {
+    "url": "https://tab1.net/",
+    "status": "HTTP/2 200 ",
+    "headers": {
+      "cache-control": "no-cache",
+      "cf-cache-status": "DYNAMIC",
+      "content-encoding": "gzip"
+    }
+  },
+  {
+    "url": "https://tab1.net/healthcheck",
+    "status": "HTTP/2 200 ",
+    "headers": {
+      "cache-control": "no-cache",
+      "cf-cache-status": "DYNAMIC",
+      "content-encoding": "gzip"
+    }
+  },
+  {
+    "url": "https://tab1.net/api/feeds.json",
+    "status": "HTTP/2 200 ",
+    "headers": {
+      "cache-control": "public, max-age=60, stale-while-revalidate=600",
+      "cf-cache-status": "HIT",
+      "etag": "W/\"9d9fbda7acd337ba\"",
+      "content-encoding": "gzip"
+    },
+    "conditionalStatus": "HTTP/2 304 ",
+    "conditionalBodyBytes": 0
+  },
+  {
+    "url": "https://tab1.net/api/catalogue.json",
+    "status": "HTTP/2 200 ",
+    "headers": {
+      "cache-control": "public, max-age=3600",
+      "via": "1.1 Caddy",
+      "cf-cache-status": "HIT",
+      "etag": "W/\"da6ff0b89d35842a\"",
+      "content-encoding": "gzip"
+    },
+    "conditionalStatus": "HTTP/2 304 ",
+    "conditionalBodyBytes": 0
+  },
+  {
+    "url": "https://tab1.net/api/sources?ids=bbc.top,bbc.world",
+    "status": "HTTP/2 200 ",
+    "headers": {
+      "cache-control": "public, max-age=60, stale-while-revalidate=600",
+      "cf-cache-status": "EXPIRED",
+      "etag": "W/\"94c6d65d347b717a\"",
+      "content-encoding": "gzip"
+    },
+    "conditionalStatus": "HTTP/2 304 ",
+    "conditionalBodyBytes": 0
+  },
+  {
+    "url": "https://tab1.net/api/sources?ids=invalid-id",
+    "status": "HTTP/2 400 ",
+    "headers": {
+      "cache-control": "no-store",
+      "cf-cache-status": "BYPASS"
+    }
+  },
+  {
+    "url": "https://www.tab1.net/test?check=1",
+    "status": "HTTP/2 308 ",
+    "headers": {
+      "location": "https://tab1.net/test?check=1",
+      "cf-cache-status": "DYNAMIC"
+    }
+  },
+  {
+    "url": "https://start.skynolimit.dev/test?check=1",
+    "status": "HTTP/2 308 ",
+    "headers": {
+      "location": "https://tab1.net/test?check=1",
+      "cf-cache-status": "DYNAMIC"
+    }
+  }
+]

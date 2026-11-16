@@ -1,0 +1,41 @@
+[
+  {
+    "t": 2559.399999976158,
+    "value": 0.17655981562143824,
+    "recent": false,
+    "sources": [
+      {
+        "tag": "MAIN",
+        "classes": "wrap grid",
+        "text": "\n    1Top stories\n    \n    A\n      \n      \n        Cut national insurance for un"
+      },
+      {
+        "tag": "DIV",
+        "classes": "setup-bar-wrap wrap",
+        "text": ""
+      },
+      {
+        "tag": "FORM",
+        "classes": "search",
+        "text": "\n        \n      /"
+      },
+      {
+        "tag": "BUTTON",
+        "classes": "weather-open",
+        "text": "Full forecastW"
+      }
+    ]
+  },
+  {
+    "t": 2592.399999976158,
+    "value": 0.014974850351519508,
+    "recent": false,
+    "sources": [
+      {
+        "tag": "MAIN",
+        "classes": "wrap grid",
+        "text": "\n    1Top stories\n    \n    A\n      \n      \n        Cut national insurance for un"
+      }
+    ]
+  }
+]

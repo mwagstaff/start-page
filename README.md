@@ -58,10 +58,12 @@ npm test
   weather and the photo. It's the same for every reader and carries a version used as its
   ETag, with `Cache-Control: public, max-age=60, stale-while-revalidate=600`; a request with a
   matching `If-None-Match` gets a 304. The page itself also has an ETag. Cloudflare serves the
-  snapshot from its edge through the skynolimit.dev Cache Rule "Start page: cache feeds
-  snapshot (origin Cache-Control)": it makes `/api/feeds.json` on tab1.net eligible
-  for cache, with Browser TTL set to respect the origin (otherwise the zone's 4-hour Browser
-  Cache TTL would replace `max-age=60`).
+  snapshot from its edge through the **tab1.net zone's** Cache Rule
+  "tab1.net: cache shared feed APIs (origin TTL)". It makes `/api/feeds.json`,
+  `/api/catalogue.json` and `/api/sources` eligible for cache, preserving query strings.
+  Edge TTL follows origin cache-control (bypassing when absent), and Browser TTL respects
+  the origin. Conditional GET/HEAD requests use weak ETag comparison, so validation still
+  works when compression changes `"version"` to `W/"version"`.
 - Open pages re-request the snapshot every minute while visible, and when you switch back to
   the tab (usually a 304). If it has changed, they redraw the cards in place, but only after
   30 seconds without scrolling, typing or moving the pointer, and not while a search is
@@ -118,9 +120,10 @@ npm test
   (`lib/sources.js`). Only catalogue ids are accepted, never URLs. Ids are sorted, and any other
   order gets a 301 to the sorted form, so pages asking for the same feeds share one response.
   Responses carry an ETag and `Cache-Control: public, max-age=60, stale-while-revalidate=600`.
-  Cloudflare caches them through the Cache Rule "Start page: cache feeds snapshot, catalogue and
-  sources (origin Cache-Control)", which covers `/api/feeds.json`, `/api/catalogue.json` and
-  `/api/sources`. Catalogue feeds that are also on the default page (BBC News top stories, BBC
+  Cloudflare caches them through the tab1.net Cache Rule described above. Concurrent first
+  requests wait for the same feed fetch; readers use last-good data during an existing refresh.
+  A failed first fetch has `Cache-Control: no-store` so an edge cache cannot spread its empty
+  error result. Catalogue feeds that are also on the default page (BBC News top stories, BBC
   Science, BBC Football, Six Colors) are read from its cache rather than fetched twice.
 - A reader who hasn't chosen anything sees the suggested page for their region: the
   catalogue's `defaults` (for the UK, Top stories, Hacker News, World, Tech and Football from
@@ -178,10 +181,13 @@ This preference is included in settings export/import and undo/history.
 
 The official address is https://tab1.net. Deploy with
 `/Users/mwagstaff/dev/server-tooling/deploy/node_project.zsh tab1.net --no-tail`.
-The service runs on Mini at port 3060 as `com.tab1.net.web`; Sky routes
-Cloudflare Tunnel traffic through Caddy to Mini over Tailscale.
-The Caddy setup script also configures redirects from `www.tab1.net` and
-`start.skynolimit.dev` to the official address, preserving paths and queries.
+The service runs on Mini at port 3060 as `com.tab1.net.web`. The dedicated
+`tab1-mini` Cloudflare Tunnel forwards directly to `http://127.0.0.1:3060`,
+removing Sky and the Tailscale relay from the main site's request path.
+Sky's Caddy still redirects `www.tab1.net` and `start.skynolimit.dev` to the
+official address, preserving paths and queries, and retains the previous root
+route for rollback. See [the tunnel runbook](infrastructure/MINI-TUNNEL.md) for
+DNS targets, supervision, health checks and rollback instructions.
 
 Browser storage keys retain the `start-page:` prefix for compatibility. Settings
 are origin-specific: export settings from an existing open tab on the old address before

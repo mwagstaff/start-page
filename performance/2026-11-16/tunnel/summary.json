@@ -1,0 +1,187 @@
+{
+  "polling": {
+    "name": "soak500-30m-8.33-1800s",
+    "count": 30000,
+    "skipped": 0,
+    "durationSeconds": 1799.91226375,
+    "p50": 19.75,
+    "p95": 83.4500410000328,
+    "p99": 150.96141699992586,
+    "max": 427.7012919999979,
+    "statuses": {
+      "200": 7,
+      "304": 29993
+    },
+    "caches": {
+      "HIT": 29941,
+      "UPDATING": 59
+    },
+    "bytes": 129889,
+    "stopped": false
+  },
+  "arrivals": {
+    "visits": 400,
+    "requests": 27200,
+    "visitP50": 344.8285419999993,
+    "visitP95": 484.65008300000045,
+    "maxVisit": 624.983083,
+    "statuses": {
+      "200": 27200
+    },
+    "allWavesPassed": true
+  },
+  "mixed": [
+    {
+      "name": "mixed-5.00-20s",
+      "count": 100,
+      "skipped": 0,
+      "durationSeconds": 19.821863374999996,
+      "p50": 20.22283299999981,
+      "p95": 81.26487499999894,
+      "p99": 128.86424999999872,
+      "max": 136.706416,
+      "statuses": {
+        "200": 30,
+        "304": 70
+      },
+      "caches": {
+        "DYNAMIC": 20,
+        "HIT": 80
+      },
+      "bytes": 500061,
+      "stopped": false
+    },
+    {
+      "name": "mixed-17.00-30s",
+      "count": 510,
+      "skipped": 0,
+      "durationSeconds": 29.964157084,
+      "p50": 23.77129199999763,
+      "p95": 153.0914159999993,
+      "p99": 217.471375000001,
+      "max": 311.60166700000264,
+      "statuses": {
+        "200": 153,
+        "304": 357
+      },
+      "caches": {
+        "DYNAMIC": 102,
+        "HIT": 408
+      },
+      "bytes": 2546223,
+      "stopped": false
+    },
+    {
+      "name": "mixed-35.00-30s",
+      "count": 1050,
+      "skipped": 0,
+      "durationSeconds": 29.998986040999995,
+      "p50": 22.515125000005355,
+      "p95": 95.28554200000508,
+      "p99": 146.48075000000244,
+      "max": 240.10629199999676,
+      "statuses": {
+        "200": 315,
+        "304": 735
+      },
+      "caches": {
+        "DYNAMIC": 210,
+        "HIT": 840
+      },
+      "bytes": 5244609,
+      "stopped": false
+    },
+    {
+      "name": "mixed-60.00-30s",
+      "count": 1800,
+      "skipped": 0,
+      "durationSeconds": 30.008207708,
+      "p50": 23.182749999992666,
+      "p95": 125.77154199998768,
+      "p99": 238.4532920000056,
+      "max": 766.3770000000077,
+      "statuses": {
+        "200": 540,
+        "304": 1260
+      },
+      "caches": {
+        "HIT": 1438,
+        "DYNAMIC": 360,
+        "UPDATING": 2
+      },
+      "bytes": 9010178,
+      "stopped": false
+    },
+    {
+      "name": "100-simultaneous-html",
+      "count": 100,
+      "skipped": 0,
+      "durationSeconds": 1.804215000000011,
+      "p50": 1760.5334589999984,
+      "p95": 1789.8469999999943,
+      "p99": 1790.5053329999937,
+      "max": 1793.9834169999958,
+      "statuses": {
+        "200": 100
+      },
+      "caches": {
+        "DYNAMIC": 100
+      },
+      "bytes": 1660583,
+      "stopped": false
+    }
+  ],
+  "totalScenarioRequests": 60760,
+  "totalErrors": 0,
+  "warmupRequests": 10,
+  "health": {
+    "samples": 61,
+    "errors": 0,
+    "first": {
+      "at": "2026-11-16T10:45:33.504108+00:00",
+      "curlExit": 0,
+      "status": 200,
+      "seconds": 0.106891,
+      "body": {
+        "status": "ok",
+        "lastRefresh": "2026-11-16T10:45:28.783Z"
+      }
+    },
+    "last": {
+      "at": "2026-11-16T11:15:33.868157+00:00",
+      "curlExit": 0,
+      "status": 200,
+      "seconds": 0.08277,
+      "body": {
+        "status": "ok",
+        "lastRefresh": "2026-11-16T11:05:28.155Z"
+      }
+    },
+    "refreshes": [
+      "2026-11-16T10:45:28.783Z",
+      "2026-11-16T10:55:28.646Z",
+      "2026-11-16T11:05:28.155Z"
+    ]
+  },
+  "resources": {
+    "node": {
+      "samples": 27,
+      "minRssMiB": 119.296875,
+      "maxRssMiB": 271.953125,
+      "finalRssMiB": 203.09375,
+      "maxSampledCpuPercent": 51.4
+    },
+    "cloudflared": {
+      "samples": 27,
+      "minRssMiB": 46.078125,
+      "maxRssMiB": 55.484375,
+      "finalRssMiB": 55.484375,
+      "maxSampledCpuPercent": 57.4
+    }
+  },
+  "connectorMetrics": {
+    "cloudflared_tunnel_ha_connections": 4.0,
+    "cloudflared_tunnel_request_errors": 0.0,
+    "cloudflared_tunnel_total_requests": 1237.0
+  }
+}

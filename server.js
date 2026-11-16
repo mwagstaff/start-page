@@ -8,6 +8,7 @@ import { MAX_CARD_ITEMS, createCache } from './lib/cache.js';
 import { catalogueProblems, catalogueSources, publicCatalogue } from './lib/catalogue.js';
 import { createCustomFeeds } from './lib/custom.js';
 import { createImageFinder } from './lib/images.js';
+import { notModified } from './lib/http-cache.js';
 import { renderPage } from './lib/render.js';
 import { createSources } from './lib/sources.js';
 import { createThumbnailer } from './lib/thumbs.js';
@@ -82,16 +83,6 @@ function feedsData() {
     feeds = { snapshot, weather: weatherNow, backdrop: photo, version, body: JSON.stringify({ version, ...data }) };
   }
   return feeds;
-}
-
-// Answers a conditional request with 304 when the browser (or Cloudflare) already has this version.
-function notModified(req, res, etag, cacheControl) {
-  res.setHeader('ETag', etag);
-  res.setHeader('Cache-Control', cacheControl);
-  if (req.headers['if-none-match'] !== etag) return false;
-  res.writeHead(304);
-  res.end();
-  return true;
 }
 
 const STATIC_TYPES = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
@@ -179,8 +170,8 @@ const server = createServer(async (req, res) => {
         return res.end();
       }
       await (cache.ready || cache.pending);
-      const { body, etag } = await sources.get(asked);
-      if (notModified(req, res, etag, 'public, max-age=60, stale-while-revalidate=600')) return;
+      const { body, etag, cacheControl } = await sources.get(asked);
+      if (notModified(req, res, etag, cacheControl)) return;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(body);
     } catch (error) {

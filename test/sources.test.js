@@ -30,6 +30,65 @@ function setup({ fail = () => false } = {}) {
 
 const read = async (sources, ids) => JSON.parse((await sources.get(ids)).body).sources;
 
+test('concurrent cold callers wait for the same populated result', async () => {
+  let release;
+  let calls = 0;
+  const waiting = new Promise((resolve) => { release = resolve; });
+  const sources = createSources(list, {}, {
+    images: noImages, log: quiet,
+    fetch: async () => { calls++; await waiting; return [item('https://a/1')]; },
+  });
+  let settled = 0;
+  const requests = Array.from({ length: 100 }, () => sources.get(['a.top']).then((r) => { settled++; return r; }));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 1);
+  assert.equal(settled, 0, 'no caller may publish an incomplete first result');
+  release();
+  const results = await Promise.all(requests);
+  for (const result of results) {
+    assert.equal(JSON.parse(result.body).sources['a.top'].items.length, 1);
+    assert.equal(result.etag, results[0].etag);
+    assert.match(result.cacheControl, /public/);
+  }
+});
+
+test('readers get last-good data while a background refresh is running', async () => {
+  let release;
+  let calls = 0;
+  const waiting = new Promise((resolve) => { release = resolve; });
+  const sources = createSources(list, {}, {
+    images: noImages, log: quiet,
+    fetch: async () => {
+      if (++calls > 1) await waiting;
+      return [item(`https://a/${calls}`)];
+    },
+  });
+  await sources.get(['a.top']);
+  const refreshing = sources.refresh();
+  try {
+    const stale = await sources.get(['a.top']);
+    assert.equal(JSON.parse(stale.body).sources['a.top'].items[0].link, 'https://a/1');
+    assert.equal(calls, 2);
+  } finally { release(); }
+  await refreshing;
+  assert.equal((await read(sources, ['a.top']))['a.top'].items[0].link, 'https://a/2');
+});
+
+test('a failed cold load is not edge-cacheable and retry remains bounded', async () => {
+  let calls = 0;
+  const sources = createSources(list, {}, {
+    images: noImages, log: quiet,
+    fetch: async () => { calls++; throw new Error('Unavailable'); },
+  });
+  const results = await Promise.all(Array.from({ length: 20 }, () => sources.get(['a.top'])));
+  for (const result of results) {
+    assert.equal(result.cacheControl, 'no-store');
+    assert.equal(JSON.parse(result.body).sources['a.top'].error, 'Unavailable');
+  }
+  await sources.get(['a.top']);
+  assert.equal(calls, 1);
+});
+
 test('canonical ids are known, unique and sorted', () => {
   const { sources } = setup();
   assert.deepEqual(sources.canonical(['b.top', 'a.top', 'b.top', '']), ['a.top', 'b.top']);

@@ -1,0 +1,247 @@
+[
+  {
+    "path": "/api/feeds.json",
+    "attempt": 0,
+    "status": 200,
+    "bytes": 111972,
+    "cache": "HIT",
+    "age": "18",
+    "etag": "W/\"ef3572dd1371c8e2\"",
+    "cacheControl": "public, max-age=60, stale-while-revalidate=600",
+    "vary": null
+  },
+  {
+    "path": "/api/feeds.json",
+    "attempt": 1,
+    "status": 200,
+    "bytes": 111972,
+    "cache": "HIT",
+    "age": "18",
+    "etag": "W/\"ef3572dd1371c8e2\"",
+    "cacheControl": "public, max-age=60, stale-while-revalidate=600",
+    "vary": null
+  },
+  {
+    "path": "/api/feeds.json",
+    "attempt": 2,
+    "status": 304,
+    "bytes": 0,
+    "cache": "HIT",
+    "age": "18",
+    "etag": "\"ef3572dd1371c8e2\"",
+    "cacheControl": "public, max-age=60, stale-while-revalidate=600",
+    "vary": null
+  },
+  {
+    "path": "/api/catalogue.json",
+    "attempt": 0,
+    "status": 200,
+    "bytes": 6066,
+    "cache": "MISS",
+    "age": null,
+    "etag": "W/\"da6ff0b89d35842a\"",
+    "cacheControl": "public, max-age=3600",
+    "vary": null
+  },
+  {
+    "path": "/api/catalogue.json",
+    "attempt": 1,
+    "status": 200,
+    "bytes": 6066,
+    "cache": "HIT",
+    "age": "0",
+    "etag": "W/\"da6ff0b89d35842a\"",
+    "cacheControl": "public, max-age=3600",
+    "vary": null
+  },
+  {
+    "path": "/api/catalogue.json",
+    "attempt": 2,
+    "status": 304,
+    "bytes": 0,
+    "cache": "HIT",
+    "age": "0",
+    "etag": "\"da6ff0b89d35842a\"",
+    "cacheControl": "public, max-age=3600",
+    "vary": null
+  },
+  {
+    "path": "/api/sources?ids=bbc.top,bbc.world",
+    "attempt": 0,
+    "status": 200,
+    "bytes": 10138,
+    "cache": "MISS",
+    "age": null,
+    "etag": "W/\"bb0d501c7047a3fc\"",
+    "cacheControl": "public, max-age=60, stale-while-revalidate=600",
+    "vary": null,
+    "sourceIds": [
+      "bbc.top",
+      "bbc.world"
+    ]
+  },
+  {
+    "path": "/api/sources?ids=bbc.top,bbc.world",
+    "attempt": 1,
+    "status": 200,
+    "bytes": 10138,
+    "cache": "HIT",
+    "age": "0",
+    "etag": "W/\"bb0d501c7047a3fc\"",
+    "cacheControl": "public, max-age=60, stale-while-revalidate=600",
+    "vary": null,
+    "sourceIds": [
+      "bbc.top",
+      "bbc.world"
+    ]
+  },
+  {
+    "path": "/api/sources?ids=bbc.top,bbc.world",
+    "attempt": 2,
+    "status": 304,
+    "bytes": 0,
+    "cache": "HIT",
+    "age": "0",
+    "etag": "\"bb0d501c7047a3fc\"",
+    "cacheControl": "public, max-age=60, stale-while-revalidate=600",
+    "vary": null
+  },
+  {
+    "path": "/api/sources?ids=bbc.top",
+    "attempt": 0,
+    "status": 200,
+    "bytes": 5090,
+    "cache": "MISS",
+    "age": null,
+    "etag": "W/\"1de828b5269ff010\"",
+    "cacheControl": "public, max-age=60, stale-while-revalidate=600",
+    "vary": null,
+    "sourceIds": [
+      "bbc.top"
+    ]
+  },
+  {
+    "path": "/api/sources?ids=bbc.top",
+    "attempt": 1,
+    "status": 200,
+    "bytes": 5090,
+    "cache": "HIT",
+    "age": "0",
+    "etag": "W/\"1de828b5269ff010\"",
+    "cacheControl": "public, max-age=60, stale-while-revalidate=600",
+    "vary": null,
+    "sourceIds": [
+      "bbc.top"
+    ]
+  },
+  {
+    "path": "/api/sources?ids=bbc.top",
+    "attempt": 2,
+    "status": 304,
+    "bytes": 0,
+    "cache": "HIT",
+    "age": "0",
+    "etag": "\"1de828b5269ff010\"",
+    "cacheControl": "public, max-age=60, stale-while-revalidate=600",
+    "vary": null
+  },
+  {
+    "path": "/api/sources?ids=not-a-source",
+    "attempt": 0,
+    "status": 400,
+    "bytes": 40,
+    "cache": "BYPASS",
+    "age": null,
+    "etag": null,
+    "cacheControl": "no-store",
+    "vary": null
+  },
+  {
+    "path": "/api/sources?ids=not-a-source",
+    "attempt": 1,
+    "status": 400,
+    "bytes": 40,
+    "cache": "BYPASS",
+    "age": null,
+    "etag": null,
+    "cacheControl": "no-store",
+    "vary": null
+  },
+  {
+    "path": "/api/sources?ids=not-a-source",
+    "attempt": 2,
+    "status": 400,
+    "bytes": 40,
+    "cache": "BYPASS",
+    "age": null,
+    "etag": null,
+    "cacheControl": "no-store",
+    "vary": null
+  },
+  {
+    "path": "/healthcheck",
+    "attempt": 0,
+    "status": 200,
+    "bytes": 56,
+    "cache": "DYNAMIC",
+    "age": null,
+    "etag": null,
+    "cacheControl": "no-cache",
+    "vary": null
+  },
+  {
+    "path": "/healthcheck",
+    "attempt": 1,
+    "status": 200,
+    "bytes": 56,
+    "cache": "DYNAMIC",
+    "age": null,
+    "etag": null,
+    "cacheControl": "no-cache",
+    "vary": null
+  },
+  {
+    "path": "/healthcheck",
+    "attempt": 2,
+    "status": 200,
+    "bytes": 56,
+    "cache": "DYNAMIC",
+    "age": null,
+    "etag": null,
+    "cacheControl": "no-cache",
+    "vary": null
+  },
+  {
+    "path": "/",
+    "attempt": 0,
+    "status": 200,
+    "bytes": 90147,
+    "cache": "DYNAMIC",
+    "age": null,
+    "etag": null,
+    "cacheControl": "no-cache",
+    "vary": "Accept-Language"
+  },
+  {
+    "path": "/",
+    "attempt": 1,
+    "status": 200,
+    "bytes": 90147,
+    "cache": "DYNAMIC",
+    "age": null,
+    "etag": null,
+    "cacheControl": "no-cache",
+    "vary": "Accept-Language"
+  },
+  {
+    "path": "/",
+    "attempt": 2,
+    "status": 200,
+    "bytes": 90147,
+    "cache": "DYNAMIC",
+    "age": null,
+    "etag": null,
+    "cacheControl": "no-cache",
+    "vary": "Accept-Language"
+  }
+]
