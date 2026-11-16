@@ -550,7 +550,11 @@ html:has(.weather-screen[open]) body > :is(main, .tabs, .peek, .backdrop) { visi
 .ws-content {
   position: relative;
   height: 100%;
+  /* Chart popovers can extend past the edge; never let them create sideways panning. */
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-x: none;
+  touch-action: pan-y pinch-zoom;
   padding: clamp(14px, 2.6vh, 40px) clamp(16px, 4.5vw, 72px) clamp(14px, 2vh, 48px);
   /* A gentle shade under the detail column keeps small text legible over the brightest skies. */
   background: linear-gradient(90deg, transparent 35%, rgb(6 10 18 / 0.22) 70%);
@@ -954,7 +958,15 @@ html:has(.weather-screen[open]) body > :is(main, .tabs, .peek, .backdrop) { visi
 
 @media (max-width: 700px) {
   .masthead .wrap { flex-wrap: wrap; }
-  .search { order: 3; flex-basis: 100%; max-width: none; }
+  .masthead .title { flex-basis: 100%; align-items: center; justify-content: space-between; }
+  .masthead .customise-open { margin-left: auto; min-height: 44px; }
+  .masthead .weather { order: 2; flex-basis: 100%; min-height: 44px; padding: 8px 12px; }
+  .masthead .weather .now { flex: 1; min-width: 0; }
+  .masthead .weather .summary { min-width: 0; overflow-wrap: anywhere; }
+  .masthead .weather-open { inset: 0; border-color: var(--masthead-border); background: rgb(255 255 255 / 0.07); }
+  .masthead .weather-open span { display: none; }
+  .masthead .search { order: 3; flex-basis: 100%; max-width: none; min-width: 0; margin: 0; }
+  .masthead .search input { height: 44px; font-size: 16px; }
 }
 
 @media (max-width: 560px) {
@@ -1034,14 +1046,17 @@ body:has(.grid.packed) > :is(.masthead, .tabs) { flex: none; }
 .grid.packed.scrolls .card:last-child { min-height: 0; }
 
 
-/* Filling the screen (layout.js): every column runs the full height, its stories spaced out
-   to share the spare room, and its last card stretched over what's left, so all the
-   columns end level. */
+/* Filling the screen (layout.js): stories share spare room with bounded spacing. Stretch
+   the last card only when fitting the window; on scrolling pages, exhausted cards must
+   end at their content instead of becoming a tall empty box. */
 .grid.filled { align-items: stretch; }
-.grid.filled .card:last-child { flex-grow: 1; }
+.grid.filled:not(.scrolls) .card:last-child { flex-grow: 1; }
 .grid.filled .item { padding-block: calc(var(--item-pad) + var(--story-spread, 0px)); }
 
-.grid.packed .card .items {
+/* Internal scrolling belongs only to cards constrained to the window. On a scrolling
+   page, even a fully expanded overflow:auto list with overscroll containment traps wheel
+   and touch gestures instead of letting them reach the page. */
+.grid.packed:not(.scrolls) .card .items {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -2589,6 +2604,8 @@ body:has(.grid.packed) > .setup-bar-wrap { flex: none; }
 .keyboard-mode:not(.keyboard-no-characters) .weather { padding-right: 34px; }
 .weather-open > .keyboard-page-key { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); }
 body:not(.keyboard-mode) :is(.keyboard-page-key, .keyboard-card-key, .keyboard-story-key, .keyboard-enter-key, .keyboard-comment-key), .keyboard-card-key[hidden], .keyboard-story-key[hidden] { display: none; }
+body:not(.keyboard-mode) kbd { display: none; }
+body:not(.keyboard-mode) .customise-open { padding-right: 11px; }
 .keyboard-mode .card h2 { display: flex; align-items: center; gap: 10px; min-height: 31px; }
 .keyboard-card-key { position: static; min-width: 26px; height: 26px; font-size: 12px; }
 .keyboard-mode .item { position: relative; isolation: isolate; scroll-margin-block: 10px; }

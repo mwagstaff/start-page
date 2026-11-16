@@ -42,7 +42,10 @@ npm test
 - `public/layout.js` measures the cards and sorts them into the columns that make the
   tallest column as short as possible, using an exact search. Each column keeps the config
   order. Without JavaScript the page falls back to plain CSS columns. Once you've placed
-  cards yourself (below), it keeps each card in the column you chose instead.
+  cards yourself (below), it keeps each card in the column you chose instead. When a narrower
+  window cannot show all those columns, displaced cards flow into the shortest available
+  column; widening the window restores the saved positions. On scrolling pages, cards end
+  at their content even when there are too few spare stories to level the columns.
 - The background photo changes daily. The server picks one from the sources in
   `config.backdrop`: Bing's homepage photos for landscapes, nature and cities, and ESA's
   Webb and Hubble feeds for space. `weight` sets how often each source comes up, and the

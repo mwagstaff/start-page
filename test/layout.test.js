@@ -49,10 +49,24 @@ test('placeColumns keeps cards in their chosen columns, however many each has', 
   assert.deepEqual(placeColumns([1, 0, 2, 0], [10, 10, 10, 10], 3), [[1, 3], [0], [2]]);
 });
 
-test('placeColumns folds extra columns into the last and puts new cards in the shortest', () => {
-  assert.deepEqual(placeColumns([0, 3, 2], [10, 10, 10], 2), [[0], [1, 2]]);
+test('placeColumns flows displaced and new cards into the shortest available column', () => {
+  assert.deepEqual(placeColumns([0, 3, 2], [10, 10, 10], 2), [[0, 2], [1]]);
   assert.deepEqual(placeColumns([null, 0, 0, 1], [50, 100, 100, 80], 2), [[1, 2], [0, 3]]);
   assert.deepEqual(placeColumns([0, 1], [10, 10], 1), [[0, 1]]);
+});
+
+test('a four-column saved layout reflows around Hacker News when only two columns fit', () => {
+  // Hacker News | Top stories | World + Tech | Football. Previously all four news
+  // cards were pushed into column two, leaving Hacker News to stretch over the gap.
+  const saved = [0, 1, 2, 2, 3];
+  const heights = [850, 670, 630, 670, 630];
+  const columns = placeColumns(saved, heights, 2);
+  assert.deepEqual(columns, [[0, 3], [1, 2, 4]]);
+  assert.equal(tallest(heights, columns), 1930);
+  // Resizing doesn't overwrite the saved arrangement; each wider breakpoint restores it.
+  assert.deepEqual(placeColumns(saved, heights, 3), [[0], [1, 4], [2, 3]]);
+  assert.deepEqual(placeColumns(saved, heights, 4), [[0], [1], [2, 3], [4]]);
+  assert.deepEqual(saved, [0, 1, 2, 2, 3]);
 });
 
 // A card of `n` stories, `item` tall each, under a heading `head` tall, starting at `start`.
@@ -82,7 +96,7 @@ test('storySpread shares a column\'s spare room between its stories, within a li
   const { storySpread } = await import('../public/layout.js');
   assert.equal(storySpread(800, 760, 10), 2); // 40px over 10 stories: 2px above and below each
   assert.equal(storySpread(800, 820, 10), 0); // too tall already: nothing added
-  assert.equal(storySpread(800, 200, 2), 10); // short of stories: capped, the last card stretches
+  assert.equal(storySpread(800, 200, 2), 10); // short of stories: spacing stays capped
   assert.equal(storySpread(800, 100, 0), 0);
 });
 

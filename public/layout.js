@@ -5,9 +5,10 @@
 // spares it was drawn with, so every column reaches the bottom of the window. With more
 // cards than fit the window while each still shows a useful number of stories, the page
 // scrolls instead (`scrolls`): cards show their own number of stories, and shorter columns
-// are filled to end level with the tallest. The Customise bar doesn't count against the
-// window, so opening it only pushes the cards down rather than changing how they're laid
-// out. Without JavaScript the CSS multi-column layout still works; this only improves on it.
+// are filled towards the tallest, without stretching cards beyond their content. The
+// Customise bar doesn't count against the window, so opening it only pushes the cards down
+// rather than changing how they're laid out. Without JavaScript the CSS multi-column
+// layout still works; this only improves on it.
 
 const MIN_COLUMN_WIDTH = 300; // if style.css doesn't set --column-width (it changes with the density)
 const EXACT_LIMIT = 16; // above this many cards, use the greedy result alone
@@ -94,16 +95,17 @@ export function packColumns(heights, columnCount) {
 }
 
 // Cards in the columns the reader chose (`cols`, null for a card not placed yet), each
-// column in page order. A column beyond what fits moves into the last one; a card not
-// placed yet goes into whichever column is shortest. Empty columns are kept, as somewhere
-// to drop a card.
+// column in page order. Keep choices that still fit, then put cards from columns beyond
+// the available width (and new cards) into whichever column is shortest. This is only a
+// responsive fallback: saved choices are untouched, ready for a wider window again.
+// Empty columns are kept, as somewhere to drop a card.
 export function placeColumns(cols, heights, columnCount) {
   const count = Math.max(1, columnCount);
   const columns = Array.from({ length: count }, () => []);
   const loads = new Array(count).fill(0);
   const put = (i, c) => { columns[c].push(i); loads[c] += heights[i]; };
-  cols.forEach((col, i) => { if (col !== null) put(i, Math.min(col, count - 1)); });
-  cols.forEach((col, i) => { if (col === null) put(i, loads.indexOf(Math.min(...loads))); });
+  cols.forEach((col, i) => { if (col !== null && col < count) put(i, col); });
+  cols.forEach((col, i) => { if (col === null || col >= count) put(i, loads.indexOf(Math.min(...loads))); });
   return columns.map((column) => column.sort((a, b) => a - b));
 }
 
@@ -185,8 +187,11 @@ function initGrid(grid) {
       const fill = filling() && count > 1;
       resetStories(grid);
       if (count === 1) return;
-      if (fill) grid.querySelectorAll('.item.extra').forEach((item) => item.classList.add('show'));
+      // Measure every story even with filling off: hidden spares have zero-sized rects,
+      // which would corrupt the heights calculated from the last story's bottom.
+      grid.querySelectorAll('.item.extra').forEach((item) => item.classList.add('show'));
       const measured = cards.map(measureCard);
+      if (!fill) resetStories(grid);
       // Packed by the height each card has at its own number of stories.
       const heights = measured.map(({ start, sizes }) => sizes[start]);
       const manual = grid.dataset.arrange === 'manual';
@@ -213,8 +218,9 @@ function initGrid(grid) {
       }
       if (scrolling || barHeight) grid.classList.add('scrolls');
       if (!fill) return;
-      // Whatever space is left is shared between the stories, and the last card in each
-      // column stretches over any remainder (style.css), so every column ends level.
+      // Share spare space between stories, within storySpread's limit. Only a layout
+      // fitting the window stretches its last cards over the remainder (style.css);
+      // scrolling cards stop at their content even if a column runs out of stories.
       groups.forEach((group, c) => {
         const counts = fillColumn(group.map((i) => measured[i]), space);
         group.forEach((i, j) => showStories(measured[i].items, counts[j]));

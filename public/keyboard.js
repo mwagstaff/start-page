@@ -7,6 +7,9 @@ import { spatialNeighbor } from './keyboard-navigation.js';
 const grid = document.querySelector('.grid');
 const search = document.querySelector('.search input');
 const active = true;
+// Touch is a default hint, not proof that no external keyboard is connected.
+const touchInput = window.matchMedia('(hover: none) and (pointer: coarse)');
+let keyboardDetected = false;
 let enabled = currentSettings()?.shortcuts !== false;
 let keyboardInput = false;
 let pointerActive = false;
@@ -140,7 +143,7 @@ function reflect() {
   const focus = document.activeElement;
   const saved = bookmark(focus);
   if (saved) { last = saved; remembered.set(saved.cardId, saved); }
-  document.body.classList.toggle('keyboard-mode', active);
+  document.body.classList.toggle('keyboard-mode', active && (!touchInput.matches || keyboardDetected));
   document.body.classList.toggle('keyboard-input', keyboardInput);
   document.body.classList.toggle('keyboard-no-characters', !enabled);
   document.body.classList.toggle('keyboard-typing', focus === search);
@@ -171,6 +174,7 @@ function reflect() {
 }
 
 function enter() {
+  keyboardDetected = true;
   keyboardInput = true;
   reflect();
   reserveFooter();
@@ -214,6 +218,12 @@ function resetSelection() {
 
 function onKey(event) {
   const target = event.target;
+  // Typing into a field can come from the phone's software keyboard. Only reveal
+  // hints after keyboard use outside fields, or a physical navigation/modifier key.
+  if (!event.isComposing && event.key !== 'Unidentified' &&
+      (!editing(target) || event.key === 'Tab' || event.key.startsWith('Arrow') || event.metaKey || event.ctrlKey)) {
+    keyboardDetected = true;
+  }
   const command = shortcutCommand(event, { active, enabled, editing: editing(target) });
   if (command?.type === 'reset') {
     resetSelection();
@@ -344,6 +354,7 @@ document.addEventListener('dragend', finishPointer, true);
 document.addEventListener('contextmenu', finishPointer, true);
 // Capture before the weather screen's Escape listener closes its non-modal dialog.
 document.addEventListener('keydown', onKey, true);
+touchInput.addEventListener('change', reflect);
 document.addEventListener('keyboard:settings', ({ detail }) => { enabled = detail.enabled; decorate(); });
 document.addEventListener('weather:shown', pageBadges);
 document.addEventListener('setup:change', ({ detail }) => {
