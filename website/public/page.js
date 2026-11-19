@@ -1,0 +1,497 @@
+// Draws the cards in the browser from /api/feeds.json: in the reader's own layout when
+// they've customised it, and in place when the feeds change. The server's first render
+// (the suggested page for the UK) is shown first, and stays without JavaScript.
+// Cards from the reader's topics and sources (topics.js) are filled from /api/sources.
+// Readers who haven't chosen any yet get their region's suggested ones.
+// Every change to the settings is recorded (history.js), so it can be undone.
+
+import { searchProvider, updateSearchForm, validSearch } from './search.js';
+import { buildCards } from './stories.js';
+import { renderWidget } from './cards.js';
+import { setTemperatureUnit, showWeather, shownWeather, temperatureUnit, unitForLocale } from './forecast.js';
+import { canRedo, canUndo, describeChange, loadHistory, moveTo, recordChange, saveHistory } from './history.js';
+import { DENSITIES, MAX_CARD_ITEMS, cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
+import { cardChoice, defaultProfile, guessRegion, layoutForProfile, profileCards, profileSourceIds, profileWidgets, withOutlet, withTopic, withoutPaywalls } from './topics.js';
+
+const grid = document.querySelector('.grid');
+const { tab } = document.body.dataset;
+let shownVersion = document.body.dataset.version;
+let feeds = null;
+let settings = loadSettings(); // kept here too, in case storage is blocked
+const custom = new Map(); // custom feed id → { title, items } or { error }, once loaded
+let catalogue = null; // /api/catalogue.json, once a profile needs it
+let profileLoaded = {}; // catalogue feed id → { name, error, items }, from /api/sources
+let history = loadHistory(); // kept here too, in case storage is blocked
+let pending = null; // a change not yet in the history: { before, beforeCards, label }
+
+export const currentVersion = () => shownVersion;
+export const currentFeeds = () => feeds;
+export const currentSettings = () => settings;
+export const currentCatalogue = () => catalogue;
+
+// The outlets and topics to choose from. The early script starts this fetch for readers
+// with a profile, so their cards don't wait for it.
+export async function fetchCatalogue() {
+  if (catalogue) return catalogue;
+  try {
+    catalogue = await (window.startCatalogue?.catch(() => null) ?? fetch('/api/catalogue.json').then((response) => (response.ok ? response.json() : null)));
+  } catch {
+    catalogue = null;
+  }
+  window.startCatalogue = null;
+  return catalogue;
+}
+
+// The reader's region, as far as the time zone tells (lib/render.js's early script guesses the same way).
+export const guessedRegion = () => guessRegion(Intl.DateTimeFormat().resolvedOptions().timeZone);
+
+// Readers who haven't chosen topics or arranged their cards (first visit, or after "Reset")
+// are on the suggested page for their region.
+const onSuggestedPage = (from = settings) => !from?.profile && !from?.tabs[tab];
+
+// The topics and sources the page is built from: the reader's own, or the suggested ones
+// (null for a layout arranged before topics existed, and until the catalogue has loaded).
+export function currentProfile() {
+  if (settings?.profile) return settings.profile;
+  return onSuggestedPage() && catalogue ? defaultProfile(catalogue, guessedRegion()) : null;
+}
+
+// The cards the reader's profile makes (none until the catalogue has loaded).
+const currentProfileCards = () => {
+  const profile = currentProfile();
+  return profile && catalogue ? profileCards(profile, catalogue) : [];
+};
+
+// The setup bar opens by itself for a new reader until they press Done.
+export const welcoming = () => !settings || settings.welcome === true;
+
+// `fresh` skips any cached copy, straight after a reload made the server refetch.
+export async function fetchFeeds({ fresh = false } = {}) {
+  try {
+    const response = await fetch(`/api/feeds.json${fresh ? `?fresh=${Date.now()}` : ''}`, { cache: 'no-cache' });
+    if (!response.ok) return null;
+    feeds = await response.json();
+    return feeds;
+  } catch {
+    return null; // offline or restarting: keep what's shown
+  }
+}
+
+// A feed someone added, through this server (feeds rarely allow browsers to fetch them
+// directly). The answer is cached for a few minutes by the browser and the server alike.
+export async function fetchCustomFeed(url) {
+  try {
+    const response = await fetch(`/api/feed?url=${encodeURIComponent(url)}`);
+    const body = await response.json();
+    return response.ok ? body : { error: body.error ?? 'Couldn\'t load that feed.' };
+  } catch {
+    return { error: 'Couldn\'t reach the server.' };
+  }
+}
+
+// Every card there is: the server's, the ones the reader's profile makes, then the reader's
+// own feeds, in the snapshot's shape.
+function allWidgets() {
+  const widgets = { ...feeds.widgets, ...profileWidgets(currentProfileCards(), profileLoaded) };
+  for (const feed of settings?.custom ?? []) {
+    const loaded = custom.get(feed.id);
+    widgets[feed.id] = {
+      title: feed.title,
+      link: null,
+      thumbnails: true,
+      limit: feeds.defaultLimit,
+      maxPerSource: null,
+      custom: true,
+      sources: [{ name: feed.title, error: loaded?.error ?? null, items: loaded?.items ?? [] }],
+    };
+  }
+  // Paywalled sites left out in the setup bar: drop them from the server's cards too (cards
+  // made from topics never ask for them; see profileCards).
+  if (settings?.profile?.paywalls === false) {
+    for (const id of Object.keys(feeds.widgets)) widgets[id] = withoutPaywalls(widgets[id]);
+  }
+  // "Headlines only" in the setup bar: no pictures on any card.
+  if (settings?.profile?.pictures === false) {
+    for (const [id, widget] of Object.entries(widgets)) widgets[id] = { ...widget, thumbnails: false };
+  }
+  return widgets;
+}
+
+export const widgetFor = (id) => allWidgets()[id];
+
+// This tab's cards in page order, with hidden ones included (for the Settings screen).
+export function tabCards(from = settings) {
+  const defaults = onSuggestedPage(from) && catalogue
+    ? currentProfileCards().map((card) => card.id)
+    : feeds.tabs.find((t) => t.id === tab)?.widgets ?? [];
+  return cardList(from?.tabs[tab]?.cards, defaults, Object.keys(allWidgets()));
+}
+
+// 'manual' once the reader has put cards in columns themselves, else 'auto' (packed to fit).
+export const arrangement = () => settings?.tabs[tab]?.arrange ?? 'auto';
+
+// The cards on screen, as the ids in each column (left to right), or null when they're in a
+// single column.
+export function shownColumns() {
+  if (!grid?.classList.contains('packed') || grid.children.length < 2) return null;
+  return [...grid.children].map((column) => [...column.children].filter((el) => el.matches('.card')).map((card) => card.id));
+}
+
+function drawCards() {
+  if (!grid || !feeds) return;
+  // The suggested cards need the catalogue; until then, the server's stay.
+  if (onSuggestedPage() && !catalogue) return;
+  const layout = tabCards().filter((card) => !card.hidden);
+  const cardLayout = layout.map((card) => ({ ...card, maxItems: card.limit }));
+  const html = buildCards(allWidgets(), cardLayout, feeds.defaultLimit, MAX_CARD_ITEMS).map((card) => renderWidget(card)).join('');
+  grid.dispatchEvent(new Event('cards:beforechange'));
+  grid.classList.remove('packed');
+  grid.innerHTML = html;
+  // layout.js reads these to keep each card in the reader's column.
+  const manual = arrangement() === 'manual';
+  if (manual) grid.dataset.arrange = 'manual';
+  else delete grid.dataset.arrange;
+  for (const card of manual ? layout : []) {
+    const element = document.getElementById(card.id);
+    if (element && card.col !== undefined) element.dataset.col = card.col;
+  }
+  grid.dispatchEvent(new Event('cards:change'));
+  document.documentElement.classList.remove('customised');
+}
+
+// Loads (or reloads) the reader's own feeds, then redraws if any of them changed.
+export async function refreshCustomFeeds() {
+  const list = settings?.custom ?? [];
+  const results = await Promise.all(list.map((feed) => fetchCustomFeed(feed.url)));
+  let changed = false;
+  list.forEach((feed, i) => {
+    const before = JSON.stringify(custom.get(feed.id) ?? null);
+    if (before !== JSON.stringify(results[i])) changed = true;
+    custom.set(feed.id, results[i]);
+  });
+  if (changed) drawCards();
+}
+
+// Loads (or reloads) the catalogue feeds the reader's profile uses, then redraws if any
+// changed. The browser revalidates its copy, so this is usually a 304.
+export async function refreshProfileFeeds() {
+  const ids = profileSourceIds(currentProfileCards());
+  if (!ids.length) return;
+  let loaded;
+  try {
+    const response = await fetch(`/api/sources?ids=${ids.join(',')}`, { cache: 'no-cache' });
+    if (!response.ok) return;
+    loaded = (await response.json()).sources;
+  } catch {
+    return; // offline or restarting: keep what's shown
+  }
+  if (JSON.stringify(loaded) === JSON.stringify(profileLoaded)) return;
+  profileLoaded = loaded;
+  drawCards();
+}
+
+// The weather and photo can be turned off on the setup screen, and filling the screen with
+// stories, see-through cards and the page's density in Settings. The early script in the page sets the same classes before it
+// paints; this keeps them in step after a change.
+function applyPageOptions() {
+  const { profile } = settings ?? {};
+  const root = document.documentElement;
+  const filled = !root.classList.contains('no-fill');
+  root.classList.toggle('no-fill', settings?.fill === false);
+  if (filled !== (settings?.fill !== false)) grid?.dispatchEvent(new Event('layout:refresh'));
+  root.classList.toggle('solid-cards', settings?.solid === true);
+  const density = settings?.density ?? DENSITIES[0];
+  const shown = DENSITIES.find((d) => root.classList.contains(`density-${d}`)) ?? DENSITIES[0];
+  for (const d of DENSITIES.slice(1)) root.classList.toggle(`density-${d}`, d === density);
+  if (shown !== density) grid?.dispatchEvent(new Event('layout:refresh'));
+  root.classList.toggle('no-weather', profile?.weather === false);
+  root.classList.toggle('no-backdrop', profile?.backdrop === false);
+  document.body.classList.toggle('has-backdrop', profile?.backdrop !== false && Boolean(document.querySelector('.backdrop')));
+  applyTemperatureUnit();
+  updateSearchForm(document.querySelector('.search'), settings?.search);
+  document.dispatchEvent(new CustomEvent('keyboard:settings', { detail: { enabled: settings?.shortcuts !== false } }));
+}
+
+// Temperatures in °C or °F: the one chosen in Settings, or else the usual one for the
+// reader's region. The server went by the browser's language, so the weather is redrawn
+// only if it shows the other.
+async function applyTemperatureUnit() {
+  setTemperatureUnit(settings?.temperature ?? unitForLocale(navigator.language));
+  const wrongUnit = () => document.querySelector('.weather') && document.querySelector('.weather').dataset.unit !== temperatureUnit();
+  if (!wrongUnit()) return;
+  const data = shownWeather() ? null : feeds ?? (await fetchFeeds());
+  const weather = shownWeather() ?? data?.weather; // weather.js may have shown the reader's own meanwhile
+  if (weather && wrongUnit()) showWeather(weather);
+}
+
+// Saves a change made in the setup bar and rebuilds the cards from it: cards already on the
+// page keep their place, new ones go after them, and ones no longer wanted are hidden.
+// `label` names the change in the history (and the Undo message). New cards show
+// "Loading…" until their feeds arrive; this doesn't wait for them.
+export async function setProfile(profile, label = 'Changed topics & sources') {
+  await Promise.all([fetchCatalogue(), feeds || fetchFeeds()]);
+  const previous = settings?.tabs[tab]?.cards ?? (feeds ? tabCards().filter((card) => !card.hidden) : undefined);
+  record(label);
+  const next = { v: 1, tabs: {}, custom: [], ...settings, profile, ...(!settings && { welcome: true }) };
+  settings = next;
+  const allIds = Object.keys(allWidgets());
+  const cards = layoutForProfile(previous, currentProfileCards(), allIds, (id) => widgetFor(id)?.custom);
+  settings = { ...next, tabs: { ...next.tabs, [tab]: { ...next.tabs[tab], cards } } };
+  saveSettings(settings);
+  applyPageOptions();
+  drawCards();
+  refreshProfileFeeds();
+}
+
+// Done in the setup bar: it stays closed from now on, until the reader opens it with Customise.
+export function finishSetup() {
+  const { welcome, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  settings = { ...rest, onboarded: true };
+  saveSettings(settings);
+}
+
+// Shows a newer snapshot in place. A new background photo (once a day) needs a reload.
+export function show(data) {
+  feeds = data;
+  if (settings?.profile?.backdrop !== false && data.backdrop?.url && data.backdrop.url !== document.querySelector('.backdrop')?.getAttribute('src')) {
+    location.reload();
+    return;
+  }
+  shownVersion = data.version;
+  drawCards();
+  // weather.js marks the page once it shows the reader's own forecast; leave that alone.
+  if (document.querySelector('.weather') && data.weather && !document.body.dataset.localWeather) showWeather(data.weather);
+}
+
+// Notes the settings as they are before a change. Changes made together (adding a feed
+// saves twice) become one step in the history, recorded once they're all done.
+function record(label) {
+  if (!pending) {
+    pending = { before: settings, beforeCards: feeds ? tabCards() : [], label };
+    queueMicrotask(commitHistory);
+  }
+  pending.label ??= label;
+}
+
+function commitHistory() {
+  const { before, beforeCards, label } = pending;
+  pending = null;
+  if (JSON.stringify(before ?? null) === JSON.stringify(settings ?? null)) return;
+  const description = label ?? describeChange({ before, after: settings, beforeCards, afterCards: feeds ? tabCards() : [], titleFor: (id) => widgetFor(id)?.title });
+  history = recordChange(loadHistory() ?? history, before, settings, description, Date.now());
+  saveHistory(history);
+  announce('change', description);
+}
+
+// Tells the page (the undo message, the History dialog and Settings screen) what happened.
+function announce(type, label) {
+  document.dispatchEvent(new CustomEvent('history:change', { detail: { type, label } }));
+}
+
+function save(next, label) {
+  record(label);
+  // A reader on the suggested page keeps those topics as their own once they change anything,
+  // and a new reader keeps the setup bar until they press Done.
+  if (next && !next.profile && onSuggestedPage() && catalogue) next = { ...next, profile: currentProfile() };
+  if (next && !settings && !next.onboarded) next = { ...next, welcome: true };
+  settings = next;
+  saveSettings(settings);
+  drawCards();
+}
+
+// Saves this tab's cards (null goes back to the default layout) and redraws. `label` names
+// the change in the history, when it can say more than the settings show.
+export function setTabCards(cards, arrange = arrangement(), label = undefined) {
+  const tabs = { ...settings?.tabs };
+  if (cards) tabs[tab] = { cards, ...(arrange === 'manual' && { arrange }) };
+  else delete tabs[tab];
+  save({ v: 1, custom: [], ...settings, tabs }, label);
+}
+
+// Keeps the cards in the columns shown (see shownColumns): from now on each card stays in
+// its column, and page order runs down each column in turn. Cards not on screen keep their
+// settings and follow.
+export function placeCards(columns, label) {
+  const saved = new Map(tabCards().map((card) => [card.id, card]));
+  const placed = columns.flatMap((ids, col) => ids.filter((id) => saved.has(id)).map((id) => ({ ...saved.get(id), col })));
+  const ids = new Set(placed.map((card) => card.id));
+  setTabCards([...placed, ...[...saved.values()].filter((card) => !ids.has(card.id))], 'manual', label);
+}
+
+// Whether cards show more or fewer stories so the columns reach the bottom of the window.
+export function setFill(on) {
+  const { fill, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  save(on ? rest : { ...rest, fill: false }, on ? 'Fit cards on one page' : 'Expanded cards on a scrolling page');
+  applyPageOptions();
+}
+
+// Whether cards are opaque, or let the background photo show through (the default).
+export function setSolid(on) {
+  const { solid, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  save(on ? { ...rest, solid: true } : rest, on ? 'Made the cards solid' : 'Made the cards see-through');
+  applyPageOptions();
+}
+
+// 'C' or 'F', or null to go by the reader's region.
+export function setTemperature(unit) {
+  const { temperature, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  save(unit ? { ...rest, temperature: unit } : rest, unit ? `Showed temperatures in °${unit}` : 'Showed temperatures in the local unit');
+  applyPageOptions();
+}
+
+export function setShortcuts(enabled) {
+  const { shortcuts, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  // This preference must not turn the suggested page into a customised card layout.
+  record(`${enabled ? 'Enabled' : 'Disabled'} single-key shortcuts`);
+  settings = { ...rest, ...(!settings && { welcome: true }), ...(!enabled && { shortcuts: false }) };
+  saveSettings(settings);
+  applyPageOptions();
+}
+
+export function setSearch(value) {
+  const { search, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  const next = validSearch(value);
+  save({ ...rest, ...(next && { search: next }) }, `Changed search to ${searchProvider(next).name}`);
+  applyPageOptions();
+}
+
+// How much the page fits in: 'spacious' (the default), 'balanced' or 'compact'.
+export function setDensity(density) {
+  const { density: _, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  save(density === DENSITIES[0] ? rest : { ...rest, density }, `Made the page ${density}`);
+  applyPageOptions();
+}
+
+// 'auto' packs the cards to fit the screen again; 'manual' keeps them where they are now.
+export function setArrange(mode) {
+  const columns = mode === 'manual' && shownColumns();
+  if (columns) placeCards(columns);
+  else if (mode === 'manual') setTabCards(tabCards(), 'manual'); // one column on screen: places come later
+  else setTabCards(tabCards().map(({ col, ...card }) => card), 'auto');
+}
+
+export async function replaceSettings(value, label) {
+  if (value?.profile) await fetchCatalogue();
+  save(value, label);
+  applyPageOptions();
+  refreshCustomFeeds();
+  refreshProfileFeeds();
+}
+
+// Adds a feed the reader typed in, at the top of this tab. Returns an error message, or null.
+export async function addCustomFeed(url) {
+  const id = customFeedId(url);
+  if (settings?.custom?.some((feed) => feed.id === id)) return 'That feed is already on your page.';
+  const result = await fetchCustomFeed(url);
+  if (result.error) return result.error;
+  custom.set(id, result);
+  const cards = tabCards().filter((card) => card.id !== id);
+  save({ v: 1, tabs: {}, ...settings, custom: [...(settings?.custom ?? []), { id, url, title: result.title }] });
+  setTabCards([{ id }, ...cards]);
+  return null;
+}
+
+// Takes a card off the page. A card made by the reader's topics and sources goes by turning
+// that topic (or source) off, so the setup bar agrees; any other stays in Settings,
+// unticked, to bring back.
+export async function hideCard(id) {
+  if (!feeds && !(await fetchFeeds())) return;
+  const title = widgetFor(id)?.title ?? 'a card';
+  const profile = currentProfile();
+  const choice = profile && currentProfileCards().some((card) => card.id === id) ? cardChoice(catalogue, id) : null;
+  if (choice?.topic) return setProfile(withTopic(profile, choice.topic, false), `Removed ${title}`);
+  if (choice?.outlet) return setProfile(withOutlet(profile, choice.outlet, false, catalogue), `Removed ${title}`);
+  setTabCards(tabCards().map((card) => (card.id === id ? { ...card, hidden: true } : card)));
+}
+
+export const currentHistory = () => history;
+
+// Puts the page back as it was at a point in the history, without recording a change.
+// Having seen the setup screen stays remembered, so going back doesn't offer it again.
+async function goTo(index, type) {
+  history = loadHistory() ?? history;
+  if (!history || index === history.index || index < 0 || index >= history.entries.length) return false;
+  if (!feeds && !(await fetchFeeds())) return false;
+  // Undo names the change it takes back; redo and rewind, the one they go to.
+  const label = type === 'undo' ? history.entries[history.index].label : history.entries[index].label;
+  history = moveTo(history, index);
+  saveHistory(history);
+  const target = history.entries[index].settings;
+  const onboarded = settings?.onboarded || target?.onboarded;
+  const value = target ? { ...target, ...(onboarded && { onboarded: true }) } : onboarded ? { v: 1, tabs: {}, custom: [], onboarded: true } : null;
+  if (value?.profile) await fetchCatalogue();
+  settings = value;
+  saveSettings(settings);
+  drawCards();
+  applyPageOptions();
+  refreshCustomFeeds();
+  refreshProfileFeeds();
+  announce(type, label);
+  return true;
+}
+
+export const undo = () => (canUndo(history) ? goTo(history.index - 1, 'undo') : Promise.resolve(false));
+export const redo = () => (canRedo(history) ? goTo(history.index + 1, 'redo') : Promise.resolve(false));
+export const rewindTo = (index) => goTo(index, 'rewind');
+
+// Forgets every change, keeping the page as it is now.
+export function clearHistory() {
+  history = null;
+  saveHistory(null);
+  announce('clear');
+}
+
+// Forgets everything saved in this browser, history included, and goes to the home page,
+// which shows the suggested cards and the setup bar as on a first visit (setup-bar.js).
+// Can't be undone (start-over.js asks).
+export function startOver() {
+  settings = null;
+  history = null;
+  saveSettings(null);
+  saveHistory(null);
+  location.assign('/');
+}
+
+export function removeCustomFeed(id) {
+  const tabs = Object.fromEntries(Object.entries(settings?.tabs ?? {}).map(([name, page]) => [name, { ...page, cards: page.cards.filter((card) => card.id !== id) }]));
+  custom.delete(id);
+  save({ ...settings, tabs, custom: (settings?.custom ?? []).filter((feed) => feed.id !== id) });
+}
+
+// With a customised layout, the early script in the page has already started the fetch.
+// Custom cards show "Loading…" until their feeds arrive.
+applyPageOptions();
+if (settings?.tabs[tab]) {
+  const [data] = await Promise.all([window.startFeeds?.catch(() => null) ?? fetchFeeds(), settings.profile && fetchCatalogue()]);
+  if (data) {
+    feeds = data;
+    shownVersion = data.version;
+    drawCards();
+    refreshCustomFeeds();
+    refreshProfileFeeds();
+  }
+  document.documentElement.classList.remove('customised');
+} else if (onSuggestedPage()) {
+  // The server drew the UK's suggestions. Load what's needed to keep them current and to
+  // change them; elsewhere, this draws the region's own (the early script hid the cards).
+  const [data] = await Promise.all([window.startFeeds?.catch(() => null) ?? fetchFeeds(), fetchCatalogue()]);
+  if (data) {
+    feeds = data;
+    shownVersion = data.version;
+    if (guessedRegion() === 'uk') profileLoaded = await currentSourcesQuietly();
+    else await refreshProfileFeeds();
+  }
+  document.documentElement.classList.remove('customised');
+}
+
+// The suggested page's sources, without redrawing the server's copy of the same cards.
+async function currentSourcesQuietly() {
+  const ids = profileSourceIds(currentProfileCards());
+  if (!ids.length) return {};
+  try {
+    const response = await fetch(`/api/sources?ids=${ids.join(',')}`, { cache: 'no-cache' });
+    return response.ok ? (await response.json()).sources : {};
+  } catch {
+    return {};
+  }
+}

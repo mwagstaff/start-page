@@ -1,197 +1,78 @@
-# Start Page
+# tab1
 
-Personal igHome-style start page: BBC News, BBC Football, Hacker News, AI and
-general tech, science and space feeds, plus Beckenham weather in the masthead. See [PLAN.md](PLAN.md) for the full plan and deployment route.
+A personal news start page and native iPhone/iPad reader.
 
-```bash
+- `website/`: Node website, shared feed APIs, anonymous QR pairing and offline-content preparation.
+- `ios/Tab1.xcodeproj`: native SwiftUI app. Open this project in Xcode, choose the **Tab1** scheme and your iPhone, then Run.
+- Bundle identifier: `tab1.dev.skynolimit`; automatic signing uses the same development team as Top Scores (`SJ8X4DLAN9`). Minimum iOS: 26.2.
+
+## Website
+
+```sh
 npm install
-npm run dev     # http://localhost:3060, restarts on file changes
+npm run dev
 npm test
 ```
 
-- Feeds, cards and tabs are defined in `config/feeds.json`. Each card shows `limit` items,
-  or `defaultLimit` (6) if it doesn't set one. A card with several `sources`
-  merges them newest first, taking at most `maxPerSource` items from each.
-- The server fetches every feed itself every `refreshMinutes` and keeps the results in
-  memory. If a source fails, its last good items stay on the page and the card names the
-  source that's unavailable.
-- Weather comes from Open-Meteo (no key needed) and refreshes every 15 minutes. The page
-  first shows the default location in `config.weather` (Beckenham), fetched by the server. If
-  the browser shares its location, `public/weather.js` asks Open-Meteo for the forecast and
-  OpenStreetMap's Nominatim for the place name itself, with coordinates rounded to about 1km,
-  so the location never reaches this server. The browser keeps the forecast for 15 minutes
-  and the place name for good (localStorage).
-- Clicking the weather in the masthead opens the weather screen at `#weather`, which can be
-  bookmarked. Its animated sky follows the weather now. To see any sky whatever the weather,
-  add a test to the address, with `&time=night` for the night version, e.g.
-  `/#weather?test=thunderstorm&time=night`. Tests: `clear` (or `sunny`), `fair` (or
-  `mostly-clear`, `partly-cloudy`), `cloud` (or `cloudy`, `overcast`), `fog`, `drizzle`,
-  `rain`, `downpour` (or `heavy-rain`), `snow`, `storm` (or `thunderstorm`).
-- The masthead's rain chart shows the next 6 hours in 15-minute bars from Open-Meteo's
-  `minutely_15` forecast. Bar height is the rate, full height at 8 mm/h. The shade gives the
-  band: light below 2.5 mm/h, moderate below 7.6, heavy above. A one-line summary sits beside
-  it, and each bar has a tooltip.
-- Thumbnails come from the feed when it has an image. Otherwise the server reads the
-  article page's preview image (`og:image`) once and remembers it. The server shrinks
-  every thumbnail to a ~2KB 120×80 WebP using `sharp`, kept in memory and served at
-  `/thumb/<id>.webp`. It only serves images it put on the page itself. A story with no
-  image shows its site's initial instead. Thumbnails are made straight after each refresh;
-  if a site refuses the download (some block servers), the story gets the initial too, and
-  the image is tried again an hour later. Any thumbnail that still fails in the browser is
-  swapped for the initial.
-- `public/layout.js` measures the cards and sorts them into the columns that make the
-  tallest column as short as possible, using an exact search. Each column keeps the config
-  order. Without JavaScript the page falls back to plain CSS columns. Once you've placed
-  cards yourself (below), it keeps each card in the column you chose instead. When a narrower
-  window cannot show all those columns, displaced cards flow into the shortest available
-  column; widening the window restores the saved positions. On scrolling pages, cards end
-  at their content even when there are too few spare stories to level the columns.
-- The background photo changes daily. The server picks one from the sources in
-  `config.backdrop`: Bing's homepage photos for landscapes, nature and cities, and ESA's
-  Webb and Hubble feeds for space. `weight` sets how often each source comes up, and the
-  same date always gives the same photo. Hover the bottom-right corner to see the photo with its credit.
-- The masthead's search box is a plain form that sends you to Google search. It's focused when
-  the page loads, so you can start typing straight away.
-- A story only shows in one card: cards claim stories in page order, and a later card skips
-  any story an earlier one shows (same link without tracking parameters, or the same
-  headline) and fills up from further down its feeds. `public/stories.js` makes these
-  choices for both the server and the browser.
-- `/api/feeds.json` is one snapshot of every card's settings and the top of each of its feeds
-  (more than a card shows, so cards can fill up after duplicates are dropped), plus the default
-  weather and the photo. It's the same for every reader and carries a version used as its
-  ETag, with `Cache-Control: public, max-age=60, stale-while-revalidate=600`; a request with a
-  matching `If-None-Match` gets a 304. The page itself also has an ETag. Cloudflare serves the
-  snapshot from its edge through the **tab1.net zone's** Cache Rule
-  "tab1.net: cache shared feed APIs (origin TTL)". It makes `/api/feeds.json`,
-  `/api/catalogue.json` and `/api/sources` eligible for cache, preserving query strings.
-  Edge TTL follows origin cache-control (bypassing when absent), and Browser TTL respects
-  the origin. Conditional GET/HEAD requests use weak ETag comparison, so validation still
-  works when compression changes `"version"` to `W/"version"`.
-- Open pages re-request the snapshot every minute while visible, and when you switch back to
-  the tab (usually a 304). If it has changed, they redraw the cards in place, but only after
-  30 seconds without scrolling, typing or moving the pointer, and not while a search is
-  half-typed or Settings is open. A new daily photo reloads the page. Reloading the page in the
-  browser fetches every feed and the weather straight away (`POST /api/refresh`, at most once
-  a minute), then redraws.
-- The sliders button in the masthead opens Settings, a full-window page at `/settings`
-  (`public/settings-screen.js`; the address can be bookmarked or shared, and Back closes it): show or hide cards (including any card
-  in `config.widgets` that isn't on the tab), change their order (arrows, or drag a row by its
-  ⠿ handle, which works with touch too) and number of stories (up to 15), add your own RSS or
-  Atom feeds (up to 20), choose whether cards are fitted to the screen, and export or import
-  the settings as `tab1.net-settings.json`. On the page itself you can drag any card (press
-  and move with a mouse; press and hold, then move, on a touch screen; Escape cancels): it
-  lifts and follows the pointer, a dashed outline shows where it will land, and the other
-  cards slide out of the way. Dropping a card keeps every card in the column it's in, with no
-  limit per column (`public/reorder.js`); "Auto-arrange cards" in Settings packs them
-  to fit again. Settings are kept in
-  the browser's localStorage under `start-page:settings`, with no account. With a saved
-  layout, the browser draws the cards from the snapshot; a small script in the page's `<head>`
-  hides the default cards until then, and starts fetching the snapshot early. Without saved
-  settings or without JavaScript, the server-rendered default layout shows as before.
-- Feeds you add are fetched through `GET /api/feed?url=`, since most sites don't let browsers
-  read their feeds directly. Anyone can ask for any URL, and the server sits on a home network,
-  so `lib/custom.js` only fetches http(s) on the default ports, without credentials, and only
-  connects to public addresses: private, loopback, Tailscale (100.64/10), link-local and other
-  reserved ranges are refused. That's checked on the address actually connected to (so DNS
-  can't point it somewhere private) and again after each redirect (at most 3). It reads at most
-  2MB, gives up after 10 seconds, and fetches at most 30 new feeds a minute. Each feed is kept
-  for `refreshMinutes` and shared by everyone who adds it; its stories use the feed's own
-  images, loaded by the browser.
-- **Advanced settings → Search** chooses Google (the default), Bing, DuckDuckGo,
-  Yahoo, Brave Search or Ecosia. A custom provider needs a name and an http(s) search
-  URL containing `{query}`, for example `https://example.com/search?q={query}`.
-  Search words are URL-encoded, results open in a new tab, and the masthead names
-  the active provider. The choice and custom URL are saved in this browser and
-  included in settings export/import and undo/history. Switching to a preset keeps
-  the custom provider available for later.
-- Modules in `public/` import each other by plain path; the page's import map adds each file's
-  content hash, so browsers never mix old and new versions after a deploy. The server works the
-  hashes out again whenever a file in `public/` changes.
-- Endpoints: `/` (page), `/api/feeds.json` (snapshot), `/api/feed?url=` (a feed someone added), `/api/catalogue.json` (outlets and topics to choose from), `/api/sources?ids=` (catalogue feeds by id), `/api/widgets` (JSON, default layout), `POST /api/refresh`, `/healthcheck` (503 until the first refresh finishes).
-- `PORT` defaults to 3060.
-- `config/catalogue.json` lists the outlets and topics readers will pick from when they set up
-  their page (see [ONBOARDING-PLAN.md](ONBOARDING-PLAN.md); not used by the page yet). Each
-  outlet has one feed per section (`top`, `politics`, `world`, `business`, `science`, `health`,
-  `sport`, `culture`); a topic either merges the chosen outlets' feeds for a section, lists its
-  own `sources`, or borrows a card from `feeds.json` (`widget`). `npm run check-feeds` fetches
-  every feed in it as the server would and fails if any is broken or has nothing newer than a
-  week; `npm test` checks the catalogue's structure.
-- Catalogue feeds aren't fetched until a page asks for them at `/api/sources?ids=bbc.politics,guardian.politics`
-  (ids from `/api/catalogue.json`, which leaves out the feed addresses). The first request for a
-  feed fetches it on the spot; after that it's refreshed every `refreshMinutes` for as long as
-  someone has asked for it in the last 24 hours, then left alone until it's next wanted
-  (`lib/sources.js`). Only catalogue ids are accepted, never URLs. Ids are sorted, and any other
-  order gets a 301 to the sorted form, so pages asking for the same feeds share one response.
-  Responses carry an ETag and `Cache-Control: public, max-age=60, stale-while-revalidate=600`.
-  Cloudflare caches them through the tab1.net Cache Rule described above. Concurrent first
-  requests wait for the same feed fetch; readers use last-good data during an existing refresh.
-  A failed first fetch has `Cache-Control: no-store` so an edge cache cannot spread its empty
-  error result. Catalogue feeds that are also on the default page (BBC News top stories, BBC
-  Science, BBC Football, Six Colors) are read from its cache rather than fetched twice.
-- A reader who hasn't chosen anything sees the suggested page for their region: the
-  catalogue's `defaults` (for the UK, Top stories, Hacker News, World, Tech and Football from
-  BBC News, The Guardian and Sky News). The server draws the UK's (so it also works without
-  JavaScript); elsewhere the early script hides it until `page.js` draws the region's, guessed
-  from the time zone.
-- The setup bar (`public/setup-bar.js`) sits between the masthead and the cards. It opens by
-  itself on a first visit and stays, on later visits too, until the reader presses Done; after
-  that the masthead's Customise button opens it (as does `/settings/topics-and-sources`).
-  Compact, it shows the pillars News, Tech and Sport (then More and Display) with what's
-  chosen in each; each opens a drawer: news topics, sources, region and one card per topic or
-  per source; tiles for Tech, Sport and More topics showing where their stories come from; and
-  pictures, density, weather and the daily photo. On phones a drawer is a sheet from the
-  bottom. Every choice is saved as `profile` straight away and the cards change underneath
-  (`public/topics.js`): new cards go at the end and glow briefly, and each change can be
-  undone. A card's × turns its topic off, so the bar always matches the page. Each topic
-  names its pillar in `config/catalogue.json`.
-- Settings (`/settings`) is now "Advanced settings", opened from the bar: card order and
-  stories per card, fill and arrangement, temperature unit, your own feeds, import/export,
-  History and "Start over…". Its "Edit topics and sources…" button goes back to the bar.
-  "Reset cards" goes back to the suggested page. "Start over…" (`public/start-over.js`) asks
-  first, offering an export, then clears the settings and history from this browser and
-  reloads the home page as on a first visit. It can't be undone.
+Root commands forward to `website/`. The compatibility `server.js` entry also remains available. Website documentation is in [website/README.md](website/README.md).
 
-## Keyboard navigation
+## Story summaries
 
-Keyboard navigation is on by default, without moving focus on page load. Global
-badges use the logo's blue/violet finish; story hints and the detailed guide stay
-hidden until needed. Press `?` to show or hide Keyboard help; Escape never opens it. Number badges choose cards (`1`–`9`, then `0` for the tenth)
-and reveal letter shortcuts in the card gutters without resizing stories or changing how many fit: A, B, D, E… skip C, S and W. Left/right
-arrows move to the adjacent column, choosing the card and story closest to the
-current reading height. At the first/last story, up/down moves to the last/first
-story in the card directly above/below, when one exists. Arrows do not wrap or
-jump diagonally. Home/End goes to the first/last story in the current card.
-Enter opens the focused link and C opens that story's comments. `/` focuses search
-(S also works); Command-. on Mac or Ctrl-. opens Customise, and W opens weather.
-Keyboard focus has a soft halo; pointer interaction clears it and the story hints.
+Open **Summary** beneath a headline on the website or in the iOS reader. Article recaps and Hacker News or Lobsters discussion summaries become available independently. When article extraction fails, the reader displays the feed’s original excerpt under **Publisher excerpt**, if supplied. The iOS app keeps available summaries with its offline library.
 
-In Customise, left/right and Home/End move between the bar's buttons. Down on a
-section opens its choices; arrows move between tiles and checkboxes, while radio
-groups, selects and text fields keep their native keys. Enter or Space activates
-a button or choice. Escape closes Customise and clears selection. Tab remains available throughout, and
-changing an option preserves focus even when the bar redraws.
+Feed discovery queues work under `TAB1_DATA_DIR/summaries` (by default `website/data/summaries`). One worker in the website process uses Mini’s local Ollama `qwen3.5:9b` on loopback port 11434. The local maintenance service on port 3310 must report open admission and zero active jobs. Tab1 rechecks during inference and cancels its request if Kidsplorers needs the runner. With normal macOS memory pressure and one-minute load below 0.5 per logical CPU, the worker waits one second between jobs. Warning pressure or moderate load keeps the five-second pause. At critical or unknown pressure, or load at or above 0.9 per logical CPU, generation waits. Scheduled publisher polls are spread across the ten-minute cycle, and publishers that supply HTTP validators can return 304 without another feed parse. Web and app readers can still open previously completed summaries while work waits. New articles and threads take separate queue slots, and opening a pending summary prioritises it.
 
-Typing, browser shortcuts, dialogs and normal Tab navigation keep their usual behaviour.
-Escape clears card/story selection, focus and story hints, hides Keyboard help, and closes page controls without disabling keyboard navigation. Card numbers
-stay stable during a reading session; story focus follows its URL through refreshes
-and layout changes. Hidden stories have no shortcuts. **Advanced settings → Keyboard**
-turns off single-key shortcuts; arrows, Tab and Command-. / Ctrl-. remain available.
-In the weather screen, **↑ / ↓** select the previous/next forecast day (revealing more
-days when needed); **W** or **Escape** closes it without changing keyboard mode.
-This preference is included in settings export/import and undo/history.
+## iPhone testing
 
-## Production deployment
+1. Open `ios/Tab1.xcodeproj` in Xcode. Select your iPhone and the Tab1 scheme.
+2. Check Signing & Capabilities uses your team, then build and run.
+3. On the website choose **Connect iPhone**. In the app choose **Settings → Connect website** and scan the code.
+4. Choose **Downloads → Download for offline**. This queues articles, images and HN/Lobsters discussions through a background URL session. Inspect individual story status before switching to airplane mode.
+5. Open a saved article and its Comments tab, close the app, enable airplane mode and reopen it. Saved content remains available. Read/unread and favourites sync when connected again.
 
-The official address is https://tab1.net. Deploy with
-`/Users/mwagstaff/dev/server-tooling/deploy/node_project.zsh tab1.net --no-tail`.
-The service runs on Mini at port 3060 as `com.tab1.net.web`. The dedicated
-`tab1-mini` Cloudflare Tunnel forwards directly to `http://127.0.0.1:3060`,
-removing Sky and the Tailscale relay from the main site's request path.
-Sky's Caddy still redirects `www.tab1.net` and `start.skynolimit.dev` to the
-official address, preserving paths and queries, and retains the previous root
-route for rollback. See [the tunnel runbook](infrastructure/MINI-TUNNEL.md) for
-DNS targets, supervision, health checks and rollback instructions.
+For local development start the website with `PORT=3067 TAB1_PUBLIC_URL=http://YOUR-MAC.local:3067 npm --prefix website start`. In the app's Settings → Advanced settings set that URL, or scan a pairing code generated by that local server. The phone and Mac must be on the same network. Use HTTPS for remote servers.
 
-Browser storage keys retain the `start-page:` prefix for compatibility. Settings
-are origin-specific: export settings from an existing open tab on the old address before
-refreshing it, then import that JSON file on tab1.net to carry your layout across. Existing exports remain supported.
+## App-only topics
+
+In Settings → App-only topics, select additional reading topics for this iPhone. Return to Settings to refresh the cards. These choices are stored separately on the device, never written to the paired homepage settings, and survive app restarts and re-pairing. Extra cards are labelled App only and participate in automatic/offline downloads within the same limits. The existing Synced homepage topics/sources controls still change both devices. Previously downloaded stories remain in Downloads after removing a topic, subject to normal retention.
+
+## Offline behaviour
+
+The app collects up to 100 stories per enabled card (up to 1,000 per refresh), independently of website display counts. Actual totals depend on available feed items and cross-card deduplication. Cards show eight headlines initially; More stories / Fewer stories expands or collapses the remaining headlines, and search includes the whole current collection. Collapsing a card does not stop its downloads.
+
+Current cards and collected stories are retained for seven days, with a default 1 GB budget. Favourites are protected. Text, comments and image files live in Application Support, excluded from backup, rather than purgeable URL caches. Older unprotected entries are removed to make space. If protected content fills the budget, new downloads report the limit instead of deleting favourites.
+
+Background refresh requests an hourly opportunity; iOS decides when it runs. Queued file downloads use a background URL session. Force-quitting, system restrictions and publisher failures can prevent completion. The Downloads page distinguishes saved article bodies from failed downloads. Offline comments cover Hacker News and Lobsters, up to 500 initially; the reader offers Download all (bounded at 10,000 for a single request).
+
+Temporary HTTP failures (408, 429, 500, 502, 503 and 504) and transient connection failures get up to three automatic retries, with minimum delays of 5, 30 and 120 seconds. Server `Retry-After` delays are honoured. Retries are queued as background URL session tasks, with the attempt count stored in the task descriptor; iOS may start them later. Permanent publisher/extraction failures are not automatically retried within that download attempt. A later refresh or manual retry starts a new attempt.
+
+After a failure, the reader offers **Retry download**; Downloads offers **Retry failed downloads** for entries not already downloading or waiting for an automatic retry. Existing article bodies and images are retained, and successful parts are not downloaded again. Error text comes from the server when available. Extraction failures use HTTP 422 rather than a misleading transient 502; a single visible article element is used as a fallback when full-page extraction fails.
+
+Offline reader HTML explicitly declares UTF-8 so punctuation, accented characters and non-breaking spaces render correctly, including in existing saved stories. Extraction version 2 preserves editorial figures/captions and normalises lazy image sources before sanitising. Older saved article bodies are refreshed on the next download pass (or when opened online with automatic downloads enabled); their existing content remains readable until replacement succeeds. The article footer opens the original URL through the system URL handler, outside the offline reader.
+
+Live-blog extraction version 3 keeps timeline targets and presents compact time/title rows with local jump links. Reader HTML preparation and file writes run off the main thread; identical SwiftUI updates do no rendering work. Image changes are coalesced and page reloads wait for scrolling to stop, preserving the scroll offset. Images load lazily and live-blog blocks use offscreen rendering containment. Library persistence uses a serial, coalescing background writer and is flushed before background download completion and on entering the background.
+
+The reader does not bypass paywalls, execute publisher scripts or cache videos. Article coverage depends on accessible publisher HTML. Unavailable articles keep their headline and original link.
+
+## Development and verification
+
+The Xcode project is checked in. Regeneration is optional with `xcodegen generate --spec ios/project.yml`.
+
+```sh
+npm test
+swiftc ios/Tab1/DownloadRetry.swift ios/tests/RetryPolicyTests.swift -o /tmp/tab1-retry-policy-tests
+/tmp/tab1-retry-policy-tests
+swiftc ios/Tab1/Models.swift ios/Tab1/OfflineArticleHTML.swift ios/tests/OfflineArticleHTMLTests.swift -o /tmp/tab1-offline-html-tests
+/tmp/tab1-offline-html-tests
+node website/scripts/ios-fixture-server.js
+# In another terminal, with an available simulator:
+xcodebuild -project ios/Tab1.xcodeproj -scheme Tab1 -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max' test
+```
+
+The UI tests cover temporary failure recovery, individual and bulk manual retry, and use their own offline library and local fixture server (port 3068). It downloads a story and discussion, terminates the app, relaunches against an unreachable server and verifies both remain readable.
+
+## Server persistence and deployment
+
+Anonymous device credentials are hashed in `website/data/profiles.json` locally (`data/profiles.json` when deploying the website directory alone). Set `TAB1_DATA_DIR` to relocate this directory. Keep it outside destructive deployment syncs and back it up; losing it invalidates existing pairings. The server-tooling tab1 entry now deploys `website/` and excludes `/data/`. The existing remote service path and port remain unchanged.
+
+Pairing codes expire after five minutes and can be claimed once. Each paired device gets an independent token. Unlinking a browser revokes that browser token. Article fetching uses the existing public-address-only fetcher, including redirect/DNS checks and bounded responses.

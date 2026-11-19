@@ -1,0 +1,56 @@
+name: Tab1
+options:
+  bundleIdPrefix: tab1.dev
+  deploymentTarget:
+    iOS: '26.2'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+    DEVELOPMENT_TEAM: SJ8X4DLAN9
+    CODE_SIGN_STYLE: Automatic
+targets:
+  Tab1:
+    type: application
+    platform: iOS
+    sources:
+      - path: Tab1
+      - path: ../website/public/forecast.js
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: tab1.dev.skynolimit
+        TARGETED_DEVICE_FAMILY: '1,2'
+        GENERATE_INFOPLIST_FILE: YES
+    info:
+      path: Tab1/Info.plist
+      properties:
+        CFBundleDisplayName: tab1
+        CFBundleShortVersionString: '1.0'
+        CFBundleVersion: '1'
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSLocationWhenInUseUsageDescription: Show and save the forecast for your approximate location.
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSCameraUsageDescription: Scan a QR code from tab1 to connect your settings.
+        NSLocalNetworkUsageDescription: Connect to your tab1 development server for testing.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        BGTaskSchedulerPermittedIdentifiers: [tab1.dev.skynolimit.refresh, tab1.dev.skynolimit.processing]
+        UIBackgroundModes: [fetch, processing]
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [tab1]
+    scheme:
+      testTargets: [Tab1UITests]
+
+  Tab1UITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tab1UITests]
+    dependencies:
+      - target: Tab1
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: tab1.dev.skynolimit.uitests
+        GENERATE_INFOPLIST_FILE: YES
