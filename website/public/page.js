@@ -5,6 +5,7 @@
 // Readers who haven't chosen any yet get their region's suggested ones.
 // Every change to the settings is recorded (history.js), so it can be undone.
 
+import { showFootball } from './football.js';
 import { searchProvider, updateSearchForm, validSearch } from './search.js';
 import { buildCards } from './stories.js';
 import { renderWidget } from './cards.js';
@@ -143,7 +144,7 @@ function drawCards() {
   if (onSuggestedPage() && !catalogue) return;
   const layout = tabCards().filter((card) => !card.hidden);
   const cardLayout = layout.map((card) => ({ ...card, maxItems: card.limit }));
-  const html = buildCards(allWidgets(), cardLayout, feeds.defaultLimit, MAX_CARD_ITEMS).map((card) => renderWidget(card)).join('');
+  const html = buildCards(allWidgets(), cardLayout, feeds.defaultLimit, MAX_CARD_ITEMS).map((card, index) => renderWidget(card, undefined, cardLayout[index].limit)).join('');
   grid.dispatchEvent(new Event('cards:beforechange'));
   grid.classList.remove('packed');
   grid.innerHTML = html;
@@ -207,6 +208,7 @@ function applyPageOptions() {
   root.classList.toggle('no-weather', profile?.weather === false);
   root.classList.toggle('no-backdrop', profile?.backdrop === false);
   document.body.classList.toggle('has-backdrop', profile?.backdrop !== false && Boolean(document.querySelector('.backdrop')));
+  showFootball({ premier: settings?.football === true, tvStars: settings?.footballTv ?? 0 });
   applyTemperatureUnit();
   updateSearchForm(document.querySelector('.search'), settings?.search);
   document.dispatchEvent(new CustomEvent('keyboard:settings', { detail: { enabled: settings?.shortcuts !== false } }));
@@ -336,6 +338,19 @@ export function setSolid(on) {
 export function setTemperature(unit) {
   const { temperature, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
   save(unit ? { ...rest, temperature: unit } : rest, unit ? `Showed temperatures in °${unit}` : 'Showed temperatures in the local unit');
+  applyPageOptions();
+}
+
+export function setFootball(enabled) {
+  const { football, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  save(enabled ? { ...rest, football: true } : rest, enabled ? 'Showed football fixtures' : 'Hid football fixtures');
+  applyPageOptions();
+}
+
+// stars: 1–5 shows televised matches rated at least that many stars; 0 turns them off.
+export function setFootballTv(stars) {
+  const { footballTv, ...rest } = { v: 1, tabs: {}, custom: [], ...settings };
+  save(stars ? { ...rest, footballTv: stars } : rest, stars ? `Showed ${stars}-star+ matches on TV` : 'Hid matches on TV');
   applyPageOptions();
 }
 

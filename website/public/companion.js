@@ -23,12 +23,20 @@ button.textContent = "Connect iPhone";
 button.className = "companion-connect";
 button.style.cssText =
   "position:fixed;bottom:12px;left:12px;z-index:50;padding:8px 14px;border-radius:20px;border:1px solid #888;background:Canvas;color:CanvasText;font:inherit";
-document.body.append(button);
+// Pairing is for desktop browsers: on an iPhone or iPad you'd use the app itself, and an Android
+// phone can't run it. iPadOS Safari reports itself as a Mac, so a touch "Mac" counts as an iPad.
+// A browser that's already connected keeps syncing either way.
+const mobile =
+  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+if (!mobile) document.body.append(button);
 button.onclick = async () => {
   const dialog = document.createElement("dialog");
-  dialog.style.cssText =
-    "max-width:360px;padding:24px;border-radius:20px;background:Canvas;color:CanvasText";
+  dialog.className = "customise companion-dialog";
+  dialog.setAttribute("aria-labelledby", "companion-title");
+  dialog.addEventListener("close", () => dialog.remove(), { once: true });
   const title = document.createElement("h2");
+  title.id = "companion-title";
   title.textContent = "Connect tab1 for iPhone";
   dialog.append(title);
   const status = document.createElement("p");
@@ -36,11 +44,12 @@ button.onclick = async () => {
   dialog.append(status);
   const close = document.createElement("button");
   close.textContent = "Close";
-  close.onclick = () => {
-    dialog.close();
-    dialog.remove();
-  };
-  dialog.append(close);
+  close.className = "primary";
+  close.onclick = () => dialog.close();
+  const actions = document.createElement("div");
+  actions.className = "customise-actions";
+  actions.append(close);
+  dialog.append(actions);
   document.body.append(dialog);
   dialog.showModal();
   try {
@@ -57,11 +66,13 @@ button.onclick = async () => {
     const pair = await request("pair", {});
     const img = document.createElement("img");
     img.src = pair.qr;
-    img.alt = "Scan with tab1 on your iPhone";
-    img.style.width = "100%";
-    dialog.insertBefore(img, status);
+    img.alt = "QR code to connect this browser to tab1";
+    const expiry = document.createElement("p");
+    expiry.className = "customise-status";
+    expiry.textContent = "This code expires in five minutes.";
+    status.after(img, expiry);
     status.textContent =
-      "In the app, open Settings → Connect website. This code expires in five minutes.";
+      "Scan this code with your iPhone’s Camera and tap the link. If tab1 is installed, it will open and connect automatically.";
     const unlink = document.createElement("button");
     unlink.textContent = "Disconnect this browser";
     unlink.onclick = async () => {
@@ -69,9 +80,8 @@ button.onclick = async () => {
       connection = null;
       localStorage.removeItem(key);
       dialog.close();
-      dialog.remove();
     };
-    dialog.append(unlink);
+    actions.prepend(unlink);
   } catch (e) {
     status.textContent = e.message;
   }

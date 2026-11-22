@@ -1847,6 +1847,10 @@ html:has(.weather-screen[open]):has(:is(.settings-screen, .setup-screen)[open]) 
 .customise .danger:not(:disabled):hover { border-color: var(--danger); filter: brightness(1.08); }
 .start-over .start-over-cancel { margin-left: auto; }
 
+.companion-dialog { width: min(360px, calc(100vw - 32px)); }
+.companion-dialog img { display: block; width: 100%; border-radius: 8px; }
+.companion-dialog .customise-actions { margin-top: 18px; gap: 12px; }
+
 /* Asking before a card is removed */
 .remove-dialog { width: min(440px, calc(100vw - 32px)); }
 .remove-dialog h2 { margin-bottom: 12px; overflow-wrap: anywhere; }
@@ -2183,6 +2187,9 @@ body:has(.grid.packed) > .setup-bar-wrap { flex: none; }
 .sb-history:hover { color: var(--text); background: var(--sb-field-hover); }
 
 .sb-advanced {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 11px;
   border: 0;
   border-radius: 999px;
@@ -2191,6 +2198,7 @@ body:has(.grid.packed) > .setup-bar-wrap { flex: none; }
   white-space: nowrap;
   cursor: pointer;
 }
+.sb-advanced svg { display: block; flex: none; }
 .sb-advanced:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sb-advanced:hover { color: var(--text); background: var(--sb-field-hover); }
 
@@ -2437,18 +2445,25 @@ body:has(.grid.packed) > .setup-bar-wrap { flex: none; }
 
 @media (max-width: 1000px) {
   .sb-intro-text { display: none; }
-  .sb-advanced { display: none; }
-  .sb-history span { display: none; }
-  .sb-history { padding: 8px; }
+  .sb-history span, .sb-advanced span { display: none; }
+  .sb-history, .sb-advanced { padding: 8px; }
 }
 
 /* Phones: the pillars scroll sideways under the title, and a drawer is a sheet from the bottom. */
 @media (max-width: 760px) {
+  .grid { columns: 1; }
+  .card .mobile-overflow,
+  .sb-switch:has([name="fill"]),
+  .arrange-toggle:has([data-field="fill"]) { display: none; }
+
   .sb-main { flex-wrap: wrap; gap: 10px; padding: 12px 12px 10px; }
   .sb-intro { flex: 1; }
   .sb-intro-text { display: block; }
   .sb-intro p { display: block; white-space: normal; }
   .sb-actions { margin-left: 0; }
+  /* The actions get a row of their own here, so there's room to spell out More settings. */
+  .sb-advanced span { display: inline; }
+  .sb-advanced { padding: 8px 11px; }
   .sb-pillars {
     flex-basis: 100%;
     order: 3;
@@ -2750,3 +2765,42 @@ body:has(dialog[open]) > .keyboard-footer { display: none; }
 .story-summary p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .story-summary p, .story-summary ul { margin: .35rem 0 .7rem; }
 .story-summary ul { padding-inline-start: 1.3rem; }
+
+.fixture-strip:not([hidden]) {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  margin: 5px var(--gutter) 0;
+  align-self: flex-start;
+  max-width: calc(100% - 2 * var(--gutter));
+}
+.fixture-strip a {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.fixture-strip a:hover { background: color-mix(in srgb, var(--surface) 92%, var(--text)); text-decoration: none; }
+.fixture-strip a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.fixture-strip img { object-fit: contain; }
+.fixture-strip strong img { width: auto; height: 16px; max-width: 48px; }
+.fixture-strip strong { display: inline-flex; align-items: center; padding-inline: 2px; }
+.fixture-strip small { color: var(--muted); font-weight: 600; }
+.fixture-strip .is-live small { background: #c40033; color: white; padding: 1px 5px; border-radius: 8px; }
+.fixture-strip .fixture-stars { color: #f5b301; font-size: 9px; letter-spacing: -1px; margin-inline-start: -1px; }
+.settings-screen .football-stars { margin: 4px 0 0; }
+.football-stars .density-options b { display: block; color: #f5b301; font-size: 12px; letter-spacing: -1px; white-space: nowrap; }
+.football-stars input:checked + span b { color: #fff; }
+.football-stars .density-options { grid-template-columns: repeat(5, 1fr); }
+/* The fixtures belong to the page, not More settings; keep their space so the cards don't shift. */
+body:has(dialog.settings-screen[open]) .fixture-strip { visibility: hidden; }

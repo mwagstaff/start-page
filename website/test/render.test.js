@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { renderWidget } from '../public/cards.js';
 import { relativeTime, renderPage } from '../lib/render.js';
 
 const now = Date.parse('2026-10-29T12:00:00Z');
@@ -50,7 +51,7 @@ test('the page carries its version, Customise button, the setup bar\'s place, an
   assert.match(html, /data-tab="home" data-version="abc123"/);
   assert.doesNotMatch(html, /class="refresh"|class="history-open/);
   assert.match(html, /<button class="customise-open" type="button"[^>]* aria-controls="setup-bar" hidden>.*<span>Customise<\/span><\/button>/);
-  assert.match(html, /<div class="setup-bar-wrap wrap" id="setup-bar" hidden><\/div>\s*<main class="wrap grid" id="stories" tabindex="-1">/);
+  assert.match(html, /<div class="setup-bar-wrap wrap" id="setup-bar" hidden><\/div>\s*<nav class="fixture-strip"[^>]* hidden><\/nav>\s*<main class="wrap grid" id="stories" tabindex="-1">/);
   assert.match(html, /<form class="search" action="https:\/\/www\.google\.com\/search" method="get" target="_blank" rel="noopener" role="search">\s*<input type="search" name="q"/);
   assert.match(html, /<script type="importmap">\{"imports":\{"\/static\/page\.js":"\/static\/page\.js\?v=h1","\/static\/cards\.js":"\/static\/cards\.js\?v=h2"\}\}<\/script>/);
   assert.match(html, /src="\/static\/page\.js\?v=h1"/);
@@ -64,4 +65,14 @@ test('the page carries its version, Customise button, the setup bar\'s place, an
   assert.doesNotMatch(html, /class="date"/);
   assert.doesNotMatch(html, /Keyboard navigation \(\/\)/);
   assert.match(html, /settings\.welcome === true\)\) root\.classList\.add\('setup-pending'\)/);
+});
+
+test('mobile cards show ten stories by default and honour a higher per-card limit', () => {
+  const items = Array.from({ length: 16 }, (_, i) => ({ title: String(i), link: `https://example.com/${i}` }));
+  const widget = { id: 'news', title: 'News', failedSources: [], items };
+  for (const [limit, expected] of [[undefined, 10], [14, 14]]) {
+    const html = renderWidget(widget, now, limit);
+    assert.equal((html.match(/<li class="item/g) ?? []).length, items.length);
+    assert.equal((html.match(/mobile-overflow/g) ?? []).length, items.length - expected);
+  }
 });

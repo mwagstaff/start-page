@@ -122,6 +122,7 @@ export function renderPage({ tabs, activeTab, widgets, weather = null, backdrop 
   </header>
   ${nav}
   <div class="setup-bar-wrap wrap" id="setup-bar" hidden></div>
+  <nav class="fixture-strip" aria-label="Today’s football matches" hidden></nav>
   <main class="wrap grid" id="stories" tabindex="-1">
     ${widgets.map((widget) => renderWidget(widget, now)).join('\n')}
   </main>

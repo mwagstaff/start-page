@@ -12,7 +12,7 @@
 // loaded at /settings opens it straight away. Done, Escape or Back closes it.
 
 import { escapeHtml, storyCountControl } from './cards.js';
-import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setDensity, setFill, setSolid, setSearch, setShortcuts, setTabCards, setTemperature, tabCards, widgetFor } from './page.js';
+import { addCustomFeed, arrangement, currentFeeds, currentSettings, fetchCatalogue, fetchFeeds, removeCustomFeed, replaceSettings, setArrange, setDensity, setFill, setFootball, setFootballTv, setSolid, setSearch, setShortcuts, setTabCards, setTemperature, tabCards, widgetFor } from './page.js';
 import { unitForLocale } from './forecast.js';
 import { openHistory } from './undo.js';
 import { askStartOver } from './start-over.js';
@@ -26,6 +26,7 @@ let dialog = null;
 let cards = []; // this tab's cards in the screen's order, hidden ones included
 let pushed = false; // opening added /settings to the history, so closing goes back over it
 
+const DEFAULT_TV_STARS = 3;
 const DENSITY_HINTS = {
   spacious: 'More of the photo',
   balanced: 'In between',
@@ -113,6 +114,23 @@ function build() {
             </label>
             <p class="settings-hint">Single-key shortcuts pause while typing. Turn them off to use arrows and Tab instead. Command-. / Ctrl-. remains available. Esc clears selection and closes page controls.</p>
           </section>
+          <section class="settings-section" aria-labelledby="settings-football-title">
+            <h2 id="settings-football-title">Football</h2>
+            <label class="arrange-toggle">
+              <input type="checkbox" data-field="football">
+              <span>Premier League fixtures<small>Show today’s matches involving Premier League clubs above the cards, with live scores from Top Scores.</small></span>
+            </label>
+            <label class="arrange-toggle">
+              <input type="checkbox" data-field="football-tv">
+              <span>Matches on TV<small>Show today’s matches on UK TV, rated for watchability by Top Scores.</small></span>
+            </label>
+            <fieldset class="density football-stars" hidden>
+              <legend>Minimum watchability</legend>
+              <div class="density-options">
+                ${[1, 2, 3, 4, 5].map((n) => `<label><input type="radio" name="football-stars" value="${n}" data-field="football-stars" aria-label="${n} star${n === 1 ? '' : 's'}${n < 5 ? ' or more' : ' only'}"><span><b aria-hidden="true">${'★'.repeat(n)}</b><small>${n < 5 ? 'and up' : 'only'}</small></span></label>`).join('')}
+              </div>
+            </fieldset>
+          </section>
           <section class="settings-section" aria-labelledby="settings-weather-title">
             <h2 id="settings-weather-title">Weather</h2>
             <fieldset class="density">
@@ -165,6 +183,11 @@ function renderList(focus) {
   dialog.querySelector('[data-field="arrange"]').checked = arrangement() === 'auto';
   dialog.querySelector('[data-field="fill"]').checked = currentSettings()?.fill !== false;
   dialog.querySelector('[data-field="solid"]').checked = currentSettings()?.solid === true;
+  dialog.querySelector('[data-field="football"]').checked = currentSettings()?.football === true;
+  const tvStars = currentSettings()?.footballTv ?? 0;
+  dialog.querySelector('[data-field="football-tv"]').checked = tvStars > 0;
+  dialog.querySelector('.football-stars').hidden = !tvStars;
+  for (const radio of dialog.querySelectorAll('[data-field="football-stars"]')) radio.checked = Number(radio.value) === tvStars;
   dialog.querySelector('[data-field="shortcuts"]').checked = currentSettings()?.shortcuts !== false;
   dialog.querySelector(`[data-field="density"][value="${currentSettings()?.density ?? DENSITIES[0]}"]`).checked = true;
   dialog.querySelector(`[data-field="temperature"][value="${currentSettings()?.temperature ?? ''}"]`).checked = true;
@@ -249,6 +272,18 @@ async function onClick(event) {
 function onChange(event) {
   const field = event.target.dataset.field;
   if (!field) return;
+  if (field === 'football') {
+    setFootball(event.target.checked);
+    return;
+  }
+  if (field === 'football-tv' || field === 'football-stars') {
+    const stars = field === 'football-tv' ? (event.target.checked ? DEFAULT_TV_STARS : 0) : Number(event.target.value);
+    setFootballTv(stars);
+    dialog.querySelector('.football-stars').hidden = !stars;
+    for (const radio of dialog.querySelectorAll('[data-field="football-stars"]')) radio.checked = Number(radio.value) === stars;
+    status(stars ? `Showing matches on TV rated ${stars} star${stars === 1 ? '' : 's'}${stars < 5 ? ' or more' : ''}.` : 'Matches on TV are hidden.');
+    return;
+  }
   if (field === 'shortcuts') {
     setShortcuts(event.target.checked);
     status(event.target.checked ? 'Single-key shortcuts are on.' : 'Single-key shortcuts are off. Arrows and Tab still work.');

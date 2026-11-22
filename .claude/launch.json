@@ -4,13 +4,23 @@
     {
       "name": "tab1.net",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 3060
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3060,
+      "autoPort": true
     },
     {
       "name": "mockups",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "3061", "--bind", "127.0.0.1"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "3061",
+        "--bind",
+        "127.0.0.1"
+      ],
       "port": 3061
     }
   ]

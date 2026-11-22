@@ -130,11 +130,12 @@ function initGrid(grid) {
   let cards = [...grid.children];
   let laidOutWidth = 0;
   let laidOutHeight = 0;
+  const mobile = matchMedia('(max-width: 760px)');
   const filling = () => !document.documentElement.classList.contains('no-fill');
 
   const layout = () => {
     // The window's height decides whether the cards fit, and how far to fill them.
-    if (grid.clientWidth === laidOutWidth && window.innerHeight === laidOutHeight) return;
+    if (grid.clientWidth === laidOutWidth && (mobile.matches || window.innerHeight === laidOutHeight)) return;
     laidOutWidth = grid.clientWidth;
     laidOutHeight = window.innerHeight;
     grid.dispatchEvent(new Event('layout:beforechange'));
@@ -142,6 +143,14 @@ function initGrid(grid) {
       // Measure in the CSS column layout, where each card already has the column width.
       grid.classList.remove('packed', 'filled', 'scrolls');
       grid.replaceChildren(...cards);
+      if (mobile.matches) {
+        const column = document.createElement('div');
+        column.className = 'column';
+        column.append(...cards);
+        grid.replaceChildren(column);
+        grid.classList.add('packed', 'scrolls');
+        return;
+      }
       const count = columnCountFor(grid);
       const fill = filling();
       const measured = cards.map(measureCard);
@@ -182,6 +191,10 @@ function initGrid(grid) {
     }
   };
 
+  mobile.addEventListener('change', () => {
+    laidOutWidth = 0;
+    layout();
+  });
   layout();
   // page.js puts new cards straight into the grid (a customised layout, or fresh stories) and fires this.
   grid.addEventListener('cards:change', () => {

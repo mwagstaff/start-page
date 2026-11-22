@@ -3,12 +3,14 @@
 
 import { MAX_CARD_ITEMS } from './settings.js';
 
+const MOBILE_DEFAULT_LIMIT = 10;
+
 export function storyCountControl(title, limit) {
   const options = Array.from({ length: MAX_CARD_ITEMS }, (_, index) => {
     const count = index + 1;
     return `<option value="${count}"${limit === count ? ' selected' : ''}>${count}</option>`;
   });
-  return `<label class="card-limit">Stories <select data-field="limit" aria-label="Stories for ${escapeHtml(title)}"><option value="">Auto (${MAX_CARD_ITEMS})</option>${options.join('')}</select></label>`;
+  return `<label class="card-limit">Stories <select data-field="limit" aria-label="Stories for ${escapeHtml(title)}"><option value="">Auto (${MOBILE_DEFAULT_LIMIT} on mobile)</option>${options.join('')}</select></label>`;
 }
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -50,7 +52,7 @@ function siteInitial(item) {
   return (host || item.source || '?').charAt(0).toUpperCase();
 }
 
-function renderItem(item, widget, now) {
+function renderItem(item, widget, now, mobileOverflow) {
   let thumb = '';
   if (widget.thumbnails && item.image) {
     thumb = `<img class="thumb" src="${escapeHtml(item.image)}" alt="" loading="lazy" decoding="async" width="54" height="36" data-initial="${escapeHtml(siteInitial(item))}">`;
@@ -58,7 +60,7 @@ function renderItem(item, widget, now) {
     // Keeps headlines lined up when a story has no picture: the site's initial instead.
     thumb = `<span class="thumb thumb-empty" aria-hidden="true">${escapeHtml(siteInitial(item))}</span>`;
   }
-  return `<li class="item${thumb ? ' has-thumb' : ''}${item.extra ? ' extra' : ''}">
+  return `<li class="item${mobileOverflow ? ' mobile-overflow' : ''}${thumb ? ' has-thumb' : ''}${item.extra ? ' extra' : ''}">
       ${thumb}
       <div class="body">
         <a class="headline" href="${escapeHtml(item.link)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a>
@@ -70,13 +72,13 @@ function renderItem(item, widget, now) {
 // The × that removes a card (remove.js shows it once it can).
 const CLOSE_ICON = '<svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg>';
 
-export function renderWidget(widget, now) {
+export function renderWidget(widget, now, mobileLimit = MOBILE_DEFAULT_LIMIT) {
   const title = widget.link
     ? `<a href="${escapeHtml(widget.link)}" target="_blank" rel="noopener">${escapeHtml(widget.title)}</a>`
     : escapeHtml(widget.title);
   let body;
   if (widget.items.length) {
-    body = `<ul class="items">${widget.items.map((item) => renderItem(item, widget, now)).join('')}</ul>`;
+    body = `<ul class="items">${widget.items.map((item, index) => renderItem(item, widget, now, index >= mobileLimit)).join('')}</ul>`;
   } else if (widget.failedSources.length) {
     body = `<p class="empty">Couldn't load this feed. It will try again in a few minutes.</p>`;
   } else {

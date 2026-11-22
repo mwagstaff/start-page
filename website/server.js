@@ -1,3 +1,4 @@
+import { todaysFixtures } from './lib/football.js';
 import { createSummaries } from './lib/summaries.js';
 import { createFeedReader } from './lib/feeds.js';
 import { createCompanion } from './lib/companion.js';
@@ -149,6 +150,13 @@ const server = createServer(async (req, res) => {
   const { pathname, searchParams } = url;
   if (await companion(req, res, url)) return;
 
+  if (pathname === '/api/football.json') {
+    try {
+      return send(res, 200, JSON.stringify(await todaysFixtures()), 'application/json');
+    } catch {
+      return send(res, 503, JSON.stringify({ error: 'Fixtures unavailable' }), 'application/json');
+    }
+  }
   if (pathname === '/api/summary' && req.method === 'GET') {
     const result = summaries.get(searchParams.get('url'), searchParams.get('thread'), true);
     res.writeHead(result ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

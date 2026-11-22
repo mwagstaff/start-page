@@ -68,6 +68,7 @@ const ICONS = {
   spark: '<path d="M8 1.6c.45 3.2 1.9 5.25 6.4 6.4-4.5 1.15-5.95 3.2-6.4 6.4-.45-3.2-1.9-5.25-6.4-6.4 4.5-1.15 5.95-3.2 6.4-6.4z" fill="currentColor" stroke="none"/>',
   close: '<path d="M4 4l8 8M12 4l-8 8"/>',
   history: '<path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8"/><path d="M2.4 2.6v2.6H5"/><path d="M8 5.2V8l2 1.3"/>',
+  settings: '<circle cx="8" cy="8" r="3.9"/><circle cx="8" cy="8" r="1.5"/><path d="M8 1.6v2.5M8 11.9v2.5M1.6 8h2.5M11.9 8h2.5M3.5 3.5l1.7 1.7M10.8 10.8l1.7 1.7M3.5 12.5l1.7-1.7M10.8 5.2l1.7-1.7"/>',
 };
 const icon = (name, size = 15) => `<svg viewBox="0 0 16 16" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
@@ -223,7 +224,7 @@ function render() {
         </div>
         <div class="sb-actions">
           <button type="button" class="sb-history" data-action="history" title="Undo or rewind changes">${icon('history', 14)}<span>History</span></button>
-          <button type="button" class="sb-advanced" data-action="advanced">More settings</button>
+          <button type="button" class="sb-advanced" data-action="advanced" aria-label="More settings" title="More settings: football, card order, RSS feeds, search…">${icon('settings', 14)}<span>More settings</span></button>
           <button type="button" class="sb-done" data-action="done">Done</button>
         </div>
       </div>

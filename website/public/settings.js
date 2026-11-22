@@ -72,7 +72,7 @@ export function validSettings(value) {
   const profile = validProfile(value.profile);
   const search = validSearch(value.search);
   const shortcuts = value.shortcuts === false ? { shortcuts: false } : {};
-  return { v: 1, tabs, custom, ...shortcuts, ...(search && { search }), ...(profile && { profile }), ...((value.onboarded === true || profile) && { onboarded: true }), ...(value.welcome === true && { welcome: true }), ...(value.fill === false && { fill: false }), ...(value.solid === true && { solid: true }), ...(DENSITIES.includes(value.density) && value.density !== DENSITIES[0] && { density: value.density }), ...(TEMPERATURE_UNITS.includes(value.temperature) && { temperature: value.temperature }) };
+  return { v: 1, tabs, custom, ...(value.football === true && { football: true }), ...([1, 2, 3, 4, 5].includes(value.footballTv) && { footballTv: value.footballTv }), ...shortcuts, ...(search && { search }), ...(profile && { profile }), ...((value.onboarded === true || profile) && { onboarded: true }), ...(value.welcome === true && { welcome: true }), ...(value.fill === false && { fill: false }), ...(value.solid === true && { solid: true }), ...(DENSITIES.includes(value.density) && value.density !== DENSITIES[0] && { density: value.density }), ...(TEMPERATURE_UNITS.includes(value.temperature) && { temperature: value.temperature }) };
 }
 
 // Every card for a tab, in page order: the reader's saved order first, then any of the
@@ -126,7 +126,7 @@ export function loadSettings() {
 
 export function saveSettings(settings) {
   try {
-    if (settings && (Object.keys(settings.tabs).length || settings.onboarded || settings.welcome || settings.fill === false || settings.solid || settings.density || settings.temperature || settings.search || settings.shortcuts === false)) localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    if (settings && (Object.keys(settings.tabs).length || settings.onboarded || settings.welcome || settings.fill === false || settings.football || settings.footballTv || settings.solid || settings.density || settings.temperature || settings.search || settings.shortcuts === false)) localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     else localStorage.removeItem(SETTINGS_KEY);
   } catch {
     // Storage blocked (private window, site data off): the change lasts until the page reloads.
