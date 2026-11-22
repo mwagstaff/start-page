@@ -109,7 +109,7 @@ function columnCountFor(grid) {
 // of them showing. Hiding stories from the end takes away exactly the space down to the
 // last one left; `start` is how many it shows unfilled (the ones that aren't spares).
 function measureCard(card) {
-  const items = [...card.querySelectorAll('.item')];
+  const items = [...card.querySelectorAll('.item:not(.mobile-only-story)')];
   const margin = parseFloat(getComputedStyle(card).marginBottom);
   const full = card.getBoundingClientRect().height + margin;
   if (!items.length) return { margin, start: 0, sizes: [full] };

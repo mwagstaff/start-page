@@ -304,14 +304,42 @@ private struct StoryAge: View {
   }
 }
 
+private struct PendingSummary: View {
+  @Environment(LibraryStore.self) private var store
+  @Environment(\.scenePhase) private var phase
+  let story: Story
+  var body: some View {
+    let summary = store.library.entries[story.id]?.story.summary ?? story.summary
+    let pending = summary?.pending != false && store.online
+    Button {} label: {
+      HStack(spacing: 4) {
+        Text("Summary")
+        if pending { ProgressView().controlSize(.mini).accessibilityHidden(true) }
+      }
+    }
+    .disabled(true)
+    .accessibilityValue(pending ? "Preparing automatically" : "Unavailable")
+    .task(id: pending && phase == .active) {
+      guard pending && phase == .active else { return }
+      while !Task.isCancelled {
+        do { try await Task.sleep(for: .seconds(15)) } catch { return }
+        if let latest = try? await store.refreshSummary(story, background: true),
+          latest.isReady || !latest.pending { return }
+      }
+    }
+  }
+}
 private struct StoryActions: View {
+  @Environment(LibraryStore.self) private var store
   let story: Story
   var body: some View {
     HStack {
       if story.commentsUrl != nil { CommentsLink(story: story) }
-      NavigationLink { ReaderView(story: story, selection: .summary) } label: {
-        Label("Summary", systemImage: "text.alignleft").font(.caption)
-      }.buttonStyle(.borderless).accessibilityHint("Open summary for " + story.title)
+      if (store.library.entries[story.id]?.story.summary ?? story.summary)?.isReady == true {
+        NavigationLink { ReaderView(story: story, selection: .summary) } label: {
+          Label("Summary", systemImage: "text.alignleft").font(.caption)
+        }.buttonStyle(.borderless).accessibilityHint("Open summary for " + story.title)
+      } else { PendingSummary(story: story).font(.caption).buttonStyle(.borderless) }
     }
   }
 }
@@ -385,15 +413,17 @@ struct ReaderView: View {
           Text(status).font(.callout)
         }.padding()
       }
-      Group {
+      let summaryReady = (entry?.story.summary ?? story.summary)?.isReady == true
+      HStack {
         Picker("Read", selection: $selection) {
           Text("Article").tag(Section.article)
           if story.commentsUrl != nil { Text("Comments").tag(Section.comments) }
-          Text("Summary").tag(Section.summary)
+          if summaryReady { Text("Summary").tag(Section.summary) }
         }.pickerStyle(.segmented)
-          .padding([.top, .horizontal])
-          .padding(.bottom, discussion && entry?.discussion != nil ? 0 : 16)
+        if !summaryReady { PendingSummary(story: story).font(.subheadline) }
       }
+      .padding([.top, .horizontal])
+      .padding(.bottom, discussion && entry?.discussion != nil ? 0 : 16)
       if selection == .summary {
         SummaryReader(story: story)
       } else if discussion {

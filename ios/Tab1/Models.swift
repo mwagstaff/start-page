@@ -8,6 +8,7 @@ struct StorySummary: Codable, Hashable {
     var total: Int
     var updated: String
   }
+  var isReady: Bool { recap?.isEmpty == false || discussion?.bullets.isEmpty == false }
   var recap: String?
   var unavailable: Bool?
   var pending: Bool

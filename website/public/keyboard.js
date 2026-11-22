@@ -116,7 +116,7 @@ function bookmark(element = document.activeElement) {
 }
 
 function focusStory(row, kind = 'headline', scroll = true) {
-  const target = kind === 'summary' ? row.querySelector('.summary-link') : kind === 'comments' ? comments(row) ?? headline(row) : headline(row);
+  const target = kind === 'summary' ? row.querySelector('.summary-link:enabled') ?? headline(row) : kind === 'comments' ? comments(row) ?? headline(row) : headline(row);
   if (!visible(target)) return;
   target.focus({ preventScroll: true });
   if (scroll) row.scrollIntoView({ block: 'nearest', inline: 'nearest' });

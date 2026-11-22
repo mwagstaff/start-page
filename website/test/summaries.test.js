@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createSummaries } from '../lib/summaries.js';
+import { createSummaries, summaryState } from '../lib/summaries.js';
 import { readFeed } from '../lib/feeds.js';
 
 test('shared article and independent discussions survive maintenance and restart', async (t) => {
@@ -43,4 +43,12 @@ test('publisher excerpt preserves wording and line breaks and excludes embedded 
   const xml =
     '<rss><channel><item><link>https://example.org/story</link><title>Story</title><description><![CDATA[<p>One  exact phrase.</p><p>Another &amp; another.</p><script>ignore()</script>]]></description></item></channel></rss>';
   assert.equal(readFeed(xml).items[0].excerpt, 'One  exact phrase.\nAnother & another.');
+});
+
+test('only generated article or discussion text enables Summary', () => {
+  assert.equal(summaryState({ pending: true }), 'pending');
+  assert.equal(summaryState({ recap: 'Two sentences.', pending: true }), 'ready');
+  assert.equal(summaryState({ unavailable: true, discussion: { bullets: ['A theme.'] } }), 'ready');
+  assert.equal(summaryState({ unavailable: true, excerpt: 'Publisher text' }), 'unavailable');
+  assert.equal(summaryState(null), 'unavailable');
 });

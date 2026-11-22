@@ -2450,8 +2450,22 @@ body:has(.grid.packed) > .setup-bar-wrap { flex: none; }
 }
 
 /* Phones: the pillars scroll sideways under the title, and a drawer is a sheet from the bottom. */
+.mobile-story-actions { display: none; }
+@media (width > 760px) {
+  .card .mobile-only-story { display: none; }
+}
 @media (max-width: 760px) {
   .grid { columns: 1; }
+  .mobile-story-actions { display: flex; flex-wrap: wrap; gap: 0 16px; }
+  .mobile-story-actions button {
+    min-height: 44px;
+    padding: 4px 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+  }
   .card .mobile-overflow,
   .sb-switch:has([name="fill"]),
   .arrange-toggle:has([data-field="fill"]) { display: none; }
@@ -2760,7 +2774,11 @@ body:has(dialog[open]) > .keyboard-footer { display: none; }
 }
 
 .summary-link { font: inherit; color: inherit; background: transparent; border: 0; padding: 0; cursor: pointer; }
-.summary-link:hover, .summary-link:focus-visible { text-decoration: underline; }
+.summary-link:disabled { opacity: .65; cursor: default; }
+.summary-link[data-state="pending"]::after { content: ""; display: inline-block; width: .65em; height: .65em; margin-inline-start: .35em; border: 1px solid currentColor; border-inline-end-color: transparent; border-radius: 50%; animation: summary-spin 1s linear infinite; }
+@keyframes summary-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .summary-link[data-state="pending"]::after { animation: none; } }
+.summary-link:enabled:hover, .summary-link:focus-visible { text-decoration: underline; }
 .story-summary { margin-block: .5rem; font-size: .9rem; line-height: 1.45; }
 .story-summary p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .story-summary p, .story-summary ul { margin: .35rem 0 .7rem; }

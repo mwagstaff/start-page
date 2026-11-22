@@ -40,7 +40,9 @@ function renderMeta(item, widget, now) {
     const label = item.comments != null ? `${item.comments} comments` : 'comments';
     parts.push(`<a class="comments-link" href="${escapeHtml(item.commentsUrl)}" target="_blank" rel="noopener" aria-label="${escapeHtml(`${label} on ${item.title}`)}">${label}</a>`);
   }
-  parts.push(`<button type="button" class="summary-link" aria-expanded="false" aria-label="${escapeHtml('Summary of ' + item.title)}" data-story="${escapeHtml(item.link)}" data-thread="${escapeHtml(item.commentsUrl)}" data-excerpt="${escapeHtml(item.excerpt)}">Summary</button>`);
+  const state = item.summaryState ?? 'pending';
+  const summaryLabel = state === 'ready' ? 'Summary of ' : state === 'pending' ? 'Preparing summary automatically for ' : 'Summary unavailable for ';
+  parts.push(`<button type="button" class="summary-link" ${state === 'ready' ? '' : 'disabled'} data-state="${state}" title="${escapeHtml(summaryLabel + item.title)}" aria-expanded="false" aria-label="${escapeHtml(summaryLabel + item.title)}" data-story="${escapeHtml(item.link)}" data-thread="${escapeHtml(item.commentsUrl)}" data-excerpt="${escapeHtml(item.excerpt)}">Summary</button>`);
   return parts.length ? `<div class="meta">${parts.join('<span aria-hidden="true"> · </span>')}</div>` : '';
 }
 
@@ -52,7 +54,7 @@ function siteInitial(item) {
   return (host || item.source || '?').charAt(0).toUpperCase();
 }
 
-function renderItem(item, widget, now, mobileOverflow) {
+export function renderItem(item, widget, now, mobileOverflow) {
   let thumb = '';
   if (widget.thumbnails && item.image) {
     thumb = `<img class="thumb" src="${escapeHtml(item.image)}" alt="" loading="lazy" decoding="async" width="54" height="36" data-initial="${escapeHtml(siteInitial(item))}">`;
@@ -78,7 +80,7 @@ export function renderWidget(widget, now, mobileLimit = MOBILE_DEFAULT_LIMIT) {
     : escapeHtml(widget.title);
   let body;
   if (widget.items.length) {
-    body = `<ul class="items">${widget.items.map((item, index) => renderItem(item, widget, now, index >= mobileLimit)).join('')}</ul>`;
+    body = `<ul class="items" id="${escapeHtml(widget.id)}-stories">${widget.items.map((item, index) => renderItem(item, widget, now, index >= mobileLimit)).join('')}</ul>`;
   } else if (widget.failedSources.length) {
     body = `<p class="empty">Couldn't load this feed. It will try again in a few minutes.</p>`;
   } else {

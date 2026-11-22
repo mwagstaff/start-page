@@ -20,10 +20,10 @@ final class OfflineTests: XCTestCase {
     }.resume()
     wait(for: [done], timeout: 10)
   }
-  private func launchReader(extraArguments: [String] = []) -> XCUIApplication {
+  private func launchReader(server: String = "http://localhost:3068", extraArguments: [String] = []) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--reset-ui-library", "-server", "http://localhost:3068", "-automatic", "NO",
+      "--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "NO",
     ]
     app.launchArguments += extraArguments
     app.launch()
@@ -31,6 +31,16 @@ final class OfflineTests: XCTestCase {
     XCTAssertTrue(headline.waitForExistence(timeout: 45))
     headline.firstMatch.tap()
     return app
+  }
+  func testPendingSummaryEnablesAutomaticallyInReader() {
+    let app = launchReader(server: "http://localhost:3068/pending-summary")
+    let pending = app.buttons["Summary"].firstMatch
+    XCTAssertTrue(pending.waitForExistence(timeout: 5))
+    XCTAssertFalse(pending.isEnabled)
+    let ready = app.segmentedControls.buttons["Summary"]
+    XCTAssertTrue(ready.waitForExistence(timeout: 30))
+    ready.tap()
+    XCTAssertTrue(app.staticTexts["AI discussion summary"].waitForExistence(timeout: 5))
   }
   func testPublisherExcerptAndDiscussionOffline() throws {
     let app = launchReader(extraArguments: ["-AppleInterfaceStyle", "Dark",

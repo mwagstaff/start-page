@@ -1,5 +1,5 @@
 import { todaysFixtures } from './lib/football.js';
-import { createSummaries } from './lib/summaries.js';
+import { createSummaries, summaryState } from './lib/summaries.js';
 import { createFeedReader } from './lib/feeds.js';
 import { createCompanion } from './lib/companion.js';
 import { createHash } from 'node:crypto';
@@ -157,8 +157,24 @@ const server = createServer(async (req, res) => {
       return send(res, 503, JSON.stringify({ error: 'Fixtures unavailable' }), 'application/json');
     }
   }
+  if (pathname === '/api/summary-status' && req.method === 'POST') {
+    try {
+      req.setEncoding('utf8');
+      let body = '';
+      for await (const chunk of req) {
+        body += chunk;
+        if (Buffer.byteLength(body) > 262144) return send(res, 413, 'Batch too large', 'text/plain');
+      }
+      const stories = JSON.parse(body);
+      if (!Array.isArray(stories) || stories.length > 100) throw new Error();
+      const states = stories.map(([url, thread]) => summaryState(summaries.get(url, thread)));
+      return send(res, 200, JSON.stringify(states), 'application/json');
+    } catch {
+      return send(res, 400, 'Invalid stories', 'text/plain');
+    }
+  }
   if (pathname === '/api/summary' && req.method === 'GET') {
-    const result = summaries.get(searchParams.get('url'), searchParams.get('thread'), true);
+    const result = summaries.get(searchParams.get('url'), searchParams.get('thread'), !searchParams.has('background'));
     res.writeHead(result ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(result || { error: 'Story unavailable' }));
   }
@@ -263,8 +279,6 @@ const server = createServer(async (req, res) => {
   // (forecast.js); one saved in Settings is put right in the browser.
   const unit = unitForLocale(req.headers['accept-language']?.split(/[,;]/)[0].trim());
   res.setHeader('Vary', 'Accept-Language');
-  const etag = `"${createHash('sha256').update(JSON.stringify([tab.id, version, home?.etag, today, versions, unit])).digest('hex').slice(0, 16)}"`;
-  if (notModified(req, res, etag, 'no-cache')) return;
   let widgets;
   if (home) {
     const snapshot = cache.snapshot();
@@ -273,6 +287,11 @@ const server = createServer(async (req, res) => {
   } else {
     widgets = tab.widgets.map((id) => cache.widget(id));
   }
+  widgets = widgets.map(widget => ({ ...widget, items: widget.items.map(item => ({
+    ...item, summaryState: summaryState(summaries.get(item.link, item.commentsUrl)),
+  })) }));
+  const etag = `"${createHash('sha256').update(JSON.stringify([tab.id, version, home?.etag, today, versions, unit, widgets.map(w => w.items.map(i => i.summaryState))])).digest('hex').slice(0, 16)}"`;
+  if (notModified(req, res, etag, 'no-cache')) return;
   const html = renderPage({ tabs: config.tabs, activeTab: tab, versions, version, weather: weather.current, backdrop: backdrop.current, widgets, unit });
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);

@@ -118,6 +118,11 @@ async function prepare(job) {
   return { bullets, count, total: thread.total, updated: new Date().toISOString(), hash };
 }
 
+export function summaryState(summary) {
+  if (summary?.recap || summary?.discussion?.bullets.length) return 'ready';
+  return summary?.pending ? 'pending' : 'unavailable';
+}
+
 export function createSummaries(directory, { run = prepare, capacity = summaryCapacity, start = true } = {}) {
   directory = join(directory, 'summaries');
   mkdirSync(directory, { recursive: true, mode: 0o700 });

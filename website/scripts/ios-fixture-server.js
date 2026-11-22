@@ -25,6 +25,7 @@ const summary = { unavailable: true, pending: false,
   discussion: { bullets: ["Readers compared the two routes."], count: 1, total: 2, updated: "2026-11-18T10:00:00.000Z" } };
 const interruptedRefreshes = new Set();
 let longArticle = false;
+let pendingSummaryReady = false;
 let downloadFailures = 0, failureStatus = 503, articleAttempts = 0;
 let revision = 0,
   reading = {};
@@ -64,6 +65,7 @@ createServer(async (req, res) => {
       return;
     }
   }
+  if (route.startsWith("/pending-summary/") && route.endsWith("/cards")) pendingSummaryReady = false;
   let response;
   if (route.endsWith("/create"))
     response = { token: "fixture-token", revision, settings, reading };
@@ -91,7 +93,7 @@ createServer(async (req, res) => {
               link: "https://example.org/offline",
               source: "Test newspaper",
               date: new Date(Date.now() - 3 * 3600000).toISOString(),
-              excerpt: "The publisher’s original words.", summary, comments: 1,
+              excerpt: "The publisher’s original words.", summary: route.startsWith("/pending-summary/") ? { pending: true } : summary, comments: 1,
               commentsUrl: "https://news.ycombinator.com/item?id=1",
             },
             ...Array.from({length:9}, (_, i) => ({title: `Journey story ${i+1}`, link: `https://example.org/journey/${i}`, source: "Test newspaper"})),
@@ -99,7 +101,12 @@ createServer(async (req, res) => {
         },
       ],
     };
-  else if (route.endsWith("/summary")) response = summary;
+  else if (route.endsWith("/summary")) {
+    const query = new URL(req.url, "http://localhost").searchParams;
+    const isPendingFixture = route.startsWith("/pending-summary/") && query.get("url") === "https://example.org/offline";
+    if (isPendingFixture && query.has("background")) pendingSummaryReady = true;
+    response = isPendingFixture && !pendingSummaryReady ? { pending: true } : summary;
+  }
   else if (route.endsWith("/article"))
     response = {
       title: "A story ready for the journey",

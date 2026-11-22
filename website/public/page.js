@@ -7,6 +7,7 @@
 
 import { showFootball } from './football.js';
 import { searchProvider, updateSearchForm, validSearch } from './search.js';
+import { initMobileStories } from './mobile-stories.js';
 import { buildCards } from './stories.js';
 import { renderWidget } from './cards.js';
 import { setTemperatureUnit, showWeather, shownWeather, temperatureUnit, unitForLocale } from './forecast.js';
@@ -510,3 +511,5 @@ async function currentSourcesQuietly() {
     return {};
   }
 }
+
+if (grid) initMobileStories(grid, () => feeds ? allWidgets() : {});

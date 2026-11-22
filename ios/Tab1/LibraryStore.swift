@@ -413,9 +413,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
         for item in cards[index].items.indices {
           var story = cards[index].items[item]
           let existing = library.entries[story.id]
-          if !download && existing?.article == nil && existing?.story.summary == nil {
-            story.summary = nil
-          } else if story.summary == nil {
+          if story.summary == nil {
             story.summary = existing?.story.summary
           }
           cards[index].items[item] = story
@@ -525,14 +523,19 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     await queueImages(id, automaticRetry: automaticRetry)
     if !automaticRetry && online { _ = try? await refreshSummary(entry.story) }
   }
-  func refreshSummary(_ story: Story) async throws -> StorySummary {
+  func refreshSummary(_ story: Story, background: Bool = false) async throws -> StorySummary {
     guard var components = URLComponents(string: server + "/api/summary") else { throw URLError(.badURL) }
     components.queryItems = [URLQueryItem(name: "url", value: story.link)]
+    if background { components.queryItems?.append(URLQueryItem(name: "background", value: "1")) }
     if let thread = story.commentsUrl { components.queryItems?.append(URLQueryItem(name: "thread", value: thread)) }
     guard let url = components.url else { throw URLError(.badURL) }
     let (data, response) = try await URLSession.shared.data(from: url)
-    guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-    let summary = try JSONDecoder().decode(StorySummary.self, from: data)
+    let summary: StorySummary
+    switch (response as? HTTPURLResponse)?.statusCode {
+    case 200: summary = try JSONDecoder().decode(StorySummary.self, from: data)
+    case 404 where background: summary = StorySummary(unavailable: true, pending: false)
+    default: throw URLError(.badServerResponse)
+    }
     try Task.checkCancellation()
     if library.entries[story.id]?.story.summary != summary {
       library.entries[story.id]?.story.summary = summary

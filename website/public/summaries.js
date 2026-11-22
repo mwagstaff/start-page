@@ -1,3 +1,39 @@
+// Read queue status in batches without promoting jobs or redrawing story cards.
+let checking = false;
+async function updateButtons() {
+  if (checking || document.hidden) return;
+  checking = true;
+  try {
+    const buttons = [...document.querySelectorAll('.summary-link:disabled')];
+    for (let start = 0; start < buttons.length; start += 100) {
+      const batch = buttons.slice(start, start + 100);
+      const response = await fetch('/api/summary-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(batch.map(button => [button.dataset.story, button.dataset.thread])),
+      });
+      if (!response.ok) return;
+      const states = await response.json();
+      batch.forEach((button, index) => {
+        const state = states[index];
+        button.dataset.state = state;
+        button.disabled = state !== 'ready';
+        button.title = state === 'pending' ? 'Preparing summary automatically'
+          : state === 'unavailable' ? 'Summary unavailable' : 'Open summary';
+        button.setAttribute('aria-label', button.title + ' · ' + button.closest('.body').querySelector('.headline').textContent);
+      });
+    }
+  } catch {
+    // Retry transient connection failures on the next check.
+  } finally {
+    checking = false;
+  }
+}
+updateButtons();
+document.querySelector('.grid')?.addEventListener('cards:change', updateButtons);
+document.addEventListener('visibilitychange', updateButtons);
+setInterval(updateButtons, 15000);
+
 async function show(button, panel) {
   const params = new URLSearchParams({ url: button.dataset.story, thread: button.dataset.thread });
   try {
@@ -42,7 +78,7 @@ async function show(button, panel) {
 }
 document.addEventListener('click', (event) => {
   const button = event.target.closest('.summary-link');
-  if (!button) return;
+  if (!button || button.disabled) return;
   const body = button.closest('.body');
   const existing = body.querySelector('.story-summary');
   button.setAttribute('aria-expanded', String(!existing));
