@@ -10,10 +10,20 @@ settings:
     CURRENT_PROJECT_VERSION: '1'
     DEVELOPMENT_TEAM: SJ8X4DLAN9
     CODE_SIGN_STYLE: Automatic
+packages:
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: 9.0.0
 targets:
   Tab1:
     type: application
     platform: iOS
+    dependencies:
+      - package: GoogleSignIn
+    entitlements:
+      path: Tab1/Tab1.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]
     sources:
       - path: Tab1
       - path: ../website/public/forecast.js
@@ -21,6 +31,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: tab1.dev.skynolimit
+        TAB1_SIGN_STYLE: Automatic
+        CODE_SIGN_STYLE: "$(TAB1_SIGN_STYLE)"
+        PROVISIONING_PROFILE_SPECIFIER: "$(TAB1_PROFILE)"
         TARGETED_DEVICE_FAMILY: '1,2'
         GENERATE_INFOPLIST_FILE: YES
     info:
@@ -41,6 +54,7 @@ targets:
         UIBackgroundModes: [fetch, processing]
         CFBundleURLTypes:
           - CFBundleURLSchemes: [tab1]
+          - CFBundleURLSchemes: ['com.googleusercontent.apps.198958053443-cioa249m5haidthm825uovm3ikbbba33']
     scheme:
       testTargets: [Tab1UITests]
 

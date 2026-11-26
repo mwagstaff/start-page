@@ -1,3 +1,4 @@
+import AuthenticationServices
 import BackgroundTasks
 import Foundation
 import Network
@@ -21,6 +22,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
   var pending: [String: ReadingPatch] = [:]
   var revision = 0
   var updated: Date?
+  var lastArticleDownload: Date?
   init(_ value: Library = Library()) {
     cards = value.cards
     entries = value.entries
@@ -34,11 +36,13 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     pending = value.pending
     revision = value.revision
     updated = value.updated
+    lastArticleDownload = value.lastArticleDownload
   }
   var snapshot: Library {
     Library(cards: cards, entries: entries, settings: settings, baseline: baseline,
             catalogue: catalogue, weather: weather, backdrop: backdrop, backdropFile: backdropFile,
-            reading: reading, pending: pending, revision: revision, updated: updated)
+            reading: reading, pending: pending, revision: revision, updated: updated,
+            lastArticleDownload: lastArticleDownload)
   }
 }
 
@@ -47,7 +51,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
   private(set) var library = LiveLibrary()
   var appTopics: Set<String> = []
   private(set) var backdropGeneration = 0
-  var busy = false
+  var busy: Bool { currentRefresh != nil }
   var message = "Ready for your next journey"
   var lastError: String?
   var downloadActivity: [String: DownloadActivity] = [:]
@@ -78,7 +82,8 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     let retrying = (descriptor.retryAttempt ?? 0) > 0
     let previous = downloadActivity[descriptor.key]
     guard previous?.retrying != retrying else { return }
-    downloadActivity[descriptor.key] = DownloadActivity(story: descriptor.story, retrying: retrying)
+    downloadActivity[descriptor.key] = DownloadActivity(
+      story: descriptor.story, isArticle: descriptor.kind == "article", retrying: retrying)
     var counts = transfersByStory[descriptor.story] ?? StoryTransfers()
     if previous == nil { counts.active += 1 }
     if previous?.retrying == true { counts.retrying -= 1 }
@@ -142,11 +147,28 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
   }
   var server: String { didSet { UserDefaults.standard.set(server, forKey: "server") } }
   var budgetGB: Double { didSet { UserDefaults.standard.set(budgetGB, forKey: "budgetGB") } }
-  var automatic = true { didSet { UserDefaults.standard.set(automatic, forKey: "automatic") } }
-  let root: URL
+  var automatic = true {
+    didSet {
+      UserDefaults.standard.set(automatic, forKey: "automatic")
+      BackgroundRefresh.schedule(online: online)
+    }
+  }
+  private(set) var signInProvider = UserDefaults.standard.string(forKey: "tab1.signInProvider")
+  func setSignInProvider(_ value: String?) {
+    signInProvider = ["google", "apple"].contains(value ?? "") ? value : nil
+    UserDefaults.standard.set(signInProvider, forKey: "tab1.signInProvider")
+  }
+  private(set) var accountActive = UserDefaults.standard.bool(forKey: "tab1.accountActive")
+  private(set) var downloadScope = UserDefaults.standard.string(forKey: "tab1.downloadScope")
+  private(set) var root: URL
   private let monitor = NWPathMonitor()
+  var endingSession = false
+  private(set) var switchingLibrary = false
   private var connectionEpoch = 0
   private var refreshAfterCurrent = false
+  private var currentRefresh: Task<Bool, Never>?
+  private var currentRefreshDownloads = false
+  private var lastExitCheck: Date?
   @ObservationIgnored private var cachedTokens: [String: String] = [:]
   private func credential() async -> String {
     let host = server
@@ -172,7 +194,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     budgetGB = UserDefaults.standard.object(forKey: "budgetGB") as? Double ?? 1
     root = URL.applicationSupportDirectory.appending(
       path: ProcessInfo.processInfo.arguments.contains("--ui-testing")
-        ? "Tab1UITest" : "Tab1Offline", directoryHint: .isDirectory)
+        ? "Tab1UITest" : (UserDefaults.standard.string(forKey: "tab1.libraryFolder") ?? "Tab1Offline"), directoryHint: .isDirectory)
     automatic =
       UserDefaults.standard.object(forKey: "automatic") == nil
       ? true : UserDefaults.standard.bool(forKey: "automatic")
@@ -220,6 +242,21 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
       persist()
     }
   }
+  @ObservationIgnored private var settingsSync: Task<Void, Never>?
+  func saveSharedSettings() {
+    persist()
+    settingsSync?.cancel()
+    guard online else { return }
+    let epoch = connectionEpoch
+    settingsSync = Task {
+      do {
+        try await Task.sleep(for:.milliseconds(350))
+        guard epoch == connectionEpoch else { return }
+        try await sync()
+      } catch is CancellationError { }
+      catch { lastError = error.localizedDescription }
+    }
+  }
   func persist() {
     pendingDownloadSave?.cancel()
     pendingDownloadSave = nil
@@ -233,9 +270,12 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     await persistence.flush()
   }
   func request<T: Decodable>(_ route: String, body: JSONValue? = nil) async throws -> T {
+    if route.hasPrefix("account/") && server != "https://tab1.net" { throw URLError(.unsupportedURL) }
     guard let url = URL(string: server + "/api/companion/" + route) else { throw URLError(.badURL) }
     let epoch = connectionEpoch
     var req = URLRequest(url: url)
+    req.httpShouldHandleCookies = false
+    req.setValue("ios", forHTTPHeaderField: "X-Tab1-Platform")
     req.timeoutInterval = ["sync", "cards", "create"].contains(route) ? 20 : 90
     req.setValue("Bearer " + (await credential()), forHTTPHeaderField: "Authorization")
     if let body {
@@ -258,7 +298,15 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     guard epoch == connectionEpoch else { throw CancellationError() }
     return decoded
   }
+  private var creatingProfile: Task<Void, Error>?
   func ensureProfile() async throws {
+    if let task = creatingProfile { try await task.value; return }
+    let task = Task { try await createMissingProfile() }
+    creatingProfile = task
+    defer { creatingProfile = nil }
+    try await task.value
+  }
+  private func createMissingProfile() async throws {
     guard await credential().isEmpty else { return }
     let response: SyncResponse = try await request(
       "create", body: .object(["settings": library.settings]))
@@ -324,7 +372,90 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
       domain: "tab1", code: 409,
       userInfo: [NSLocalizedDescriptionKey: "Settings changed elsewhere. Please retry sync."])
   }
+  func adoptAccount(_ response: SyncResponse, appleUser: String?) async throws {
+    guard let token = response.token, !token.isEmpty, response.accountTag != nil else {
+      throw URLError(.cannotParseResponse)
+    }
+    connectionEpoch += 1
+    if let tag = response.accountTag {
+      let saved = UserDefaults.standard.string(forKey: "tab1.folder." + tag)
+      if let saved, saved != root.lastPathComponent {
+        await switchLibrary(to: saved)
+      }
+      UserDefaults.standard.set(root.lastPathComponent, forKey: "tab1.folder." + tag)
+      UserDefaults.standard.set(tag, forKey: "tab1.activeAccount")
+    }
+    await disk.saveCredential(appleUser ?? "", host: "https://tab1.net#apple-user")
+    await saveCredential(token)
+    setSignInProvider(response.signInProvider)
+    accountActive = true
+    UserDefaults.standard.set(true, forKey: "tab1.accountActive")
+    library.settings = response.settings ?? .object([:])
+    library.baseline = library.settings
+    library.revision = response.revision
+    library.reading = response.reading
+    library.pending = [:]
+    for (key, state) in response.reading where state.saved && library.entries[key] == nil {
+      if let story = state.story { library.entries[key] = Entry(story: story) }
+    }
+    persist()
+    if busy { refreshAfterCurrent = true } else { requestHomeRefresh() }
+  }
+
+  private func switchLibrary(to folder: String) async {
+    switchingLibrary = true
+    lastExitCheck = nil
+    defer { switchingLibrary = false }
+    connectionEpoch += 1
+    downloadScope = UUID().uuidString
+    UserDefaults.standard.set(downloadScope, forKey: "tab1.downloadScope")
+    await BackgroundDownloads.shared.cancelAccountTasks()
+    while busy || syncing != nil { try? await Task.sleep(for: .milliseconds(50)) }
+    await fileWork?.value
+    fileWork = nil
+    await flushPersistence()
+    root = URL.applicationSupportDirectory.appending(path:folder, directoryHint:.isDirectory)
+    UserDefaults.standard.set(folder, forKey: "tab1.libraryFolder")
+    let (cached, _, bytes) = await disk.open(root, reset:false)
+    library = LiveLibrary(cached)
+    downloadActivity = [:]
+    transfersByStory = [:]
+    usedBytes = bytes
+    if let topics = try? JSONEncoder().encode(appTopics) { try? topics.write(to: root.appending(path:"app-topics.json"), options:.atomic) }
+  }
+
+  func leaveAccount(deleting: Bool = false) async {
+    guard accountActive, !switchingLibrary else { return }
+    let oldRoot = root
+    let tag = UserDefaults.standard.string(forKey: "tab1.activeAccount")
+    await switchLibrary(to: "Tab1Offline-" + UUID().uuidString)
+    if deleting {
+      await disk.discard(oldRoot)
+      if let tag { UserDefaults.standard.removeObject(forKey: "tab1.folder." + tag) }
+    }
+    UserDefaults.standard.removeObject(forKey: "tab1.activeAccount")
+    await disk.saveCredential("", host: "https://tab1.net#apple-user")
+    await saveCredential("")
+    setSignInProvider(nil)
+    accountActive = false
+    UserDefaults.standard.removeObject(forKey: "tab1.accountActive")
+    persist()
+    requestHomeRefresh()
+  }
+  func checkAppleCredential() async {
+    guard accountActive else { return }
+    let epoch = connectionEpoch
+    let user = await disk.credential("https://tab1.net#apple-user")
+    guard !user.isEmpty,
+      let state = try? await ASAuthorizationAppleIDProvider().credentialState(forUserID: user),
+      epoch == connectionEpoch, state == .revoked || state == .notFound else { return }
+    let _: JSONValue? = try? await request("account/signout", body: .object([:]))
+    guard epoch == connectionEpoch else { return }
+    await leaveAccount()
+  }
   func pair(_ value: String) async {
+    guard !accountActive else { lastError = "Sign out before switching to a QR connection."; return }
+
     await load()
     do {
       guard let url = URLComponents(string: value), url.scheme == "tab1", url.host == "pair",
@@ -373,20 +504,61 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     persist()
     Task { try? await sync() }
   }
+  func refreshAccountPreferences() async {
+    guard accountActive, online, !busy else { return }
+    let previous = library.settings
+    let epoch = connectionEpoch
+    do {
+      try await sync()
+      if epoch == connectionEpoch && previous != library.settings {
+        await refresh(download: automatic)
+      }
+    } catch { /* The cached homepage stays usable until the next refresh. */ }
+  }
   func requestHomeRefresh() {
     // SwiftUI owns the gesture lifetime. Keep the library update alive across navigation.
-    guard !busy else { return }
+    guard !busy, !switchingLibrary else { return }
     Task { await refresh(download: automatic) }
   }
-  func refresh(download: Bool = true) async {
+  func refreshInBackground(leavingApp: Bool = false) async -> Bool {
     await load()
-    guard !busy else { return }
+    guard !Task.isCancelled, !switchingLibrary else { return false }
+    if let currentRefresh {
+      if leavingApp { lastExitCheck = .now }
+      let needsDownloads = automatic && !currentRefreshDownloads
+      let epoch = connectionEpoch
+      let updated = await currentRefresh.value
+      guard updated, !Task.isCancelled, epoch == connectionEpoch, !switchingLibrary else { return false }
+      if needsDownloads && automatic { await downloadEntries() }
+      return !Task.isCancelled
+    }
+    guard automatic || needsRefreshRetry else { return true }
+    guard online else { return false }
+    if leavingApp {
+      // Rapid app switches should share a check, even when no new stories arrive.
+      if !needsRefreshRetry, let lastExitCheck,
+         Date.now.timeIntervalSince(lastExitCheck) < BackgroundRefreshSchedule.interval { return true }
+      lastExitCheck = .now
+    }
+    return await refresh(download: automatic, refreshWeather: false)
+  }
+  @discardableResult func refresh(download: Bool = true, refreshWeather: Bool = true) async -> Bool {
+    await load()
+    guard !Task.isCancelled, !switchingLibrary else { return false }
+    if let currentRefresh { return await currentRefresh.value }
+    currentRefreshDownloads = download
+    let work = Task { await performRefresh(download: download, refreshWeather: refreshWeather) }
+    currentRefresh = work
+    return await withTaskCancellationHandler {
+      await work.value
+    } onCancel: { work.cancel() }
+  }
+  private func performRefresh(download: Bool, refreshWeather: Bool) async -> Bool {
     retryTask?.cancel()
     retryTask = nil
-    busy = true
     lastError = nil
     defer {
-      busy = false
+      currentRefresh = nil
       BackgroundRefresh.schedule(online: online)
       if refreshAfterCurrent {
         refreshAfterCurrent = false
@@ -397,16 +569,19 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     let started = ContinuousClock.now
     homeLog.notice("Refresh started cachedCards=\(self.library.cards.count) online=\(self.online)")
     do {
+      try Task.checkCancellation()
       message = "Syncing your cards…"
       try await sync()
       try Task.checkCancellation()
       stage = "cards"
       message = "Updating stories…"
+      let requestedSettings = library.settings
       let snapshot: Snapshot = try await request(
         "cards",
         body: .object([
           "settings": library.settings, "appTopics": .array(appTopics.sorted().map { .string($0) }),
         ]))
+      try Task.checkCancellation()
       homeLog.notice("Cards received cards=\(snapshot.cards.count) stories=\(snapshot.cards.reduce(0) { $0 + $1.items.count }) elapsed=\(String(describing: started.duration(to: .now)), privacy: .public)")
       var cards = snapshot.cards
       for index in cards.indices {
@@ -425,7 +600,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
         }
       }
       library.cards = cards
-      library.settings = snapshot.settings
+      library.settings = mergePreferences(base: requestedSettings, local: library.settings, remote: snapshot.settings)
       library.catalogue = snapshot.catalogue
       let oldPhoto = library.backdrop?["url"].string
       library.backdrop = snapshot.backdrop
@@ -442,14 +617,17 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
       library.updated = .now
       persist()
       message = "Cards updated"
-      async let weather: Void = LocalWeather.shared.refresh()
+      async let weather: Void = refreshWeather ? LocalWeather.shared.refresh() : ()
       if download { await downloadEntries() }
       await weather
+      try Task.checkCancellation()
+      return true
     } catch {
       let failure = error as NSError
       if error is CancellationError || (failure.domain == NSURLErrorDomain && failure.code == NSURLErrorCancelled) {
+        if automatic && !switchingLibrary { needsRefreshRetry = true }
         message = library.cards.isEmpty ? "Pull to refresh" : "Showing your saved library"
-        return
+        return false
       }
       homeLog.error("Refresh failed stage=\(stage, privacy: .public) domain=\(failure.domain, privacy: .public) code=\(failure.code) cachedCards=\(self.library.cards.count)")
       let transientNetwork = failure.domain == NSURLErrorDomain && [
@@ -459,26 +637,41 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
       if transientNetwork || (failure.domain == "tab1" && [408, 429, 500, 502, 503, 504].contains(failure.code)) {
         retryRefreshLater()
         message = online ? "Couldn’t update stories. Retrying automatically…" : "Waiting for connection"
-        return
+        return false
       }
       needsRefreshRetry = false
       lastError = error.localizedDescription
       message =
         library.cards.isEmpty
         ? "Connect to download your first stories" : "Showing your saved library"
+      return false
     }
   }
-  func downloadEntries() async {
+  private var downloadCandidates: [String] {
     let current = library.cards.flatMap(\.items).map(\.id)
     let saved = library.entries.keys.filter { library.reading[$0]?.saved == true }
     let upgrades = library.entries.values.filter { $0.article?.needsImageUpgrade == true }.map(\.id)
     let cutoff = Date.now.addingTimeInterval(-7 * 86400)
     let repairs = library.entries.values.filter { $0.error != nil && $0.collected > cutoff }.map(\.id)
-    let ids = Array(NSOrderedSet(array: current + saved + upgrades + repairs)) as? [String] ?? current
+    return Array(NSOrderedSet(array: current + saved + upgrades + repairs)) as? [String] ?? current
+  }
+
+  var pendingStoryDownloads: Int {
+    downloadActivity.values.count { activity in
+      guard activity.isArticle, let entry = library.entries[activity.story] else { return false }
+      return entry.article == nil
+    }
+  }
+
+  var downloadedStoryCount: Int { library.entries.values.count { $0.article != nil } }
+
+  func downloadEntries() async {
+    let ids = downloadCandidates
     beginScheduling()
     defer { schedulingDepth -= 1 }
+    let epoch = connectionEpoch
     for id in ids {
-      if Task.isCancelled { break }
+      if Task.isCancelled || switchingLibrary || connectionEpoch != epoch { return }
       await Task.yield()
       await download(id, automaticRetry: true)
     }
@@ -592,6 +785,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
   }
 
   private func applyDownload(_ descriptor: DownloadDescriptor, file: URL, status: Int, mime: String?) async {
+    guard descriptor.scope == downloadScope, !switchingLibrary else { return }
     let backdrop = descriptor.kind == "backdrop"
     if backdrop {
       guard descriptor.remote == library.backdrop?["url"].string else { return }
@@ -616,6 +810,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
       switch payload {
       case .article(let article):
         entry.article = article
+        library.lastArticleDownload = .now
         uncheckedPayloadBytes += bytes
       case .comments(let discussion):
         entry.discussion = discussion
@@ -692,9 +887,8 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     if values.contains(id) { values.removeAll { $0 == id } } else { values.append(id) }
     profile[category] = .array(values.map(JSONValue.string))
     settings["profile"] = profile
-    settings["tabs"] = .object([:])
     library.settings = settings
-    persist()
+    saveSharedSettings()
   }
 }
 enum Keychain {
@@ -729,44 +923,76 @@ enum Keychain {
     #endif
   }
 }
-enum BackgroundRefresh {
+@MainActor enum BackgroundRefresh {
+  private static let refreshID = "tab1.dev.skynolimit.refresh"
+  private static let processingID = "tab1.dev.skynolimit.processing"
+  private static var scheduling: Task<Void, Never>?
+
   static func register() {
-    BGTaskScheduler.shared.register(
-      forTaskWithIdentifier: "tab1.dev.skynolimit.refresh", using: nil
-    ) { task in run(task) }
-    BGTaskScheduler.shared.register(
-      forTaskWithIdentifier: "tab1.dev.skynolimit.processing", using: nil
-    ) { task in run(task) }
-  }
-  static func run(_ task: BGTask) {
-    let work = Task { @MainActor in
-      let store = LibraryStore.shared
-      if store.busy {
-        // Keep the execution grant until a foreground or reconnect refresh finishes.
-        while store.busy && !Task.isCancelled {
-          do { try await Task.sleep(for: .milliseconds(500)) } catch { break }
-        }
-      } else if store.automatic || store.needsRefreshRetry {
-        await store.refresh(download: store.automatic)
+    for id in [refreshID, processingID] {
+      if !BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main, launchHandler: { task in
+        MainActor.assumeIsolated { run(task) }
+      }) {
+        homeLog.error("Could not register background task \(id, privacy: .public)")
       }
-      task.setTaskCompleted(success: !Task.isCancelled && !store.needsRefreshRetry && store.lastError == nil)
     }
-    task.expirationHandler = { work.cancel() }
   }
-  static func schedule(online: Bool) {
-    let recovery = UserDefaults.standard.bool(forKey: "needsRefreshRetry")
-    if !recovery && UserDefaults.standard.object(forKey: "automatic") as? Bool == false {
-      BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: "tab1.dev.skynolimit.refresh")
-      BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: "tab1.dev.skynolimit.processing")
-      return
+  private static func run(_ task: BGTask) {
+    let store = LibraryStore.shared
+    // Replace the consumed request even if iOS expires this grant during sync.
+    let next = schedule(online: store.online, replacing: task.identifier)
+    var completed = false
+    func finish(_ success: Bool) {
+      guard !completed else { return }
+      completed = true
+      task.setTaskCompleted(success: success)
     }
-    let request = BGAppRefreshTaskRequest(identifier: "tab1.dev.skynolimit.refresh")
-    request.earliestBeginDate = Date(timeIntervalSinceNow: recovery ? 60 : 3600)
-    try? BGTaskScheduler.shared.submit(request)
-    let processing = BGProcessingTaskRequest(identifier: "tab1.dev.skynolimit.processing")
-    processing.requiresNetworkConnectivity = true
-    processing.earliestBeginDate = recovery && !online ? nil : request.earliestBeginDate
-    try? BGTaskScheduler.shared.submit(processing)
+    let work = Task {
+      let success = await store.refreshInBackground()
+      await store.flushPersistence()
+      await next.value
+      finish(success && !Task.isCancelled && !store.needsRefreshRetry && store.lastError == nil)
+    }
+    task.expirationHandler = { @Sendable in
+      work.cancel()
+      Task { @MainActor in finish(false) }
+    }
+  }
+  @discardableResult static func schedule(online: Bool, replacing consumed: String? = nil) -> Task<Void, Never> {
+    let defaults = UserDefaults.standard
+    let plan = BackgroundRefreshSchedule(
+      automatic: defaults.object(forKey: "automatic") == nil || defaults.bool(forKey: "automatic"),
+      retry: defaults.bool(forKey: "needsRefreshRetry"), online: online)
+    let previous = scheduling
+    let work = Task {
+      await previous?.value
+      let scheduler = BGTaskScheduler.shared
+      guard let plan else {
+        for id in [refreshID, processingID] { scheduler.cancel(taskRequestWithIdentifier: id) }
+        return
+      }
+      let pending = await scheduler.pendingTaskRequests()
+      let refresh = BGAppRefreshTaskRequest(identifier: refreshID)
+      refresh.earliestBeginDate = plan.refreshDate
+      let processing = BGProcessingTaskRequest(identifier: processingID)
+      processing.requiresNetworkConnectivity = true
+      processing.earliestBeginDate = plan.processingDate
+      for request in [refresh, processing] as [BGTaskRequest] {
+        if request.identifier != consumed,
+           let existing = pending.first(where: { $0.identifier == request.identifier }),
+           !BackgroundRefreshSchedule.shouldAdvance(pending: existing.earliestBeginDate, to: request.earliestBeginDate) {
+          continue
+        }
+        do {
+          if #available(iOS 27, *) { try await scheduler.submitTaskRequest(request) }
+          else { try scheduler.submit(request) }
+        } catch {
+          homeLog.error("Could not schedule \(request.identifier, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+      }
+    }
+    scheduling = work
+    return work
   }
 }
 

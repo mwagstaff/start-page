@@ -54,7 +54,7 @@ function earlyScript(tab) {
         root.classList.add('customised');
         setTimeout(() => root.classList.remove('customised'), 3000);
       };
-      if (settings?.tabs?.[${JSON.stringify(tab)}]) {
+      if (settings?.tabs?.[${JSON.stringify(tab)}] || settings?.profile) {
         hideUntilDrawn();
         window.startFeeds = fetch('/api/feeds.json', { cache: 'no-cache' }).then((response) => response.json());
         if (settings.profile) window.startCatalogue = fetch('/api/catalogue.json').then((response) => response.json());
@@ -118,6 +118,14 @@ export function renderPage({ tabs, activeTab, widgets, weather = null, backdrop 
         <input type="search" name="q" placeholder="Search Google" aria-label="Search Google" autocomplete="off">
       </form>
       ${renderWeather(weather, unit)}
+      <div class="account-menu" hidden>
+        <button type="button" class="account-avatar" aria-label="Sign in or create an account" title="Sign in or create an account"><svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></button>
+        <div id="account-actions" class="account-actions" hidden>
+          <button type="button" data-account-settings>Account settings</button>
+          <button type="button" data-signout>Sign out</button>
+          <span role="status"></span>
+        </div>
+      </div>
     </div>
   </header>
   ${nav}

@@ -9,7 +9,7 @@ const port = Number(process.env.PORT || 3068);
 const photoURL = `http://localhost:${port}/fixture-photo.png`;
 let settings = {
   v: 1,
-  tabs: {},
+  tabs: { home: { cards: [{ id: "fixture" }] } },
   custom: [],
   profile: {
     outlets: [],
@@ -24,6 +24,7 @@ let settings = {
 const summary = { unavailable: true, pending: false,
   discussion: { bullets: ["Readers compared the two routes."], count: 1, total: 2, updated: "2026-11-18T10:00:00.000Z" } };
 const interruptedRefreshes = new Set();
+const backgroundEditions = new Map();
 let longArticle = false;
 let pendingSummaryReady = false;
 let downloadFailures = 0, failureStatus = 503, articleAttempts = 0;
@@ -34,6 +35,48 @@ createServer(async (req, res) => {
   for await (const chunk of req) body += chunk;
   const value = body ? JSON.parse(body) : {};
   const route = new URL(req.url, "http://localhost").pathname;
+  const editionID = route.match(/^\/background-edition\/([^/]+)\//)?.[1];
+  if (editionID) {
+    const edition = backgroundEditions.get(editionID) ?? { published: false, offline: false, served: false };
+    backgroundEditions.set(editionID, edition);
+    if (route.endsWith("/test")) {
+      if (req.method === "POST") {
+        if (value.holdFirst) edition.holdFirst = true;
+        if (value.publish) {
+          edition.published = true;
+          edition.release?.();
+        }
+        if (value.disconnect) edition.offline = true;
+      }
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(JSON.stringify({ served: edition.served }));
+      return;
+    }
+    if (edition.offline) { res.writeHead(503).end(); return; }
+    const link = "https://example.org/edition/" + editionID;
+    if (route.endsWith("/cards") || route.endsWith("/article")) {
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      if (route.endsWith("/cards")) {
+        // Hold the next feed response until the test has put the app in the background.
+        if ((edition.opened || edition.holdFirst) && !edition.published) {
+          edition.publication ??= new Promise(resolve => { edition.release = resolve; });
+          await edition.publication;
+        }
+        edition.opened = true;
+        res.end(JSON.stringify({ settings, catalogue: {}, cards: [{
+          id: "fixture", title: "Your stories",
+          items: edition.published ? [{ title: "Afternoon edition", link }] : [],
+        }] }));
+      } else {
+        const requested = new URL(req.url, "http://localhost").searchParams.get("url");
+        res.end(JSON.stringify({ title: "Afternoon edition", extractionVersion: 3,
+          html: "<p>The afternoon report is ready to read offline.</p>", images: [],
+          downloadedAt: new Date().toISOString() }));
+        if (requested === link) edition.served = true;
+      }
+      return;
+    }
+  }
   if (route.startsWith("/retry-once/") && route.endsWith("/cards") && !interruptedRefreshes.has(route)) {
     interruptedRefreshes.add(route);
     res.writeHead(503).end();

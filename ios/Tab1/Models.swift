@@ -154,6 +154,7 @@ struct Library: Codable {
   var pending: [String: ReadingPatch] = [:]
   var revision = 0
   var updated: Date?
+  var lastArticleDownload: Date?
 }
 struct Snapshot: Decodable {
   var cards: [Card]
@@ -163,6 +164,8 @@ struct Snapshot: Decodable {
   var backdrop: JSONValue?
 }
 struct SyncResponse: Decodable {
+  var signInProvider: String?
+  var accountTag: String?
   var token: String?
   var revision: Int
   var settings: JSONValue?

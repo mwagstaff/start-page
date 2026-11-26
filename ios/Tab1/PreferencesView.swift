@@ -25,7 +25,7 @@ struct PreferencesView: View {
   func change(_ key: String, _ value: JSONValue) {
     history.append(store.library.settings)
     store.library.settings[key] = value
-    store.persist()
+    store.saveSharedSettings()
   }
   func profileBinding(_ key: String, default fallback: Bool = true) -> Binding<Bool> {
     Binding(
@@ -79,7 +79,6 @@ struct PreferencesView: View {
               var p = store.library.settings["profile"]
               p["style"] = .string(value)
               change("profile", p)
-              change("tabs", .object([:]))
             })
         ) {
           Text("Topic").tag("topics")
@@ -139,7 +138,6 @@ struct PreferencesView: View {
             Spacer()
             Button("Remove", role: .destructive) {
               change("custom", .array(store.library.settings["custom"].array.filter { $0 != feed }))
-              change("tabs", .object([:]))
             }
           }
         }
@@ -154,7 +152,7 @@ struct PreferencesView: View {
         Button("Undo last settings change") {
           if let previous = history.popLast() {
             store.library.settings = previous
-            store.persist()
+            store.saveSharedSettings()
           }
         }.disabled(history.isEmpty)
         Button("Reset settings", role: .destructive) { reset = true }
@@ -178,7 +176,7 @@ struct PreferencesView: View {
           }
           history.append(store.library.settings)
           store.library.settings = value
-          store.persist()
+          store.saveSharedSettings()
         } catch { store.lastError = error.localizedDescription }
       }
       .confirmationDialog(
@@ -189,7 +187,7 @@ struct PreferencesView: View {
           store.library.settings = .object([
             "v": .number(1), "tabs": .object([:]), "custom": .array([]),
           ])
-          store.persist()
+          store.saveSharedSettings()
         }
       }
   }
@@ -201,13 +199,15 @@ struct PreferencesView: View {
     var tabs = store.library.settings["tabs"]
     var home = tabs["home"]
     let old = home["cards"].array
-    home["cards"] = .array(
-      store.library.cards.filter { !$0.id.hasPrefix("app-") }.map { card in
-        old.first { $0["id"].string == card.id } ?? .object(["id": .string(card.id)])
-      })
+    let shared = store.library.cards.filter { !$0.id.hasPrefix("app-") }
+    let ids = Set(shared.map(\.id))
+    let visible = shared.map { card in
+      old.first { $0["id"].string == card.id } ?? .object(["id": .string(card.id)])
+    }
+    home["cards"] = .array(visible + old.filter { !ids.contains($0["id"].string) })
     tabs["home"] = home
     store.library.settings["tabs"] = tabs
-    store.persist()
+    store.saveSharedSettings()
   }
   func setLimit(_ id: String, _ value: Int) {
     saveLayout()
@@ -234,7 +234,6 @@ struct PreferencesView: View {
     feeds.append(
       .object(["id": .string(id), "url": .string(feedURL), "title": .string(url.host() ?? "Feed")]))
     change("custom", .array(feeds))
-    change("tabs", .object([:]))
     feedURL = ""
   }
 }

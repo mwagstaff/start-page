@@ -71,6 +71,17 @@ function stars(m) {
   return Number.isInteger(value) && value >= 1 && value <= 5 ? value : null;
 }
 
+function watchabilityScore(m) {
+  const score = m.watchability_index?.score;
+  return Number.isFinite(score) && score >= 0 && score <= 100 ? score : -1;
+}
+
+function biggestMatchFirst(a, b) {
+  return (stars(b) ?? 0) - (stars(a) ?? 0)
+    || watchabilityScore(b) - watchabilityScore(a)
+    || String(a.time || '99').localeCompare(String(b.time || '99'));
+}
+
 // One list for the day: every match, flagged when a Premier League club plays in it
 // (the Premier League option) and rated 1–5 stars for watchability (the TV option).
 async function load(date) {
@@ -78,7 +89,7 @@ async function load(date) {
   const premierIds = new Set(premier.map(m => matchId(date, m)));
   const seen = new Set(all.map(m => matchId(date, m)));
   const rows = [...all, ...premier.filter(m => !seen.has(matchId(date, m)))]
-    .sort((a, b) => String(a.time || '99').localeCompare(String(b.time || '99')));
+    .sort(biggestMatchFirst);
   const matches = rows.map(m => {
     const id = matchId(date, m);
     const status = String(m.score_status || '').trim().toUpperCase();

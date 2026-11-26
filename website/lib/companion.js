@@ -1,26 +1,10 @@
-import { randomBytes, createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
-import { join } from "node:path";
+import { fileProfiles, secret as token, digest as hash } from './profile-store.js';
 import QRCode from "qrcode";
 import sanitize from "sanitize-html";
 import { extractArticle } from "./article.js";
 import { fetchSafely, checkFeedUrl } from "./custom.js";
 import { validSettings } from "../public/settings.js";
-const token = () => randomBytes(32).toString("base64url");
-const hash = (s) => createHash("sha256").update(s).digest("hex");
-export function createCompanion({ directory, cards, fetchArticle = url => fetchSafely(url, "text/html, application/xhtml+xml"), fetchDiscussion = url => fetchSafely(url, "application/json") }) {
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const path = join(directory, "profiles.json");
-  let db = { profiles: {}, devices: {}, pairs: {} };
-  try {
-    db = JSON.parse(readFileSync(path, "utf8"));
-  } catch (e) {
-    if (e.code !== "ENOENT") throw e;
-  }
-  const save = () => {
-    writeFileSync(path + ".tmp", JSON.stringify(db), { mode: 0o600 });
-    renameSync(path + ".tmp", path);
-  };
+export function createCompanion({ directory, store = fileProfiles(directory), account, cards, reconcileSettings, fetchArticle = url => fetchSafely(url, "text/html, application/xhtml+xml"), fetchDiscussion = url => fetchSafely(url, "application/json") }) {
   const cached = new Map();
   let active = 0;
   const waiting = [];
@@ -87,10 +71,9 @@ export function createCompanion({ directory, cards, fetchArticle = url => fetchS
     });
     res.end(JSON.stringify(value));
   }
-  function addDevice(id) {
+  async function addDevice(id) {
     const secret = token();
-    db.devices[hash(secret)] = id;
-    save();
+    await store.addDevice(hash(secret), id);
     return secret;
   }
   return async (req, res, url) => {
@@ -103,12 +86,24 @@ export function createCompanion({ directory, cards, fetchArticle = url => fetchS
       )
         throw Object.assign(new Error("Origin refused"), { status: 403 });
       const route = url.pathname.slice("/api/companion/".length);
-      const auth = String(req.headers.authorization ?? "").replace(
-        /^Bearer /,
-        "",
-      );
-      let id = db.devices[hash(auth)];
-      let profile = db.profiles[id];
+      await store.ready?.();
+      if (route.startsWith("account/") && !account) {
+        if (route === "account/status") send(res, 200, { providers: [], linked: [] });
+        else send(res, 503, { error: "Account sign-in is unavailable." });
+        return true;
+      }
+      const cookie = /(?:^|; )__Host-tab1=([A-Za-z0-9_-]+)/.exec(req.headers.cookie || "")?.[1];
+      const auth = cookie || String(req.headers.authorization ?? "").replace(/^Bearer /, "");
+      const key = hash(auth);
+      const device = auth ? await store.device(key) : null;
+      let id = device?.profileId;
+      if (account && route.startsWith("account/")) {
+        await account({ route: route.slice(8), req, res, device, key, body, send });
+        return true;
+      }
+      if (cookie && (!device?.owner || req.headers['x-tab1-account'] !== hash(id))) throw Object.assign(new Error("Account changed. Reopen Settings."), { status:401 });
+      if (req.headers['x-tab1-account'] && !device?.owner) throw Object.assign(new Error("Sign in again to sync."), { status:401 });
+      let profile;
       if (route === "create" && req.method === "POST") {
         if (Date.now() - creationWindow > 3600000) {
           creationWindow = Date.now();
@@ -118,8 +113,6 @@ export function createCompanion({ directory, cards, fetchArticle = url => fetchS
           throw Object.assign(new Error("Please try connecting again later"), {
             status: 429,
           });
-        if (Object.keys(db.profiles).length >= 1000)
-          throw new Error("Profile limit reached");
         const b = await body(req);
         id = token();
         profile = {
@@ -127,33 +120,26 @@ export function createCompanion({ directory, cards, fetchArticle = url => fetchS
           settings: validSettings(b.settings),
           reading: {},
         };
-        db.profiles[id] = profile;
-        send(res, 200, { token: addDevice(id), ...profile });
+        await store.create(id, profile);
+        send(res, 200, { token: await addDevice(id), ...profile });
         return true;
       }
       if (route === "claim" && req.method === "POST") {
         const b = await body(req);
         const key = hash(String(b.code));
-        const pair = db.pairs[key];
-        if (!pair || pair.expires < Date.now())
-          throw Object.assign(
-            new Error("Pairing code expired or already used"),
-            { status: 410 },
-          );
-        delete db.pairs[key];
-        send(res, 200, { token: addDevice(pair.id), ...db.profiles[pair.id] });
+        const paired = await store.claim(key);
+        if (!paired || !(profile = await store.profile(paired))) throw Object.assign(new Error("Pairing code expired or already used"), { status: 410 });
+        send(res, 200, { token: await addDevice(paired), ...profile });
         return true;
       }
+      profile = id && await (route === "sync" || !store.metadata ? store.profile(id) : store.metadata(id));
       if (!profile)
         throw Object.assign(new Error("Please connect this device"), {
           status: 401,
         });
       if (route === "pair" && req.method === "POST") {
-        for (const [k, p] of Object.entries(db.pairs))
-          if (p.expires < Date.now()) delete db.pairs[k];
         const code = token();
-        db.pairs[hash(code)] = { id, expires: Date.now() + 300000 };
-        save();
+        await store.pair(hash(code), id, Date.now() + 300000);
         const origin = process.env.TAB1_PUBLIC_URL || "https://tab1.net";
         const payload = `tab1://pair?server=${encodeURIComponent(origin)}&code=${code}`;
         send(res, 200, {
@@ -170,10 +156,10 @@ export function createCompanion({ directory, cards, fetchArticle = url => fetchS
         if (b.settings !== undefined) {
           const s = validSettings(b.settings);
           if (!s) throw new Error("Invalid settings");
-          profile.settings = s;
+          profile.settings = reconcileSettings && req.headers['x-tab1-platform'] === 'ios' ? reconcileSettings(profile.settings, s) : s;
         }
         for (const [key, value] of Object.entries(b.reading ?? {})) {
-          if (key.length > 2048 || !value || typeof value !== "object")
+          if (!/^https?:\/\//i.test(key) || key.length > 2048 || !value || typeof value !== "object")
             continue;
           profile.reading[key] = {
             ...(profile.reading[key] || { read: false, saved: false }),
@@ -202,13 +188,12 @@ export function createCompanion({ directory, cards, fetchArticle = url => fetchS
           };
         }
         profile.revision++;
-        save();
-        send(res, 200, profile);
+        if (!await store.update(id, b.revision, profile, Object.keys(b.reading || {}).length > 0)) send(res, 409, await store.profile(id));
+        else send(res, 200, profile);
       } else if (route === "sync" && req.method === "GET")
         send(res, 200, profile);
       else if (route === "unlink" && req.method === "POST") {
-        delete db.devices[hash(auth)];
-        save();
+        await store.unlink(key);
         send(res, 200, { ok: true });
       } else if (route === "cards" && req.method === "POST") {
         const b = await body(req);
@@ -238,6 +223,10 @@ export function createCompanion({ directory, cards, fetchArticle = url => fetchS
         );
       } else send(res, 404, { error: "Unknown companion endpoint" });
     } catch (e) {
+      if (e.name?.startsWith("Mongo")) {
+        send(res,503,{error:"Account storage is temporarily unavailable.",retryable:true});
+        return true;
+      }
       send(res, e.status ?? 502, {
         error: e.message,
         retryable: e.retryable ?? [408, 429, 500, 502, 503, 504].includes(e.status ?? 502),

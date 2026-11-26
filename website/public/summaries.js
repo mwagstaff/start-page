@@ -1,11 +1,20 @@
 // Read queue status in batches without promoting jobs or redrawing story cards.
 let checking = false;
-async function updateButtons() {
-  if (checking || document.hidden) return;
+let refreshRequested = false;
+let lastFullCheck = -Infinity;
+async function updateButtons(fullCheck) {
+  if (document.hidden) return;
+  if (checking) {
+    if (fullCheck) refreshRequested = true;
+    return;
+  }
   checking = true;
   try {
-    const buttons = [...document.querySelectorAll('.summary-link:disabled')];
+    if (fullCheck) lastFullCheck = performance.now();
+    const buttons = [...document.querySelectorAll(fullCheck
+      ? '.summary-link:disabled' : '.summary-link:disabled[data-state="pending"]')];
     for (let start = 0; start < buttons.length; start += 100) {
+      if (document.hidden || refreshRequested) break;
       const batch = buttons.slice(start, start + 100);
       const response = await fetch('/api/summary-status', {
         method: 'POST',
@@ -15,6 +24,7 @@ async function updateButtons() {
       if (!response.ok) return;
       const states = await response.json();
       batch.forEach((button, index) => {
+        if (!button.isConnected) return;
         const state = states[index];
         button.dataset.state = state;
         button.disabled = state !== 'ready';
@@ -27,12 +37,18 @@ async function updateButtons() {
     // Retry transient connection failures on the next check.
   } finally {
     checking = false;
+    if (refreshRequested) {
+      refreshRequested = false;
+      updateButtons(true);
+    }
   }
 }
-updateButtons();
-document.querySelector('.grid')?.addEventListener('cards:change', updateButtons);
-document.addEventListener('visibilitychange', updateButtons);
-setInterval(updateButtons, 15000);
+const refreshButtons = () => updateButtons(true);
+refreshButtons();
+document.querySelector('.grid')?.addEventListener('cards:change', refreshButtons);
+document.addEventListener('visibilitychange', refreshButtons);
+// Poll spinning buttons frequently. Unavailable stories can recover on a later worker pass.
+setInterval(() => updateButtons(performance.now() - lastFullCheck >= 15000), 5000);
 
 async function show(button, panel) {
   const params = new URLSearchParams({ url: button.dataset.story, thread: button.dataset.thread });

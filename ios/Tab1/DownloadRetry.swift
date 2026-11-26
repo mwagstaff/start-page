@@ -1,11 +1,30 @@
 import Foundation
 
+struct BackgroundRefreshSchedule {
+  static let interval: TimeInterval = 15 * 60
+  let refreshDate: Date
+  let processingDate: Date?
+
+  init?(automatic: Bool, retry: Bool, online: Bool, now: Date = .now) {
+    guard automatic || retry else { return nil }
+    refreshDate = now.addingTimeInterval(retry ? 60 : Self.interval)
+    processingDate = retry && !online ? nil : refreshDate
+  }
+
+  // A pending request with no date is already eligible.
+  static func shouldAdvance(pending: Date?, to proposed: Date?) -> Bool {
+    guard let pending else { return false }
+    return proposed.map { $0 < pending } ?? true
+  }
+}
+
 struct DownloadDescriptor: Codable {
   var story: String
   var kind: String
   var remote: String?
   // Optional for tasks persisted by older app versions.
   var retryAttempt: Int?
+  var scope: String?
   var key: String { "\(story)|\(kind)|\(remote ?? "")" }
   var failureKey: String { kind == "image" ? "image:\(remote ?? "")" : kind }
 }
@@ -57,5 +76,6 @@ enum DownloadRetry {
 
 struct DownloadActivity {
   var story: String
+  var isArticle: Bool
   var retrying: Bool
 }

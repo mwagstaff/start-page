@@ -2,6 +2,18 @@ import Foundation
 
 @main struct RetryPolicyTests {
   static func main() throws {
+    let now = Date(timeIntervalSince1970: 1000)
+    let routine = BackgroundRefreshSchedule(automatic: true, retry: false, online: true, now: now)!
+    let recovery = BackgroundRefreshSchedule(automatic: false, retry: true, online: false, now: now)!
+    precondition(routine.refreshDate == now.addingTimeInterval(900) && routine.processingDate == routine.refreshDate)
+    precondition(recovery.refreshDate == now.addingTimeInterval(60) && recovery.processingDate == nil)
+    precondition(BackgroundRefreshSchedule(automatic: false, retry: false, online: true) == nil)
+    let later = now.addingTimeInterval(1200)
+    precondition(!BackgroundRefreshSchedule.shouldAdvance(pending: routine.refreshDate, to: later))
+    precondition(!BackgroundRefreshSchedule.shouldAdvance(pending: routine.refreshDate, to: routine.refreshDate))
+    precondition(BackgroundRefreshSchedule.shouldAdvance(pending: routine.refreshDate, to: recovery.refreshDate))
+    precondition(BackgroundRefreshSchedule.shouldAdvance(pending: routine.processingDate, to: recovery.processingDate))
+    precondition(!BackgroundRefreshSchedule.shouldAdvance(pending: nil, to: recovery.refreshDate))
     precondition(DownloadRetry.delays.max() == 60)
     for status in [408, 429, 500, 502, 503, 504] {
       for (attempt, expected) in DownloadRetry.delays.enumerated() {

@@ -31,6 +31,12 @@
 				<string>tab1</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.198958053443-cioa249m5haidthm825uovm3ikbbba33</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>

@@ -1,5 +1,67 @@
 import XCTest
 
+final class LiveAccountTests: XCTestCase {
+  private func launchLiveApp(accountMarker: Bool = false) throws -> XCUIApplication {
+    try XCTSkipUnless(ProcessInfo.processInfo.environment["TAB1_LIVE_ACCOUNT"] == "1",
+                      "Set TEST_RUNNER_TAB1_LIVE_ACCOUNT=1 to check the deployed provider configuration.")
+    let app = XCUIApplication()
+    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", "https://tab1.net", "-automatic", "NO"]
+    if accountMarker { app.launchArguments += ["-tab1.accountActive", "YES"] }
+    app.launch()
+    return app
+  }
+  func testSignOutFromHomeMenu() throws {
+    let app = try launchLiveApp(accountMarker: true)
+    let menu = app.buttons["Account menu"]
+    XCTAssertTrue(menu.waitForExistence(timeout: 20))
+    menu.tap()
+    XCTAssertTrue(app.buttons["Account settings"].exists)
+    app.buttons["Sign out"].tap()
+    let profile = app.buttons["Sign in or create an account"]
+    XCTAssertTrue(profile.waitForExistence(timeout: 30))
+    profile.tap()
+    XCTAssertTrue(app.buttons["Continue with Google"].waitForExistence(timeout: 15))
+    XCTAssertFalse(app.buttons["Clear signed-out account"].exists)
+  }
+  func testExpiredSessionReturnsToProvidersInSettings() throws {
+    let app = try launchLiveApp(accountMarker: true)
+    let menu = app.buttons["Account menu"]
+    XCTAssertTrue(menu.waitForExistence(timeout: 20))
+    menu.tap()
+    app.buttons["Account settings"].tap()
+    XCTAssertTrue(app.navigationBars["Account"].exists)
+    XCTAssertTrue(app.buttons["Continue with Google"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.buttons["account-apple"].exists)
+    XCTAssertFalse(app.buttons["Clear signed-out account"].exists)
+  }
+  func testQRPairingAvailable() throws {
+    let app = try launchLiveApp()
+    let settings = app.tabBars.buttons["Settings"]
+    XCTAssertTrue(settings.waitForExistence(timeout: 15))
+    settings.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    XCTAssertTrue(app.buttons["Connect website"].isEnabled)
+    XCTAssertTrue(app.buttons["Account"].exists)
+  }
+  func testHomeSignInPopover() throws {
+    let app = try launchLiveApp()
+    let profile = app.buttons["Sign in or create an account"]
+    XCTAssertTrue(profile.waitForExistence(timeout: 15))
+    XCTAssertTrue(profile.isHittable)
+    profile.tap()
+    let google = app.buttons["Continue with Google"]
+    XCTAssertTrue(google.waitForExistence(timeout: 45))
+    XCTAssertTrue(google.isEnabled)
+    XCTAssertFalse(app.navigationBars["Account"].exists)
+    XCTAssertLessThan(google.frame.maxY, app.frame.midY)
+    let apple = app.buttons["account-apple"]
+    XCTAssertTrue(apple.waitForExistence(timeout: 10))
+    XCTAssertEqual(apple.frame.height, google.frame.height, accuracy: 1)
+    XCTAssertEqual(apple.frame.width, google.frame.width, accuracy: 1)
+    let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: apple)
+    XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
+  }
+}
+
 final class OfflineTests: XCTestCase {
   override func setUp() {
     super.setUp()
@@ -75,6 +137,7 @@ final class OfflineTests: XCTestCase {
     let progress = app.descendants(matching: .any)["download-progress"].firstMatch
     XCTAssertTrue(progress.waitForExistence(timeout: 10))
     XCTAssertTrue(progress.isHittable)
+    XCTAssertTrue(app.staticTexts["cards-updated"].label.contains("0 downloaded · 1 pending"))
     app.tabBars.buttons["Downloads"].tap()
     XCTAssertTrue(progress.isHittable)
     let complete = XCTNSPredicateExpectation(
@@ -83,6 +146,7 @@ final class OfflineTests: XCTestCase {
     XCTAssertEqual(XCTWaiter.wait(for: [complete], timeout: 120), .completed)
     app.tabBars.buttons["Home"].tap()
     XCTAssertFalse(progress.exists)
+    XCTAssertTrue(app.staticTexts["cards-updated"].label.contains("1 downloaded · last just now"))
   }
   func testPermanentFailureHasManualRetry() throws {
     try configureDownloads(failures: 1, status: 422)
@@ -99,6 +163,9 @@ final class OfflineTests: XCTestCase {
     screenshot.name = "Retry download in Dark Mode with large text"
     screenshot.lifetime = .keepAlways
     add(screenshot)
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertEqual(app.staticTexts["cards-updated"].label, "Cards updated · 0 downloaded")
+    app.staticTexts["A story ready for the journey"].firstMatch.tap()
     retry.tap()
     XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 30))
     XCTAssertFalse(app.staticTexts["Fixture article unavailable"].exists)
@@ -187,8 +254,9 @@ final class OfflineTests: XCTestCase {
     let server = ProcessInfo.processInfo.environment["TAB1_FIXTURE_SERVER"] ?? "http://localhost:3068"
     app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server + "/slow-refresh", "-automatic", "NO"]
     app.launch()
-    let updated = app.staticTexts["Cards updated"]
+    let updated = app.staticTexts["cards-updated"]
     XCTAssertTrue(updated.waitForExistence(timeout: 25))
+    XCTAssertEqual(updated.label, "Cards updated · 0 downloaded")
     let scroll = app.scrollViews.firstMatch
     let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15))
     let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
@@ -298,6 +366,7 @@ final class OfflineTests: XCTestCase {
     app.launch()
     let toggle = app.buttons["expand-fixture"]
     XCTAssertTrue(toggle.waitForExistence(timeout: 45))
+    XCTAssertTrue(app.staticTexts["A story ready for the journey"].exists)
     app.swipeUp()
     XCTAssertEqual(toggle.value as? String, "Collapsed")
     toggle.tap()
@@ -393,5 +462,60 @@ final class OfflineTests: XCTestCase {
         .waitForExistence(timeout: 15))
     app.buttons["Comments"].tap()
     XCTAssertTrue(app.staticTexts["A thoughtful offline reply."].waitForExistence(timeout: 15))
+  }
+
+  @MainActor func testNewEditionDownloadsWhileBackgrounded() async throws {
+    try await checkBackgroundEdition(refreshInProgress: false)
+  }
+
+  @MainActor func testInProgressRefreshDownloadsWhileBackgrounded() async throws {
+    try await checkBackgroundEdition(refreshInProgress: true)
+  }
+
+  @MainActor private func checkBackgroundEdition(refreshInProgress: Bool) async throws {
+    let fixtureServer = ProcessInfo.processInfo.environment["TAB1_FIXTURE_SERVER"] ?? "http://localhost:3068"
+    let server = fixtureServer + "/background-edition/" + UUID().uuidString
+    func fixture(_ action: String? = nil) async throws -> Bool {
+      var request = URLRequest(url: URL(string: server + "/test")!)
+      if let action {
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode([action: true])
+      }
+      let (data, response) = try await URLSession.shared.data(for: request)
+      XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+      return try JSONDecoder().decode([String: Bool].self, from: data)["served"] == true
+    }
+
+    let app = XCUIApplication()
+    if refreshInProgress { _ = try await fixture("holdFirst") }
+    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "YES"]
+    app.launch()
+    let status = refreshInProgress ? "Updating stories…" : "cards-updated"
+    XCTAssertTrue(app.staticTexts[status].waitForExistence(timeout: 30))
+    XCTAssertFalse(app.staticTexts["Afternoon edition"].exists)
+    XCUIDevice.shared.press(.home)
+    XCTAssertTrue(app.wait(for: .runningBackground, timeout: 8) || app.state == .runningBackgroundSuspended)
+    _ = try await fixture("publish")
+    let deadline = ContinuousClock.now.advanced(by: .seconds(40))
+    var served = try await fixture()
+    while !served && ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(250))
+      served = try await fixture()
+    }
+    XCTAssertTrue(served, "The new article must be fetched before foregrounding")
+    _ = try await fixture("disconnect")
+    app.activate()
+    let headline = app.staticTexts["Afternoon edition"].firstMatch
+    XCTAssertTrue(headline.waitForExistence(timeout: 10))
+    headline.tap()
+    let body = app.webViews.staticTexts["The afternoon report is ready to read offline."]
+    XCTAssertTrue(body.waitForExistence(timeout: 15))
+
+    app.terminate()
+    app.launchArguments = ["--ui-testing", "-server", "http://localhost:9", "-automatic", "NO"]
+    app.launch()
+    XCTAssertTrue(headline.waitForExistence(timeout: 10))
+    headline.tap()
+    XCTAssertTrue(body.waitForExistence(timeout: 10))
   }
 }

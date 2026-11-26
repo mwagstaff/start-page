@@ -1,10 +1,15 @@
+import { homedir } from 'node:os';
+import { applyProfileChange, homepageCards } from './public/homepage.js';
+import { withoutPaywalls } from './public/topics.js';
+import { accounts } from './lib/accounts.js';
+import { mongoProfiles } from './lib/profile-store.js';
 import { todaysFixtures } from './lib/football.js';
 import { createSummaries, summaryState } from './lib/summaries.js';
 import { createFeedReader } from './lib/feeds.js';
 import { createCompanion } from './lib/companion.js';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { watch } from 'node:fs';
+import { existsSync, watch } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { createBackdrop } from './lib/backdrop.js';
@@ -125,15 +130,32 @@ async function serveStatic(res, name) {
   }
 }
 
-const companion = createCompanion({ directory: process.env.TAB1_DATA_DIR || join(ROOT, 'data'), cards: async (settings, appTopics) => {
+// Host-only account configuration lives outside the deployment directory.
+const directory = process.env.TAB1_DATA_DIR || join(ROOT, 'data');
+let accountConfig = {};
+try { accountConfig = JSON.parse(await readFile(process.env.TAB1_ACCOUNT_CONFIG || join(homedir(), '.config/tab1/accounts.json'), 'utf8')); }
+catch (error) { if (error.code !== 'ENOENT') throw error; }
+Object.assign(accountConfig, process.env);
+const store = accountConfig.TAB1_MONGO_URI ? mongoProfiles(accountConfig.TAB1_MONGO_URI, directory) : undefined;
+const unavailable = (process.env.NODE_ENV === 'production' || existsSync(join(directory, '.mongo-required')))
+  ? { ready() { throw Object.assign(new Error('Account storage is unavailable'), { status: 503 }); } }
+  : undefined;
+const legacyCards = config.tabs.find(t => t.id === 'home').widgets;
+function reconcileNativeSettings(previous, next) {
+  if (!next.profile || !previous?.tabs?.home || JSON.stringify(previous.profile) === JSON.stringify(next.profile)) return next;
+  if (next.tabs.home && JSON.stringify(previous.tabs.home) !== JSON.stringify(next.tabs.home)) return next;
+  return applyProfileChange(previous, next, clientCatalogue, config.widgets, legacyCards);
+}
+const companion = createCompanion({ directory, reconcileSettings:reconcileNativeSettings, store: store ?? unavailable, account: store && accounts(store, { ...accountConfig, defaultHomepage:defaultProfile(clientCatalogue, "uk"), catalogue:clientCatalogue, widgets:config.widgets, legacy:legacyCards }), cards: async (settings, appTopics) => {
  await (cache.ready || cache.pending);
  const profile = settings?.profile || defaultProfile(clientCatalogue, 'uk');
  const definitions = profileCards(profile, clientCatalogue);
- const sharedLayout = settings?.tabs?.home?.cards || [...definitions.map(({id})=>({id})), ...(settings?.custom||[]).map(({id})=>({id}))];
+ const sharedLayout = homepageCards(settings, clientCatalogue, config.widgets, legacyCards);
  const additions = appTopicCards(profile, clientCatalogue, appTopics, sharedLayout);
  const ids = profileSourceIds([...definitions, ...additions]);
  const loaded = ids.length ? JSON.parse((await sources.get(ids, 100)).body).sources : {};
  const widgets = { ...cache.snapshot(100).widgets, ...profileWidgets([...definitions, ...additions], loaded) };
+ if (profile.paywalls === false) for (const id of Object.keys(config.widgets)) widgets[id] = withoutPaywalls(widgets[id]);
  for (const card of additions) if (!card.sources && widgets[card.originalId]) widgets[card.id] = widgets[card.originalId];
  for (const feed of settings?.custom || []) {
   try { const value = await customFeeds(feed.url); widgets[feed.id] = { title: feed.title, limit: 8, sources: [{ name: feed.title, items: value.items }] }; }
@@ -143,11 +165,19 @@ const companion = createCompanion({ directory: process.env.TAB1_DATA_DIR || join
  const discussions=new Map(Object.values(widgets).flatMap(widget=>widget.sources.flatMap(source=>source.items)).filter(item=>item.commentsUrl).map(item=>[canonicalStoryURL(item.link),item.commentsUrl]));
  const cards=companionCards(widgets, layout).map(card=>({...card,items:card.items.map(item=>({...item,...(!item.commentsUrl && discussions.has(canonicalStoryURL(item.link))?{commentsUrl:discussions.get(canonicalStoryURL(item.link))}:{})}))}));
  for (const card of cards) for (const item of card.items) item.summary = summaries.get(item.link, item.commentsUrl);
- return { cards, settings: {...(settings || {v:1,tabs:{},custom:[]}),profile}, catalogue:clientCatalogue, weather:weather.current, backdrop:backdrop.current };
+ return { cards, settings: {...(settings || {v:1,tabs:{},custom:[]}), ...(!settings?.profile && settings?.tabs?.home && { tabs:{...settings.tabs,home:{...settings.tabs.home,cards:sharedLayout}} }),profile}, catalogue:clientCatalogue, weather:weather.current, backdrop:backdrop.current };
 }});
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const { pathname, searchParams } = url;
+  if (pathname === '/auth/github/callback') {
+    const result = new URLSearchParams();
+    for (const field of ['state', 'code', 'error'])
+      if (searchParams.has(field)) result.set(field, searchParams.get(field));
+    res.writeHead(303, { Location: '/settings#github=' + result.toString(), 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+    return res.end();
+  }
+  if (pathname === '/privacy') return send(res, 200, await readFile(join(ROOT,'public','privacy.html')), 'text/html; charset=utf-8');
   if (await companion(req, res, url)) return;
 
   if (pathname === '/api/football.json') {

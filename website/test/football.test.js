@@ -31,19 +31,34 @@ test('shares a single UK matchday request and preserves cup ties, scores and mat
   assert.equal(day.matches[0].href, 'https://top-scores.skynolimit.dev/matches/42?date=' + day.date);
 });
 
-test('merges every televised match with its watchability stars, flagging Premier League ones', async t => {
+test('merges both feeds and orders matches by stars, exact watchability score, then kick-off', async t => {
   t.mock.method(globalThis, 'fetch', async url => {
     const params = new URL(url).searchParams;
     const date = params.get('start');
     const pl = { date, time: '16:30', league: 'Premier League', home_team: 'Liverpool', away_team: 'Manchester United', away_short_name: 'Man Utd', match_details_id: '1', watchability_index: { stars: 5 }, tv_channels: [{ name: 'Sky Sports Main Event', countryCode: 'GB' }] };
     const other = { date, time: '14:30', league: 'Bundesliga', home_team: 'SV Werder Bremen', away_team: 'Hamburger SV', match_details_id: '2', watchability_index: { stars: 2 }, tv_channels: [{ name: 'Prime Video (UK)', countryCode: 'GB' }] };
-    return Response.json(params.get('epl_only') === 'true' ? [pl] : [pl, other]);
+    const european = (home_team, away_team, time, score) => ({
+      date, league: 'UEFA Champions League', home_team, away_team, time,
+      watchability_index: { stars: 4, score }, tv_channels: ['TNT Sports 1'],
+    });
+    const villa = european('Galatasaray', 'Aston Villa', '17:45', 70);
+    const arsenal = european('Arsenal', 'Borussia Dortmund', '20:00', 80);
+    const city = european('Manchester City', 'Napoli', '20:00', 70);
+    const unrated = { ...pl, match_details_id: '3', home_team: 'Brighton', time: '12:30', watchability_index: null };
+    return Response.json(params.get('epl_only') === 'true'
+      ? [pl, villa, arsenal, city, unrated]
+      : [other, pl, city, villa]);
   });
   const realNow = Date.now;
   t.mock.method(Date, 'now', () => realNow() + 60000); // skip past the shared cache
   const { matches } = await todaysFixtures();
   assert.deepEqual(matches.map(m => [m.home.short, m.away.short, m.premier, m.stars]), [
-    ['Werder Bremen', 'Hamburg', false, 2], ['Liverpool', 'Man Utd', true, 5],
+    ['Liverpool', 'Man Utd', true, 5],
+    ['Arsenal', 'Dortmund', true, 4],
+    ['Galatasaray', 'Aston Villa', true, 4],
+    ['Man City', 'Napoli', true, 4],
+    ['Werder Bremen', 'Hamburg', false, 2],
+    ['Brighton', 'Man Utd', true, null],
   ]);
 });
 

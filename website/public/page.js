@@ -5,6 +5,7 @@
 // Readers who haven't chosen any yet get their region's suggested ones.
 // Every change to the settings is recorded (history.js), so it can be undone.
 
+import { applyProfileChange, homepageCards } from './homepage.js';
 import { showFootball } from './football.js';
 import { searchProvider, updateSearchForm, validSearch } from './search.js';
 import { initMobileStories } from './mobile-stories.js';
@@ -13,7 +14,7 @@ import { renderWidget } from './cards.js';
 import { setTemperatureUnit, showWeather, shownWeather, temperatureUnit, unitForLocale } from './forecast.js';
 import { canRedo, canUndo, describeChange, loadHistory, moveTo, recordChange, saveHistory } from './history.js';
 import { DENSITIES, MAX_CARD_ITEMS, cardList, customFeedId, loadSettings, saveSettings } from './settings.js';
-import { cardChoice, defaultProfile, guessRegion, layoutForProfile, profileCards, profileSourceIds, profileWidgets, withOutlet, withTopic, withoutPaywalls } from './topics.js';
+import { cardChoice, defaultProfile, guessRegion, profileCards, profileSourceIds, profileWidgets, withOutlet, withTopic, withoutPaywalls } from './topics.js';
 
 const grid = document.querySelector('.grid');
 const { tab } = document.body.dataset;
@@ -123,6 +124,8 @@ export const widgetFor = (id) => allWidgets()[id];
 
 // This tab's cards in page order, with hidden ones included (for the Settings screen).
 export function tabCards(from = settings) {
+  if (tab === 'home' && catalogue)
+    return homepageCards(from, catalogue, feeds.widgets, feeds.tabs.find(t => t.id === tab)?.widgets ?? [], guessedRegion());
   const defaults = onSuggestedPage(from) && catalogue
     ? currentProfileCards().map((card) => card.id)
     : feeds.tabs.find((t) => t.id === tab)?.widgets ?? [];
@@ -233,13 +236,10 @@ async function applyTemperatureUnit() {
 // "Loading…" until their feeds arrive; this doesn't wait for them.
 export async function setProfile(profile, label = 'Changed topics & sources') {
   await Promise.all([fetchCatalogue(), feeds || fetchFeeds()]);
-  const previous = settings?.tabs[tab]?.cards ?? (feeds ? tabCards().filter((card) => !card.hidden) : undefined);
+  const previous = settings;
   record(label);
   const next = { v: 1, tabs: {}, custom: [], ...settings, profile, ...(!settings && { welcome: true }) };
-  settings = next;
-  const allIds = Object.keys(allWidgets());
-  const cards = layoutForProfile(previous, currentProfileCards(), allIds, (id) => widgetFor(id)?.custom);
-  settings = { ...next, tabs: { ...next.tabs, [tab]: { ...next.tabs[tab], cards } } };
+  settings = applyProfileChange(previous, next, catalogue, feeds.widgets, feeds.tabs.find(t => t.id === tab)?.widgets ?? [], guessedRegion());
   saveSettings(settings);
   applyPageOptions();
   drawCards();
@@ -388,7 +388,10 @@ export function setArrange(mode) {
 
 export async function replaceSettings(value, label) {
   if (value?.profile) await fetchCatalogue();
-  save(value, label);
+  record(label);
+  settings = value;
+  saveSettings(settings);
+  drawCards();
   applyPageOptions();
   refreshCustomFeeds();
   refreshProfileFeeds();
@@ -477,7 +480,7 @@ export function removeCustomFeed(id) {
 // With a customised layout, the early script in the page has already started the fetch.
 // Custom cards show "Loading…" until their feeds arrive.
 applyPageOptions();
-if (settings?.tabs[tab]) {
+if (settings?.tabs[tab] || settings?.profile) {
   const [data] = await Promise.all([window.startFeeds?.catch(() => null) ?? fetchFeeds(), settings.profile && fetchCatalogue()]);
   if (data) {
     feeds = data;

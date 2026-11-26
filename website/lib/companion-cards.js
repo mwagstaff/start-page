@@ -5,10 +5,12 @@ import { buildCards } from '../public/stories.js';
 export function companionCards(widgets, layout) {
   const enabled = layout.filter(card => !card.hidden && widgets[card.id]);
   const limit = Math.min(100, Math.max(1, Math.floor(1000 / Math.max(1, enabled.length))));
-  const expanded = Object.fromEntries(Object.entries(widgets).map(([id, widget]) =>
-    [id, { ...widget, limit, maxPerSource: limit }]));
-  // Reserve a short first page for every card before filling remaining capacity.
-  return buildCards(expanded, enabled.map(({ id }) => ({ id, limit: Math.min(8, limit) })), 8, limit);
+  // Allocate the website's first-page stories (including its source caps and
+  // cross-card deduplication) before filling the remaining offline capacity.
+  const ordered = enabled.map(card => ({
+    id: card.id, limit: Math.min(limit, card.limit ?? widgets[card.id].limit ?? 20),
+  }));
+  return buildCards(widgets, ordered, 20, limit);
 }
 
 // App additions are request-only; never merge them into the paired profile.

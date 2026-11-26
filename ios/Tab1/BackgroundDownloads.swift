@@ -20,9 +20,13 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
     config.allowsCellularAccess = true
     config.isDiscretionary = false
     config.httpMaximumConnectionsPerHost = 3
-    config.timeoutIntervalForResource = 240
+    // Keep the system resource timeout so a suspended or offline transfer can resume later.
     return URLSession(configuration: config, delegate: self, delegateQueue: nil)
   }()
+  @MainActor func cancelAccountTasks() async {
+    for task in await session.allTasks { task.cancel() }
+    activeKeys.removeAll()
+  }
   func reconnect() { _ = session }
   // Register surviving system tasks before creating new ones, once per process.
   @MainActor private lazy var restoration = Task { @MainActor in
@@ -32,6 +36,7 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
   @MainActor private func restoreSessionTasks() async {
     for task in await session.allTasks where task.state != .completed && task.state != .canceling {
       guard let descriptor = descriptor(for: task) else { continue }
+      guard descriptor.scope == LibraryStore.shared.downloadScope else { task.cancel(); continue }
       activeKeys.insert(descriptor.key)
       LibraryStore.shared.trackDownload(descriptor)
     }
@@ -42,6 +47,9 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
   }
   @MainActor func enqueue(url: URL, token: String?, descriptor: DownloadDescriptor) async {
     await restoreActivity()
+    guard !LibraryStore.shared.switchingLibrary else { return }
+    var descriptor = descriptor
+    descriptor.scope = LibraryStore.shared.downloadScope
     guard activeKeys.insert(descriptor.key).inserted else { return }
     var request = URLRequest(url: url)
     request.timeoutInterval = descriptor.kind == "comments" ? 90 : 45
@@ -66,6 +74,7 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
     task.resume()
   }
   @MainActor private func finish(_ descriptor: DownloadDescriptor, failed: Bool) {
+    guard descriptor.scope == LibraryStore.shared.downloadScope else { return }
     activeKeys.remove(descriptor.key)
     LibraryStore.shared.finishDownload(descriptor, failed: failed)
   }
@@ -73,6 +82,7 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
     _ descriptor: DownloadDescriptor, request: URLRequest?,
     message: String, delay: TimeInterval?, cooldown: TimeInterval = 3600
   ) async {
+    guard descriptor.scope == LibraryStore.shared.downloadScope else { return }
     if let delay, let request {
       var next = descriptor
       next.retryAttempt = (descriptor.retryAttempt ?? 0) + 1
@@ -102,6 +112,7 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
     }
     handle {
       await LibraryStore.shared.load()
+      guard descriptor.scope == LibraryStore.shared.downloadScope else { try? FileManager.default.removeItem(at: copy); return }
       if status != 200 {
         let payload = await Task.detached(priority: .utility) {
           defer { try? FileManager.default.removeItem(at: copy) }
@@ -134,6 +145,7 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
     let request = task.originalRequest
     handle {
       await LibraryStore.shared.load()
+      guard descriptor.scope == LibraryStore.shared.downloadScope else { return }
       let delay = DownloadRetry.delay(
         attempt: descriptor.retryAttempt ?? 0, error: error as NSError)
       // A background URLSession already waits for connectivity. Queue an eligible
@@ -160,22 +172,34 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
   }
 }
 final class AppDelegate: NSObject, UIApplicationDelegate {
-  @MainActor static func saveForBackground() {
+  func application(
+    _ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil
+  ) -> Bool {
+    BackgroundRefresh.register()
+    return true
+  }
+
+  @MainActor static func refreshOnBackgroundEntry() {
     let application = UIApplication.shared
+    let store = LibraryStore.shared
+    let next = BackgroundRefresh.schedule(online: store.online)
     var identifier: UIBackgroundTaskIdentifier = .invalid
-    identifier = application.beginBackgroundTask(withName: "Save offline library") {
-      if identifier != .invalid {
-        application.endBackgroundTask(identifier)
-        identifier = .invalid
-      }
+    var work: Task<Void, Never>?
+    func finish() {
+      guard identifier != .invalid else { return }
+      application.endBackgroundTask(identifier)
+      identifier = .invalid
     }
-    Task { @MainActor in
-      LibraryStore.shared.persist()
-      await LibraryStore.shared.flushPersistence()
-      if identifier != .invalid {
-        application.endBackgroundTask(identifier)
-        identifier = .invalid
-      }
+    identifier = application.beginBackgroundTask(withName: "Update offline stories") {
+      work?.cancel()
+      finish()
+    }
+    store.persist()
+    work = Task {
+      if identifier != .invalid { _ = await store.refreshInBackground(leavingApp: true) }
+      await store.flushPersistence()
+      await next.value
+      finish()
     }
   }
   func application(

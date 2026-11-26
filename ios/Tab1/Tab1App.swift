@@ -1,3 +1,5 @@
+import GoogleSignIn
+import AuthenticationServices
 import AVFoundation
 import SwiftUI
 import WebKit
@@ -7,14 +9,18 @@ import ImageIO
   @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
   @State private var store = LibraryStore.shared
   @Environment(\.scenePhase) private var phase
-  init() { BackgroundRefresh.register() }
   var body: some Scene {
     WindowGroup {
       Group {
         if store.ready { RootView() } else { ProgressView("Opening offline library…") }
-      }.environment(store).onOpenURL { url in Task { await store.pair(url.absoluteString) }
+      }.environment(store).onOpenURL { url in
+        if !GIDSignIn.sharedInstance.handle(url), url.scheme == "tab1" { Task { await store.pair(url.absoluteString) } }
+      }.onReceive(NotificationCenter.default.publisher(for: ASAuthorizationAppleIDProvider.credentialRevokedNotification)) { _ in
+        Task { await store.checkAppleCredential() }
       }.task {
-        await store.refresh(download: store.automatic)
+        await store.load()
+        await store.checkAppleCredential()
+        if phase != .background && store.online { await store.refresh(download: store.automatic) }
         while !Task.isCancelled {
           do { try await Task.sleep(for: .seconds(60)) } catch { break }
           if phase == .active && store.online && !store.hasScheduledRetry
@@ -28,10 +34,11 @@ import ImageIO
           && (store.needsRefreshRetry || Date.now.timeIntervalSince(store.library.updated ?? .distantPast) > 900)
         {
           Task { await store.refresh(download: store.automatic) }
+        } else if value == .active && store.ready && store.online && store.accountActive {
+          Task { await store.refreshAccountPreferences() }
         }
         if value == .background {
-          AppDelegate.saveForBackground()
-          BackgroundRefresh.schedule(online: store.online)
+          AppDelegate.refreshOnBackgroundEntry()
         }
       }
     }
@@ -54,6 +61,9 @@ struct HomeView: View {
   @State private var search = ""
   @State private var weather = false
   @State private var showingSearch = false
+  @State private var showAccountSettings = false
+  @State private var showingSignIn = false
+  @State private var accountInitial = ""
   @FocusState private var searchFocused: Bool
   @State private var expandedCards: Set<String> = []
   var body: some View {
@@ -79,6 +89,9 @@ struct HomeView: View {
             spacing: store.library.settings["density"].string == "compact" ? 12 : 22
           ) {
             ForEach(store.library.cards) { card in
+              let savedLimit = store.library.settings["tabs"]["home"]["cards"].array
+                .first { $0["id"].string == card.id }?["limit"].number
+              let visibleCount = savedLimit.flatMap { Int(exactly: $0) }.flatMap { $0 > 0 ? $0 : nil } ?? 8
               VStack(alignment: .leading, spacing: 8) {
                 HStack {
                   Text(card.title).font(.title3.bold())
@@ -93,7 +106,7 @@ struct HomeView: View {
                     card.items.filter {
                       search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)
                     }.prefix(
-                      !search.isEmpty || expandedCards.contains(card.id) ? card.items.count : 8))
+                      !search.isEmpty || expandedCards.contains(card.id) ? card.items.count : visibleCount))
                 ) { story in
                   NavigationLink(value: story) { StoryRow(story: story) }.buttonStyle(.plain)
                     .contextMenu {
@@ -110,7 +123,7 @@ struct HomeView: View {
                   StoryActions(story: story)
                   if story.id != card.items.last?.id { Divider() }
                 }
-                if search.isEmpty && card.items.count > 8 {
+                if search.isEmpty && card.items.count > visibleCount {
                   Button {
                     if expandedCards.contains(card.id) {
                       expandedCards.remove(card.id)
@@ -194,7 +207,49 @@ struct HomeView: View {
               Button("Weather", systemImage: "cloud.sun") { weather = true }
             }
           }
+          ToolbarItem(placement: .topBarTrailing) {
+            if store.accountActive {
+              Menu {
+                Button("Account settings", systemImage: "person.crop.circle") { showAccountSettings = true }
+                Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") {
+                  Task {
+                    do { try await store.signOut() } catch { store.lastError = error.localizedDescription }
+                  }
+                }
+              } label: {
+                Group {
+                  if store.signInProvider == "apple" && accountInitial.isEmpty { Image(systemName: "apple.logo").font(.headline) }
+                  else if store.signInProvider == "google" { Text(accountInitial.isEmpty ? "G" : accountInitial).font(.headline) }
+                  else if accountInitial.isEmpty { Image(systemName: "checkmark").font(.headline.bold()) }
+                  else { Text(accountInitial).font(.headline) }
+                }
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(store.signInProvider == "apple" ? Color.black : store.signInProvider == "google" ? Color.brown : Color.indigo, in: Circle())
+                .overlay { Circle().strokeBorder(store.signInProvider == "google" ? Color.blue : Color.white.opacity(0.8), lineWidth: 1.5) }
+              }
+              .accessibilityLabel("Account menu")
+              .accessibilityValue(store.signInProvider.map { "Signed in with " + $0.capitalized } ?? "Signed in")
+              .id("signed-in-profile")
+            } else {
+              Button("Sign in or create an account", systemImage: "person.crop.circle") {
+                showingSignIn = true
+              }
+              .popover(isPresented: $showingSignIn) { AccountView(compact: true) }
+            }
+          }
         }
+        .task(id: store.accountActive) {
+          accountInitial = ""
+          guard store.accountActive else { return }
+          showingSignIn = false
+          let status: JSONValue? = try? await store.request("account/status")
+          if !Task.isCancelled, let status, store.accountActive {
+            accountInitial = status["initial"].string
+            store.setSignInProvider(status["signInProvider"].string)
+          }
+        }
+        .navigationDestination(isPresented: $showAccountSettings) { AccountView() }
         .sheet(isPresented: $weather) { ForecastScreen() }
         .navigationDestination(for: Story.self) { story in ReaderView(story: story) }
     }
@@ -205,13 +260,39 @@ private struct HomeStatus: View {
   var body: some View {
     if store.showOfflineBanner {
       Label("Offline mode", systemImage: "wifi.slash").font(.caption).foregroundStyle(.secondary)
-    } else if store.hasActiveDownloads {
-      DownloadProgressView(compact: true)
     } else {
-      Label(
-        store.message,
-        systemImage: store.needsRefreshRetry ? "arrow.clockwise" : "checkmark.circle"
-      ).font(.caption).foregroundStyle(.secondary)
+      if store.message == "Cards updated" || !store.hasActiveDownloads {
+        Label {
+          CardRefreshMessage()
+        } icon: {
+          Image(systemName: store.needsRefreshRetry ? "arrow.clockwise" : "checkmark.circle")
+        }.font(.caption).foregroundStyle(.secondary)
+      }
+      if store.hasActiveDownloads { DownloadProgressView(compact: true) }
+    }
+  }
+}
+
+private struct CardRefreshMessage: View {
+  @Environment(LibraryStore.self) private var store
+
+  var body: some View {
+    if store.message == "Cards updated" {
+      let pending = store.pendingStoryDownloads
+      let counts = "Cards updated · \(store.downloadedStoryCount) downloaded"
+        + (pending > 0 ? " · \(pending) pending" : "")
+      TimelineView(.everyMinute) { clock in
+        if let last = store.library.lastArticleDownload {
+          let age = clock.date.timeIntervalSince(last) < 60
+            ? "just now" : last.formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated))
+          Text("\(counts) · last \(age)")
+        } else {
+          Text(counts)
+        }
+      }
+      .accessibilityIdentifier("cards-updated")
+    } else {
+      Text(store.message)
     }
   }
 }
@@ -715,7 +796,7 @@ struct DownloadsView: View {
           if store.hasActiveDownloads || (store.totalFiles > 0 && !store.busy) {
             DownloadProgressView(compact: false)
           } else {
-            Text(store.message)
+            CardRefreshMessage()
           }
           Button(
             store.busy ? "Downloading…" : "Download for offline", systemImage: "arrow.down.circle"
@@ -750,7 +831,7 @@ struct DownloadsView: View {
         }
         Section("On this device") {
           LabeledContent(
-            "Articles", value: "\(store.library.entries.values.filter{$0.article != nil}.count)")
+            "Articles", value: "\(store.downloadedStoryCount)")
           LabeledContent(
             "Discussions",
             value: "\(store.library.entries.values.filter{$0.discussion != nil}.count)")
@@ -796,6 +877,7 @@ struct SettingsView: View {
           Text("Add more reading on this iPhone without changing your website homepage.")
             .font(.footnote).foregroundStyle(.secondary)
         }
+        Section { NavigationLink("Account") { AccountView() } }
         Section("Your website") {
           Button("Connect website", systemImage: "qrcode.viewfinder") { scan = true }
           TextField("Paste a pairing link", text: $pairing).textInputAutocapitalization(.never)
@@ -812,6 +894,7 @@ struct SettingsView: View {
             "On tab1.net, choose Connect iPhone. Scan its QR code to sync settings, favourites and reading status."
           ).font(.footnote).foregroundStyle(.secondary)
         }
+        .disabled(store.accountActive)
         Section("Synced homepage topics") {
           ForEach(store.library.catalogue["topics"].object.keys.sorted(), id: \.self) { id in
             Toggle(
@@ -846,7 +929,7 @@ struct SettingsView: View {
           Button("Apply and refresh") { Task { await store.refresh(download: store.automatic) } }
           Button("Advanced settings") { showAdvanced.toggle() }
           if showAdvanced {
-            TextField("Server URL", text: $store.server).textInputAutocapitalization(.never)
+            TextField("Server URL", text: $store.server).disabled(store.accountActive).textInputAutocapitalization(.never)
               .autocorrectionDisabled()
             Text("For local testing, use your Mac’s network address and the website server port.")
               .font(.caption)

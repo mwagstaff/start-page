@@ -20,8 +20,11 @@ import { DENSITIES, MAX_CUSTOM_FEEDS, moveCard, stepCard, validSettings } from '
 
 import { SEARCH_PROVIDERS, searchProvider, validCustomSearch } from './search.js';
 
+import { renderAccount, initAccountMenu } from './account.js';
+
 const PATH = '/settings';
-const opener = document.querySelector('.customise-open'); // focus goes back there on closing
+const customiseButton = document.querySelector('.customise-open');
+let opener = customiseButton;
 let dialog = null;
 let cards = []; // this tab's cards in the screen's order, hidden ones included
 let pushed = false; // opening added /settings to the history, so closing goes back over it
@@ -41,12 +44,13 @@ function build() {
     <div class="settings-content">
       <header class="settings-head">
         <h1 id="settings-title">More settings</h1>
-        <p class="settings-saved">Changes are saved automatically in this browser.</p>
+        <p class="settings-saved">Your changes are saved automatically.</p>
         <p class="settings-status" role="status"></p>
         <button type="button" data-action="close" class="primary">Done<kbd aria-hidden="true">Esc</kbd></button>
       </header>
       <div class="settings-columns">
         <div class="settings-side">
+          <section class="settings-section" data-account tabindex="-1"><h2>Account</h2></section>
           <section class="settings-section settings-link" aria-labelledby="settings-topics-title">
             <h2 id="settings-topics-title">Topics and sources</h2>
             <p class="settings-hint">Change your region, topics, news outlets, weather and background photo.</p>
@@ -472,6 +476,7 @@ async function open() {
   status('');
   renderList();
   dialog.showModal();
+  renderAccount(dialog.querySelector('[data-account]'));
   dialog.querySelector('.settings-content').scrollTop = 0;
   if (!isSettingsPath()) {
     history.pushState(null, '', PATH);
@@ -487,14 +492,19 @@ function closed() {
   }
   pushed = false;
   opener?.focus();
+  opener = customiseButton;
 }
 
 // Undo, redo or rewind while the screen is open: show the page as it is now.
-document.addEventListener('history:change', ({ detail: { type } }) => {
-  if (!dialog?.open || type === 'change' || type === 'clear') return;
+function refreshOpenSettings() {
+  if (!dialog?.open) return;
   cards = tabCards();
   renderList();
+}
+document.addEventListener('history:change', ({ detail: { type } }) => {
+  if (type !== 'change' && type !== 'clear') refreshOpenSettings();
 });
+document.addEventListener('settings:synced', refreshOpenSettings);
 
 // Back and Forward, or /settings reached without reloading.
 addEventListener('popstate', () => {
@@ -509,3 +519,8 @@ addEventListener('popstate', () => {
 document.addEventListener('settings:open', open);
 
 if (isSettingsPath()) open();
+
+initAccountMenu(() => {
+  opener = document.querySelector('.account-avatar');
+  return open();
+});

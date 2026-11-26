@@ -13,8 +13,10 @@
 		234D8E7867C7346D03D843A1 /* WeatherScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80F63C9B8EF94CC60FD9FE60 /* WeatherScreen.swift */; };
 		26D30D387963DB33EB649E0A /* ForecastSky.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A24E74D42CBE354AE7F9687 /* ForecastSky.swift */; };
 		321D0F38A26CDFF3FF1D4E8F /* LibraryPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66617614748BCE93DCB72CF4 /* LibraryPersistence.swift */; };
+		35057AC610C2A367076338B8 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 7C5FDBE1FEFB56068E0B712C /* GoogleSignIn */; };
 		3FB56D95EF8B33F25DA5DEC6 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2320F5284D2FB10AAD9174 /* PreferencesView.swift */; };
 		449FDDC96F333F396C368A80 /* forecast.js in Resources */ = {isa = PBXBuildFile; fileRef = DE8B7CA099553840B000A316 /* forecast.js */; };
+		622F0AE6572B9F4B6A2380C1 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE247E5E32570900D350CFEF /* AccountView.swift */; };
 		730386F6A2ABA1136D3FEF37 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8FDABAC6C0A10B5FFC44D9A9 /* Assets.xcassets */; };
 		7850376DA3391F3A5C781D07 /* BackgroundDownloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DBD0461C052597D0C0C5320 /* BackgroundDownloads.swift */; };
 		C821D21FB543F3A710C57D8C /* OfflineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6F5AF98DEC1F736666DD07 /* OfflineTests.swift */; };
@@ -37,6 +39,7 @@
 		0C032DA5029B951AF57ED490 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1DBD0461C052597D0C0C5320 /* BackgroundDownloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundDownloads.swift; sourceTree = "<group>"; };
 		3A24E74D42CBE354AE7F9687 /* ForecastSky.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForecastSky.swift; sourceTree = "<group>"; };
+		3AD26D6B5E30C9E656A65E4D /* Tab1.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Tab1.entitlements; sourceTree = "<group>"; };
 		3C74E4F51CDEF2225598D7CD /* DownloadRetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadRetry.swift; sourceTree = "<group>"; };
 		56C4F86B6751CBD7B48BCDD1 /* Tab1App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tab1App.swift; sourceTree = "<group>"; };
 		66617614748BCE93DCB72CF4 /* LibraryPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPersistence.swift; sourceTree = "<group>"; };
@@ -48,10 +51,22 @@
 		9E2320F5284D2FB10AAD9174 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		CE6F5AF98DEC1F736666DD07 /* OfflineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineTests.swift; sourceTree = "<group>"; };
 		D01E2ECDF577DA75527D3283 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		DE247E5E32570900D350CFEF /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
 		DE8B7CA099553840B000A316 /* forecast.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = forecast.js; sourceTree = "<group>"; };
 		E14711780F33A991E64BBB61 /* OfflineArticleHTML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineArticleHTML.swift; sourceTree = "<group>"; };
 		FFF8C4ADC9234587D9B10046 /* Tab1.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Tab1.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0F1628E30E0FBCABF61F54AF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				35057AC610C2A367076338B8 /* GoogleSignIn in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		4E4C593DC47426E6C2D5A5EF = {
@@ -67,6 +82,7 @@
 		5183B849796B37E17CFD6B7A /* Tab1 */ = {
 			isa = PBXGroup;
 			children = (
+				DE247E5E32570900D350CFEF /* AccountView.swift */,
 				8FDABAC6C0A10B5FFC44D9A9 /* Assets.xcassets */,
 				1DBD0461C052597D0C0C5320 /* BackgroundDownloads.swift */,
 				3C74E4F51CDEF2225598D7CD /* DownloadRetry.swift */,
@@ -78,6 +94,7 @@
 				D01E2ECDF577DA75527D3283 /* Models.swift */,
 				E14711780F33A991E64BBB61 /* OfflineArticleHTML.swift */,
 				9E2320F5284D2FB10AAD9174 /* PreferencesView.swift */,
+				3AD26D6B5E30C9E656A65E4D /* Tab1.entitlements */,
 				56C4F86B6751CBD7B48BCDD1 /* Tab1App.swift */,
 				80F63C9B8EF94CC60FD9FE60 /* WeatherScreen.swift */,
 			);
@@ -137,6 +154,7 @@
 			buildPhases = (
 				17B4709DA488ED0FFAF4B2F9 /* Sources */,
 				5AA805D130286F00D3B0D7CF /* Resources */,
+				0F1628E30E0FBCABF61F54AF /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -144,6 +162,7 @@
 			);
 			name = Tab1;
 			packageProductDependencies = (
+				7C5FDBE1FEFB56068E0B712C /* GoogleSignIn */,
 			);
 			productName = Tab1;
 			productReference = FFF8C4ADC9234587D9B10046 /* Tab1.app */;
@@ -165,7 +184,7 @@
 					};
 					4FB4CFAB8B6B95F89760BAE1 = {
 						DevelopmentTeam = SJ8X4DLAN9;
-						ProvisioningStyle = Automatic;
+						ProvisioningStyle = "$(TAB1_SIGN_STYLE)";
 					};
 				};
 			};
@@ -178,6 +197,9 @@
 			);
 			mainGroup = 4E4C593DC47426E6C2D5A5EF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8C72CFF27FA91B983CFB25DF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CE724E2C4752BB2E62FF0D02 /* Products */;
 			projectDirPath = "";
@@ -206,6 +228,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				622F0AE6572B9F4B6A2380C1 /* AccountView.swift in Sources */,
 				7850376DA3391F3A5C781D07 /* BackgroundDownloads.swift in Sources */,
 				11D729374EA9F1F9DCB4CE90 /* DownloadRetry.swift in Sources */,
 				26D30D387963DB33EB649E0A /* ForecastSky.swift in Sources */,
@@ -344,7 +367,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Tab1/Tab1.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = "$(TAB1_SIGN_STYLE)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Tab1/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -352,7 +377,9 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = tab1.dev.skynolimit;
+				PROVISIONING_PROFILE_SPECIFIER = "$(TAB1_PROFILE)";
 				SDKROOT = iphoneos;
+				TAB1_SIGN_STYLE = Automatic;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -361,7 +388,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Tab1/Tab1.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = "$(TAB1_SIGN_STYLE)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Tab1/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -369,7 +398,9 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = tab1.dev.skynolimit;
+				PROVISIONING_PROFILE_SPECIFIER = "$(TAB1_PROFILE)";
 				SDKROOT = iphoneos;
+				TAB1_SIGN_STYLE = Automatic;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -465,6 +496,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8C72CFF27FA91B983CFB25DF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7C5FDBE1FEFB56068E0B712C /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8C72CFF27FA91B983CFB25DF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 0C1FDDD645575724F6FCB31D /* Project object */;
 }
