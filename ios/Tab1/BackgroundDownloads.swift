@@ -45,16 +45,18 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
     guard let text = task.taskDescription, let data = text.data(using: .utf8) else { return nil }
     return try? JSONDecoder().decode(DownloadDescriptor.self, from: data)
   }
-  @MainActor func enqueue(url: URL, token: String?, descriptor: DownloadDescriptor) async {
+  @MainActor func enqueue(url: URL, token: String?, descriptor: DownloadDescriptor, earliest: Date? = nil) async {
+    let scope = LibraryStore.shared.downloadScope
     await restoreActivity()
-    guard !LibraryStore.shared.switchingLibrary else { return }
+    guard scope == LibraryStore.shared.downloadScope, !LibraryStore.shared.switchingLibrary else { return }
     var descriptor = descriptor
     descriptor.scope = LibraryStore.shared.downloadScope
     guard activeKeys.insert(descriptor.key).inserted else { return }
     var request = URLRequest(url: url)
     request.timeoutInterval = descriptor.kind == "comments" ? 90 : 45
     if let token { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
-    await start(request, descriptor: descriptor)
+    if earliest != nil { descriptor.retryAttempt = 1 }
+    await start(request, descriptor: descriptor, delay: earliest.map { max(0, $0.timeIntervalSinceNow) })
   }
   @MainActor private func start(
     _ request: URLRequest, descriptor: DownloadDescriptor, delay: TimeInterval? = nil
@@ -150,7 +152,7 @@ final class BackgroundDownloads: NSObject, URLSessionDownloadDelegate, @unchecke
         attempt: descriptor.retryAttempt ?? 0, error: error as NSError)
       // A background URLSession already waits for connectivity. Queue an eligible
       // retry immediately while offline, and let iOS start it when a route returns.
-      let offline = !LibraryStore.shared.online
+      let offline = !LibraryStore.shared.online && (descriptor.retryAttempt ?? 0) == 0
       let temporary = DownloadRetry.isTemporaryConnectionError(error as NSError)
       await self.fail(descriptor, request: request, message: error.localizedDescription,
                 delay: offline ? delay.map { _ in 0 } : delay,

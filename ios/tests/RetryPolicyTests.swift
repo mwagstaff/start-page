@@ -14,12 +14,16 @@ import Foundation
     precondition(BackgroundRefreshSchedule.shouldAdvance(pending: routine.refreshDate, to: recovery.refreshDate))
     precondition(BackgroundRefreshSchedule.shouldAdvance(pending: routine.processingDate, to: recovery.processingDate))
     precondition(!BackgroundRefreshSchedule.shouldAdvance(pending: nil, to: recovery.refreshDate))
-    precondition(DownloadRetry.delays.max() == 60)
+    precondition(DownloadRetry.delays.prefix(3) == [5, 30, 60])
+    precondition(DownloadRetry.delay(attempt: 3, status: 502) == 900)
+    let cooldown = Date.now.addingTimeInterval(3600)
+    precondition(DownloadRetry.legacyRetryDate(message: "Download failed (HTTP 502).", after: cooldown) == cooldown)
+    precondition(DownloadRetry.legacyRetryDate(message: "Download failed (HTTP 404).", after: cooldown) == nil)
     for status in [408, 429, 500, 502, 503, 504] {
       for (attempt, expected) in DownloadRetry.delays.enumerated() {
         precondition(DownloadRetry.delay(attempt: attempt, status: status) == expected)
       }
-      precondition(DownloadRetry.delay(attempt: 3, status: status) == nil)
+      precondition(DownloadRetry.delay(attempt: DownloadRetry.delays.count, status: status) == nil)
       precondition(DownloadRetry.delay(attempt: 0, status: status, retryable: false) == nil)
     }
     for status in [200, 400, 401, 403, 404, 410, 422, 507] {
@@ -45,7 +49,7 @@ import Foundation
     let restored = try JSONDecoder().decode(
       DownloadDescriptor.self, from: JSONEncoder().encode(next))
     precondition(restored.retryAttempt == 3 && restored.key == legacy.key)
-    precondition(DownloadRetry.delay(attempt: restored.retryAttempt!, status: 502) == nil)
+    precondition(DownloadRetry.delay(attempt: restored.retryAttempt!, status: 502) == 900)
     let a = DownloadDescriptor(story: "a", kind: "image", remote: "https://example.org/a.jpg")
     let b = DownloadDescriptor(story: "a", kind: "image", remote: "https://example.org/b.jpg")
     precondition(a.key != b.key && a.failureKey != b.failureKey)

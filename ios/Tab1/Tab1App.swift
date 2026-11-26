@@ -261,14 +261,14 @@ private struct HomeStatus: View {
     if store.showOfflineBanner {
       Label("Offline mode", systemImage: "wifi.slash").font(.caption).foregroundStyle(.secondary)
     } else {
-      if store.message == "Cards updated" || !store.hasActiveDownloads {
+      if store.message == "Cards updated" || !store.showsDownloadProgress {
         Label {
           CardRefreshMessage()
         } icon: {
           Image(systemName: store.needsRefreshRetry ? "arrow.clockwise" : "checkmark.circle")
         }.font(.caption).foregroundStyle(.secondary)
       }
-      if store.hasActiveDownloads { DownloadProgressView(compact: true) }
+      if store.showsDownloadProgress { DownloadProgressView(compact: true) }
     }
   }
 }
@@ -745,15 +745,13 @@ private struct DownloadProgressView: View {
 
   private var title: String {
     if store.hasActiveDownloads {
-      if !store.online { return "Waiting for connection" }
-      if !store.downloadActivity.isEmpty && store.downloadActivity.values.allSatisfy(\.retrying) { return "Retrying automatically" }
       return store.totalFiles == 0 ? "Preparing downloads…" : "Downloading"
     }
     return store.failedFiles > 0 ? "Download pass finished" : "Downloads complete"
   }
 
   var body: some View {
-    let total = store.totalFiles
+    let total = store.totalFiles - store.queuedRetryCount
     let processed = store.finishedFiles + store.failedFiles
     let count = "\(store.finishedFiles) of \(total) downloaded"
     VStack(alignment: .leading, spacing: compact ? 3 : 8) {
@@ -793,10 +791,18 @@ struct DownloadsView: View {
     NavigationStack {
       List {
         Section {
-          if store.hasActiveDownloads || (store.totalFiles > 0 && !store.busy) {
+          if store.showsDownloadProgress || (!store.hasActiveDownloads && store.totalFiles > 0 && !store.busy) {
             DownloadProgressView(compact: false)
           } else {
             CardRefreshMessage()
+          }
+          let retries = store.queuedRetryCount
+          if retries > 0 {
+            Text(retries == 1 ? "1 file queued for automatic retry" : "\(retries) files queued for automatic retry")
+              .font(.subheadline).foregroundStyle(.secondary)
+              .accessibilityIdentifier("queued-retries")
+          } else if !store.online && store.hasActiveDownloads {
+            Text("Waiting for connection").foregroundStyle(.secondary)
           }
           Button(
             store.busy ? "Downloading…" : "Download for offline", systemImage: "arrow.down.circle"

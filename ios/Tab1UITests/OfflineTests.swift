@@ -135,11 +135,14 @@ final class OfflineTests: XCTestCase {
     app.buttons["retry-download"].tap()
     app.navigationBars.buttons.firstMatch.tap()
     let progress = app.descendants(matching: .any)["download-progress"].firstMatch
-    XCTAssertTrue(progress.waitForExistence(timeout: 10))
-    XCTAssertTrue(progress.isHittable)
+    XCTAssertTrue(progress.waitForNonExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["cards-updated"].label.contains("0 downloaded · 1 pending"))
     app.tabBars.buttons["Downloads"].tap()
-    XCTAssertTrue(progress.isHittable)
+    let queued = app.descendants(matching: .any)["queued-retries"].firstMatch
+    XCTAssertTrue(queued.waitForExistence(timeout: 10))
+    XCTAssertEqual(queued.label, "1 file queued for automatic retry")
+    XCTAssertFalse(progress.exists)
+    XCTAssertTrue(progress.waitForExistence(timeout: 120))
     let complete = XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "label == %@ AND value == %@", "Downloads complete", "3 of 3 downloaded"),
       object: progress)
@@ -472,7 +475,17 @@ final class OfflineTests: XCTestCase {
     try await checkBackgroundEdition(refreshInProgress: true)
   }
 
-  @MainActor private func checkBackgroundEdition(refreshInProgress: Bool) async throws {
+  @MainActor func testBackgroundEditionRetriesBadGateway() async throws {
+    try await checkBackgroundEdition(refreshInProgress: false, failFirstArticle: true)
+  }
+
+  @MainActor func testCachedEditionDownloadsInBackgroundWhenSyncFails() async throws {
+    try await checkBackgroundEdition(refreshInProgress: false, cachedBeforeExit: true)
+  }
+
+  @MainActor private func checkBackgroundEdition(
+    refreshInProgress: Bool, failFirstArticle: Bool = false, cachedBeforeExit: Bool = false
+  ) async throws {
     let fixtureServer = ProcessInfo.processInfo.environment["TAB1_FIXTURE_SERVER"] ?? "http://localhost:3068"
     let server = fixtureServer + "/background-edition/" + UUID().uuidString
     func fixture(_ action: String? = nil) async throws -> Bool {
@@ -488,11 +501,24 @@ final class OfflineTests: XCTestCase {
 
     let app = XCUIApplication()
     if refreshInProgress { _ = try await fixture("holdFirst") }
-    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "YES"]
+    if failFirstArticle { _ = try await fixture("failFirstArticle") }
+    if cachedBeforeExit { _ = try await fixture("publish") }
+    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", cachedBeforeExit ? "NO" : "YES"]
     app.launch()
     let status = refreshInProgress ? "Updating stories…" : "cards-updated"
     XCTAssertTrue(app.staticTexts[status].waitForExistence(timeout: 30))
-    XCTAssertFalse(app.staticTexts["Afternoon edition"].exists)
+    if cachedBeforeExit {
+      XCTAssertTrue(app.staticTexts["Afternoon edition"].exists)
+      app.terminate()
+      _ = try await fixture("failSync")
+      app.launchArguments = ["--ui-testing", "-server", server, "-automatic", "YES"]
+      app.launch()
+      XCTAssertTrue(app.staticTexts["Couldn’t update stories. Retrying automatically…"].waitForExistence(timeout: 15))
+      let servedBeforeExit = try await fixture()
+      XCTAssertFalse(servedBeforeExit)
+    } else {
+      XCTAssertFalse(app.staticTexts["Afternoon edition"].exists)
+    }
     XCUIDevice.shared.press(.home)
     XCTAssertTrue(app.wait(for: .runningBackground, timeout: 8) || app.state == .runningBackgroundSuspended)
     _ = try await fixture("publish")

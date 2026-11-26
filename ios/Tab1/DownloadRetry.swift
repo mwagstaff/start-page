@@ -35,7 +35,17 @@ struct DownloadServerError: Decodable {
 }
 
 enum DownloadRetry {
-  static let delays: [TimeInterval] = [5, 30, 60]
+  static let delays: [TimeInterval] = [5, 30, 60, 15 * 60, 3600, 6 * 3600, 24 * 3600]
+  static let temporaryHTTPStatuses = [408, 429, 500, 502, 503, 504]
+
+  // Older libraries recorded only the display message and a per-file cooldown.
+  static func legacyRetryDate(message: String?, after: Date?) -> Date? {
+    guard let after, after > .now,
+          temporaryHTTPStatuses.contains(where: { message == "Download failed (HTTP \($0))." })
+    else { return nil }
+    return after
+  }
+
   static func isTemporaryConnectionError(_ error: NSError) -> Bool {
     error.domain == NSURLErrorDomain && [
       URLError.timedOut, .networkConnectionLost, .notConnectedToInternet,
@@ -49,7 +59,7 @@ enum DownloadRetry {
     guard attempt >= 0, attempt < delays.count, retryable != false else { return nil }
     let temporary: Bool
     if let status {
-      temporary = [408, 429, 500, 502, 503, 504].contains(status)
+      temporary = retryable == true || temporaryHTTPStatuses.contains(status)
     } else if let error {
       temporary = isTemporaryConnectionError(error)
     } else {

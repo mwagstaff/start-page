@@ -41,6 +41,8 @@ createServer(async (req, res) => {
     backgroundEditions.set(editionID, edition);
     if (route.endsWith("/test")) {
       if (req.method === "POST") {
+        if (value.failSync) edition.failSync = true;
+        if (value.failFirstArticle) edition.failFirstArticle = true;
         if (value.holdFirst) edition.holdFirst = true;
         if (value.publish) {
           edition.published = true;
@@ -52,8 +54,13 @@ createServer(async (req, res) => {
       res.end(JSON.stringify({ served: edition.served }));
       return;
     }
-    if (edition.offline) { res.writeHead(503).end(); return; }
+    if (edition.offline || (edition.failSync && route.endsWith("/sync"))) { res.writeHead(503).end(); return; }
     const link = "https://example.org/edition/" + editionID;
+    if (route.endsWith("/article") && edition.failFirstArticle) {
+      edition.failFirstArticle = false;
+      res.writeHead(502, { "Cache-Control": "no-store" }).end();
+      return;
+    }
     if (route.endsWith("/cards") || route.endsWith("/article")) {
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
       if (route.endsWith("/cards")) {

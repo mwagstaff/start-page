@@ -64,6 +64,10 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
   private(set) var finishedFiles = 0
   private(set) var failedFiles = 0
   var hasActiveDownloads: Bool { schedulingDepth > 0 || !downloadActivity.isEmpty }
+  var showsDownloadProgress: Bool {
+    online && downloadActivity.values.contains { !$0.retrying }
+  }
+  var queuedRetryCount: Int { downloadActivity.values.count(where: \.retrying) }
   var totalFiles: Int { finishedFiles + failedFiles + downloadActivity.count }
 
   private func resetDownloadCountsIfIdle() {
@@ -523,6 +527,15 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
   func refreshInBackground(leavingApp: Bool = false) async -> Bool {
     await load()
     guard !Task.isCancelled, !switchingLibrary else { return false }
+    // Hand cached work to the background session even if sync stalls, fails, or
+    // iOS grants only a short execution window. The session waits for connectivity.
+    async let cached: Void = queueCachedArticles()
+    let updated = await refreshBackgroundCards(leavingApp: leavingApp)
+    await cached
+    return updated && !Task.isCancelled
+  }
+
+  private func refreshBackgroundCards(leavingApp: Bool) async -> Bool {
     if let currentRefresh {
       if leavingApp { lastExitCheck = .now }
       let needsDownloads = automatic && !currentRefreshDownloads
@@ -652,7 +665,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     let saved = library.entries.keys.filter { library.reading[$0]?.saved == true }
     let upgrades = library.entries.values.filter { $0.article?.needsImageUpgrade == true }.map(\.id)
     let cutoff = Date.now.addingTimeInterval(-7 * 86400)
-    let repairs = library.entries.values.filter { $0.error != nil && $0.collected > cutoff }.map(\.id)
+    let repairs = library.entries.values.filter { ($0.error != nil || $0.article == nil) && $0.collected > cutoff }.map(\.id)
     return Array(NSOrderedSet(array: current + saved + upgrades + repairs)) as? [String] ?? current
   }
 
@@ -678,6 +691,31 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     await withFileWork { await self.prune() }
     persist()
   }
+  private func queueCachedArticles() async {
+    guard automatic else { return }
+    let epoch = connectionEpoch
+    for id in downloadCandidates {
+      guard automatic, !Task.isCancelled, !switchingLibrary, connectionEpoch == epoch else { return }
+      guard let entry = library.entries[id] else { continue }
+      await queueArticle(entry, automaticRetry: true)
+    }
+  }
+
+  private func queueArticle(_ entry: Entry, automaticRetry: Bool) async {
+    guard entry.article == nil || entry.article?.needsImageUpgrade == true else { return }
+    let after = automaticRetry ? entry.retryAfter?["article"] : nil
+    let earliest = DownloadRetry.legacyRetryDate(message: entry.failures?["article"] ?? entry.error, after: after)
+    guard earliest != nil || (after ?? .distantPast) <= .now else { return }
+    let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+#"))
+    guard let q = entry.id.addingPercentEncoding(withAllowedCharacters: allowed),
+          let url = URL(string: server + "/api/companion/article?url=" + q) else { return }
+    let epoch = connectionEpoch
+    let token = await credential()
+    guard epoch == connectionEpoch, !Task.isCancelled else { return }
+    await BackgroundDownloads.shared.enqueue(url: url, token: token,
+      descriptor: DownloadDescriptor(story: entry.id, kind: "article"), earliest: earliest)
+  }
+
   func downloadStatus(_ id: String) -> String? {
     guard let counts = transfersByStory[id] else { return nil }
     return counts.retrying > 0 ? "Retry queued automatically…" : "Downloading…"
@@ -700,15 +738,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     guard let entry = library.entries[id] else { return }
     beginScheduling()
     defer { schedulingDepth -= 1 }
-    let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+#"))
-    if !automaticRetry || (entry.retryAfter?["article"] ?? .distantPast) <= .now,
-      entry.article == nil || entry.article?.needsImageUpgrade == true,
-      let q = id.addingPercentEncoding(withAllowedCharacters: allowed),
-      let url = URL(string: server + "/api/companion/article?url=" + q)
-    {
-      await BackgroundDownloads.shared.enqueue(
-        url: url, token: await credential(), descriptor: DownloadDescriptor(story: id, kind: "article"))
-    }
+    await queueArticle(entry, automaticRetry: automaticRetry)
     if !automaticRetry || (entry.retryAfter?["comments"] ?? .distantPast) <= .now,
       entry.discussion == nil || entry.failures?["comments"] != nil {
       await downloadComments(id)
