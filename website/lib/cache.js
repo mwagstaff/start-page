@@ -27,6 +27,10 @@ export function createCache(config, { fetch = fetchFeed, images = createImageFin
   const defaultLimit = config.defaultLimit ?? DEFAULT_LIMIT;
   // Last good result per source URL, kept when a later fetch fails.
   const sources = new Map();
+  // HN exposes a rotating front page. Keep recent items from successive polls
+  // for the deeper companion snapshot, even when the phone misses a rotation.
+  const hnURL = config.widgets['hacker-news']?.sources[0]?.url;
+  let hnHistory = [];
   let lastRefresh = null;
   let refreshing = null;
 
@@ -34,6 +38,12 @@ export function createCache(config, { fetch = fetchFeed, images = createImageFin
     const previous = sources.get(source.url);
     try {
       const items = await fetch(source.url);
+      if (source.url === hnURL) {
+        const cutoff = Date.now() - 7 * 86400000;
+        const current = new Set(items.map(item => item.link));
+        const older = hnHistory.filter(item => !current.has(item.link) && Date.parse(item.date) >= cutoff);
+        hnHistory = [...items, ...older].slice(0, 100);
+      }
       sources.set(source.url, { items, fetchedAt: new Date().toISOString(), error: null });
     } catch (error) {
       log.warn(`Feed failed: ${source.url}: ${error.message}`);
@@ -102,11 +112,12 @@ export function createCache(config, { fetch = fetchFeed, images = createImageFin
         thumbnails: Boolean(definition.thumbnails),
         limit: definition.limit ?? defaultLimit,
         maxPerSource: definition.maxPerSource ?? null,
-        sources: results(id).map((result) => ({
+        sources: results(id).map((result, index) => ({
           name: result.name,
           ...(result.paywall && { paywall: result.paywall }),
           error: result.error,
-          items: result.items.slice(0, perSource).map((item) => (definition.thumbnails ? withThumbnail(item) : item)),
+          items: (itemLimit !== null && definition.sources[index].url === hnURL
+            ? hnHistory : result.items).slice(0, perSource).map((item) => (definition.thumbnails ? withThumbnail(item) : item)),
         })),
       }];
     }));

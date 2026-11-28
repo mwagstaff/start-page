@@ -25,6 +25,9 @@ struct DownloadDescriptor: Codable {
   // Optional for tasks persisted by older app versions.
   var retryAttempt: Int?
   var scope: String?
+  var queuedAt: Date?
+  var retryHTTPStatus: Int?
+  var retryTransportCode: Int?
   var key: String { "\(story)|\(kind)|\(remote ?? "")" }
   var failureKey: String { kind == "image" ? "image:\(remote ?? "")" : kind }
 }
@@ -86,6 +89,6 @@ enum DownloadRetry {
 
 struct DownloadActivity {
   var story: String
-  var isArticle: Bool
+  var kind: String
   var retrying: Bool
 }

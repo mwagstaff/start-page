@@ -23,6 +23,7 @@ targets:
     entitlements:
       path: Tab1/Tab1.entitlements
       properties:
+        aps-environment: development
         com.apple.developer.applesignin: [Default]
     sources:
       - path: Tab1
@@ -51,7 +52,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         BGTaskSchedulerPermittedIdentifiers: [tab1.dev.skynolimit.refresh, tab1.dev.skynolimit.processing]
-        UIBackgroundModes: [fetch, processing]
+        UIBackgroundModes: [fetch, processing, remote-notification]
         CFBundleURLTypes:
           - CFBundleURLSchemes: [tab1]
           - CFBundleURLSchemes: ['com.googleusercontent.apps.198958053443-cioa249m5haidthm825uovm3ikbbba33']

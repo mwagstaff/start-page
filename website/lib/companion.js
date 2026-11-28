@@ -4,7 +4,7 @@ import sanitize from "sanitize-html";
 import { extractArticle } from "./article.js";
 import { fetchSafely, checkFeedUrl } from "./custom.js";
 import { validSettings } from "../public/settings.js";
-export function createCompanion({ directory, store = fileProfiles(directory), account, cards, reconcileSettings, fetchArticle = url => fetchSafely(url, "text/html, application/xhtml+xml"), fetchDiscussion = url => fetchSafely(url, "application/json") }) {
+export function createCompanion({ directory, store = fileProfiles(directory), account, cards, storyPush, reconcileSettings, fetchArticle = url => fetchSafely(url, "text/html, application/xhtml+xml"), fetchDiscussion = url => fetchSafely(url, "application/json") }) {
   const cached = new Map();
   let active = 0;
   const waiting = [];
@@ -195,13 +195,16 @@ export function createCompanion({ directory, store = fileProfiles(directory), ac
       else if (route === "unlink" && req.method === "POST") {
         await store.unlink(key);
         send(res, 200, { ok: true });
+      } else if (route === "story-ack" && req.method === "POST" && storyPush && !cookie && req.headers["x-tab1-platform"] === "ios") {
+        send(res, 200, await storyPush.acknowledge(key, (await body(req)).saved));
       } else if (route === "cards" && req.method === "POST") {
         const b = await body(req);
-        send(
-          res,
-          200,
-          await cards(validSettings(b.settings) || profile.settings, b.appTopics),
-        );
+        const snapshot = await cards(validSettings(b.settings) || profile.settings, b.appTopics);
+        if (storyPush && b.storyPush && !cookie && req.headers["x-tab1-platform"] === "ios") {
+          try { Object.assign(snapshot, await storyPush.register(key, b.storyPush, b.appTopics, snapshot.cards)); }
+          catch (e) { console.warn("Story push registration failed", e.code ?? e.name); }
+        }
+        send(res, 200, snapshot);
       } else if (route === "article" && req.method === "GET") {
         const link = checkFeedUrl(url.searchParams.get("url")).href;
         send(

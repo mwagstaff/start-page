@@ -6,6 +6,7 @@ import { mongoProfiles } from './lib/profile-store.js';
 import { todaysFixtures } from './lib/football.js';
 import { createSummaries, summaryState } from './lib/summaries.js';
 import { createFeedReader } from './lib/feeds.js';
+import { apnsSender, storyPushService } from './lib/story-push.js';
 import { createCompanion } from './lib/companion.js';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -146,7 +147,7 @@ function reconcileNativeSettings(previous, next) {
   if (next.tabs.home && JSON.stringify(previous.tabs.home) !== JSON.stringify(next.tabs.home)) return next;
   return applyProfileChange(previous, next, clientCatalogue, config.widgets, legacyCards);
 }
-const companion = createCompanion({ directory, reconcileSettings:reconcileNativeSettings, store: store ?? unavailable, account: store && accounts(store, { ...accountConfig, defaultHomepage:defaultProfile(clientCatalogue, "uk"), catalogue:clientCatalogue, widgets:config.widgets, legacy:legacyCards }), cards: async (settings, appTopics) => {
+async function personalizedCards(settings, appTopics) {
  await (cache.ready || cache.pending);
  const profile = settings?.profile || defaultProfile(clientCatalogue, 'uk');
  const definitions = profileCards(profile, clientCatalogue);
@@ -166,7 +167,14 @@ const companion = createCompanion({ directory, reconcileSettings:reconcileNative
  const cards=companionCards(widgets, layout).map(card=>({...card,items:card.items.map(item=>({...item,...(!item.commentsUrl && discussions.has(canonicalStoryURL(item.link))?{commentsUrl:discussions.get(canonicalStoryURL(item.link))}:{})}))}));
  for (const card of cards) for (const item of card.items) item.summary = summaries.get(item.link, item.commentsUrl);
  return { cards, settings: {...(settings || {v:1,tabs:{},custom:[]}), ...(!settings?.profile && settings?.tabs?.home && { tabs:{...settings.tabs,home:{...settings.tabs.home,cards:sharedLayout}} }),profile}, catalogue:clientCatalogue, weather:weather.current, backdrop:backdrop.current };
-}});
+}
+const storyPush = store && accountConfig.TAB1_APNS_KEY_PATH && accountConfig.TAB1_APNS_KEY_ID
+  ? storyPushService(store, personalizedCards, apnsSender(accountConfig)) : null;
+if (storyPush) {
+  setInterval(() => storyPush.scan().catch(e => console.warn("Story push worker:", e.name)), 120_000).unref();
+  console.info("Story push worker enabled");
+}
+const companion = createCompanion({ directory, reconcileSettings:reconcileNativeSettings, store: store ?? unavailable, account: store && accounts(store, { ...accountConfig, defaultHomepage:defaultProfile(clientCatalogue, "uk"), catalogue:clientCatalogue, widgets:config.widgets, legacy:legacyCards }), cards: personalizedCards, storyPush });
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const { pathname, searchParams } = url;

@@ -152,3 +152,18 @@ test('buildCards adds spare stories after every card has its own', async () => {
   const limited = buildCards(widgets, [{ id: 'ai', limit: 1, maxItems: 1 }, { id: 'tech' }], 6, 3);
   assert.deepEqual(limited.map((card) => card.items.length), [1, 2]);
 });
+
+test('companion keeps recent Hacker News front-page rotations between phone visits', async () => {
+  const now = new Date().toISOString();
+  const story = (id, date = now) => item('https://example.org/' + id, date);
+  let feed = [story(1), story(2), story('expired', '2001-01-01T00:00:00Z')];
+  const cache = createCache({ widgets: { 'hacker-news': { title: 'Hacker News',
+    sources: [{ name: 'Hacker News', url: 'https://hnrss.org/frontpage?count=100' }] } } },
+    { fetch: async () => feed });
+  await cache.refresh();
+  feed = [story(3), story(2)];
+  await cache.refresh();
+  const links = snapshot => snapshot.widgets['hacker-news'].sources[0].items.map(item => item.link);
+  assert.deepEqual(links(cache.snapshot()), [story(3).link, story(2).link]);
+  assert.deepEqual(links(cache.snapshot(100)), [story(3).link, story(2).link, story(1).link]);
+});

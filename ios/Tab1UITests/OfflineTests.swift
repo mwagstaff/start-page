@@ -5,7 +5,7 @@ final class LiveAccountTests: XCTestCase {
     try XCTSkipUnless(ProcessInfo.processInfo.environment["TAB1_LIVE_ACCOUNT"] == "1",
                       "Set TEST_RUNNER_TAB1_LIVE_ACCOUNT=1 to check the deployed provider configuration.")
     let app = XCUIApplication()
-    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", "https://tab1.net", "-automatic", "NO"]
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server", "https://tab1.net", "-automatic", "NO"]
     if accountMarker { app.launchArguments += ["-tab1.accountActive", "YES"] }
     app.launch()
     return app
@@ -85,7 +85,7 @@ final class OfflineTests: XCTestCase {
   private func launchReader(server: String = "http://localhost:3068", extraArguments: [String] = []) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "NO",
+      "--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server", server, "-automatic", "NO",
     ]
     app.launchArguments += extraArguments
     app.launch()
@@ -110,7 +110,7 @@ final class OfflineTests: XCTestCase {
     app.segmentedControls.buttons["Summary"].tap()
     XCTAssertTrue(app.staticTexts["Publisher excerpt"].waitForExistence(timeout: 10))
     app.terminate()
-    app.launchArguments = ["--ui-testing", "-server", "http://localhost:9", "-automatic", "NO"]
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "-server", "http://localhost:9", "-automatic", "NO"]
     app.launch()
     let summary = app.buttons["Summary"].firstMatch
     XCTAssertTrue(summary.waitForExistence(timeout: 20))
@@ -136,8 +136,10 @@ final class OfflineTests: XCTestCase {
     app.navigationBars.buttons.firstMatch.tap()
     let progress = app.descendants(matching: .any)["download-progress"].firstMatch
     XCTAssertTrue(progress.waitForNonExistence(timeout: 10))
-    XCTAssertTrue(app.staticTexts["cards-updated"].label.contains("0 downloaded · 1 pending"))
-    app.tabBars.buttons["Downloads"].tap()
+    XCTAssertTrue(app.staticTexts["cards-updated"].label.contains("0 downloaded"))
+    XCTAssertFalse(app.staticTexts["cards-updated"].label.contains("pending"))
+    app.tabBars.buttons["All stories"].tap()
+    app.buttons["Download details"].tap()
     let queued = app.descendants(matching: .any)["queued-retries"].firstMatch
     XCTAssertTrue(queued.waitForExistence(timeout: 10))
     XCTAssertEqual(queued.label, "1 file queued for automatic retry")
@@ -147,9 +149,23 @@ final class OfflineTests: XCTestCase {
       predicate: NSPredicate(format: "label == %@ AND value == %@", "Downloads complete", "3 of 3 downloaded"),
       object: progress)
     XCTAssertEqual(XCTWaiter.wait(for: [complete], timeout: 120), .completed)
-    app.tabBars.buttons["Home"].tap()
+    app.tabBars.buttons["Latest"].tap()
     XCTAssertFalse(progress.exists)
     XCTAssertTrue(app.staticTexts["cards-updated"].label.contains("1 downloaded · last just now"))
+  }
+  func testOnlyImagePendingAppearsInDownloads() throws {
+    try configureDownloads(failures: 0, status: 503)
+    let app = launchReader(server: "http://localhost:3068/slow-image")
+    app.buttons["retry-download"].tap()
+    app.navigationBars.buttons.firstMatch.tap()
+    let status = app.staticTexts["cards-updated"]
+    let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS '1 downloaded'"), object: status)
+    XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 10), .completed)
+    XCTAssertFalse(status.label.contains("pending"))
+    XCTAssertFalse(app.descendants(matching: .any)["download-progress"].firstMatch.exists)
+    app.tabBars.buttons["All stories"].tap()
+    app.buttons["Download details"].tap()
+    XCTAssertEqual(app.staticTexts["pending-images"].label, "1 image pending")
   }
   func testPermanentFailureHasManualRetry() throws {
     try configureDownloads(failures: 1, status: 422)
@@ -178,15 +194,16 @@ final class OfflineTests: XCTestCase {
     let app = launchReader()
     app.buttons["retry-download"].tap()
     XCTAssertTrue(app.buttons["Retry download"].waitForExistence(timeout: 20))
-    app.tabBars.buttons["Downloads"].tap()
+    app.tabBars.buttons["All stories"].tap()
     app.buttons["Download details"].tap()
+    app.buttons["Download failures"].tap()
     let retry = app.buttons["retry-failed-downloads"]
     XCTAssertTrue(retry.isEnabled)
     retry.tap()
     let finished = XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "exists == false OR enabled == false"), object: retry)
     XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 30), .completed)
-    app.tabBars.buttons["Home"].tap()
+    app.tabBars.buttons["Latest"].tap()
     XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 30))
   }
   func testOfflineImagesUnicodeAndOriginalLink() throws {
@@ -199,7 +216,7 @@ final class OfflineTests: XCTestCase {
       predicate: NSPredicate(format: "exists == false"), object: app.staticTexts["Downloading…"])
     XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 30), .completed)
     app.terminate()
-    app.launchArguments = ["--ui-testing", "-server", "http://localhost:9", "-automatic", "NO"]
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "-server", "http://localhost:9", "-automatic", "NO"]
     app.launch()
     let headline = app.staticTexts["A story ready for the journey"]
     XCTAssertTrue(headline.waitForExistence(timeout: 20))
@@ -246,7 +263,7 @@ final class OfflineTests: XCTestCase {
   func testStoriesRecoverWithoutPullingToRefresh() {
     let app = XCUIApplication()
     let server = ProcessInfo.processInfo.environment["TAB1_FIXTURE_SERVER"] ?? "http://localhost:3068"
-    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server",
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server",
                            server + "/retry-once/" + UUID().uuidString, "-automatic", "NO"]
     app.launch()
     XCTAssertTrue(app.staticTexts["Couldn’t update stories. Retrying automatically…"].waitForExistence(timeout: 6))
@@ -255,7 +272,7 @@ final class OfflineTests: XCTestCase {
   func testSlowPullRefreshContinuesAcrossTabs() {
     let app = XCUIApplication()
     let server = ProcessInfo.processInfo.environment["TAB1_FIXTURE_SERVER"] ?? "http://localhost:3068"
-    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server + "/slow-refresh", "-automatic", "NO"]
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server", server + "/slow-refresh", "-automatic", "NO"]
     app.launch()
     let updated = app.staticTexts["cards-updated"]
     XCTAssertTrue(updated.waitForExistence(timeout: 25))
@@ -265,16 +282,17 @@ final class OfflineTests: XCTestCase {
     let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
     start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0.2)
     XCTAssertTrue(app.staticTexts["Updating stories…"].waitForExistence(timeout: 4))
-    app.tabBars.buttons["Downloads"].tap()
+    app.tabBars.buttons["All stories"].tap()
+    app.buttons["Download details"].tap()
     XCTAssertTrue(updated.waitForExistence(timeout: 15))
-    app.tabBars.buttons["Home"].tap()
+    app.tabBars.buttons["Latest"].tap()
     XCTAssertTrue(updated.exists)
     XCTAssertFalse(app.staticTexts["cancelled"].exists)
   }
   func testHomeWithoutCacheWhenServerIsUnavailable() {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--reset-ui-library", "-server", "http://localhost:9", "-automatic", "NO",
+      "--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server", "http://localhost:9", "-automatic", "NO",
       "-AppleInterfaceStyle", "Dark", "-UIPreferredContentSizeCategoryName",
       "UICTContentSizeCategoryXXXL",
     ]
@@ -287,7 +305,7 @@ final class OfflineTests: XCTestCase {
   func testForecastDaySelection() {
     let app = XCUIApplication()
     let server = ProcessInfo.processInfo.environment["TAB1_FIXTURE_SERVER"] ?? "http://localhost:3068"
-    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "NO"]
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server", server, "-automatic", "NO"]
     app.launch()
     XCTAssertTrue(app.staticTexts["A story ready for the journey"].firstMatch.waitForExistence(timeout: 30))
     app.buttons["Weather"].tap()
@@ -316,7 +334,7 @@ final class OfflineTests: XCTestCase {
   func testHomeSearchOpensAndCancels() throws {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--reset-ui-library", "-server", "http://localhost:3068", "-automatic", "NO",
+      "--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server", "http://localhost:3068", "-automatic", "NO",
     ]
     app.launch()
     let headline = app.staticTexts["A story ready for the journey"]
@@ -340,7 +358,7 @@ final class OfflineTests: XCTestCase {
   func testAppOnlyTopicsPersist() throws {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--reset-ui-library", "-server", "http://localhost:3068", "-automatic", "NO",
+      "--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server", "http://localhost:3068", "-automatic", "NO",
     ]
     app.launch()
     XCTAssertTrue(app.staticTexts["A story ready for the journey"].waitForExistence(timeout: 45))
@@ -351,39 +369,232 @@ final class OfflineTests: XCTestCase {
     toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
     XCTAssertEqual(toggle.value as? String, "1")
     app.navigationBars.buttons.firstMatch.tap()
-    app.tabBars.buttons["Home"].tap()
+    app.tabBars.buttons["Latest"].tap()
     XCTAssertTrue(app.staticTexts["App-only science story"].waitForExistence(timeout: 15))
     app.terminate()
-    app.launchArguments = ["--ui-testing", "-server", "http://localhost:3068", "-automatic", "NO"]
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "-server", "http://localhost:3068", "-automatic", "NO"]
     app.launch()
     app.tabBars.buttons["Settings"].tap()
     app.buttons["App-only topics"].tap()
     XCTAssertTrue(toggle.waitForExistence(timeout: 10))
     XCTAssertEqual(toggle.value as? String, "1")
   }
-  func testCardsExpandAndCollapse() throws {
+  func testMoreStoriesOpensTopicOverflowNewestFirst() throws {
     let app = XCUIApplication()
-    app.launchArguments = [
-      "--ui-testing", "--reset-ui-library", "-server", "http://localhost:3068", "-automatic", "NO",
-    ]
+    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-showReadStories", "YES",
+                           "-server", "http://localhost:3068/dated-stories", "-automatic", "YES"]
     app.launch()
-    let toggle = app.buttons["expand-fixture"]
-    XCTAssertTrue(toggle.waitForExistence(timeout: 45))
-    XCTAssertTrue(app.staticTexts["A story ready for the journey"].exists)
-    app.swipeUp()
-    XCTAssertEqual(toggle.value as? String, "Collapsed")
-    toggle.tap()
-    XCTAssertEqual(toggle.value as? String, "Expanded")
-    app.swipeUp()
-    XCTAssertTrue(app.staticTexts["Journey story 9"].exists)
-    toggle.tap()
-    XCTAssertEqual(toggle.value as? String, "Collapsed")
+    let more = app.buttons["more-fixture"]
+    XCTAssertTrue(more.waitForExistence(timeout: 45))
+    let latest = app.staticTexts["A story ready for the journey"]
+    XCTAssertTrue(latest.exists)
     XCTAssertFalse(app.staticTexts["Journey story 9"].exists)
+    more.tap()
+    XCTAssertTrue(app.tabBars.buttons["All stories"].isSelected)
+    XCTAssertTrue(app.staticTexts["Journey story 9"].exists)
+    XCTAssertFalse(latest.exists)
+    XCTAssertTrue(app.staticTexts["Your stories"].exists)
+    XCTAssertLessThan(app.staticTexts["Journey story 8"].frame.minY, app.staticTexts["Journey story 9"].frame.minY)
+    XCTAssertLessThan(app.staticTexts["Journey story 9"].frame.minY, app.staticTexts["Earlier report"].frame.minY)
+    XCTAssertFalse(app.staticTexts["Storage"].exists)
+    XCTAssertTrue(app.staticTexts["Hacker News"].exists)
+    XCTAssertTrue(app.buttons["1 comment"].exists)
+    XCTAssertTrue(app.buttons["Summary"].firstMatch.exists)
+    let screenshot = XCTAttachment(screenshot: app.screenshot())
+    screenshot.name = "All stories grouped by topic"
+    screenshot.lifetime = .keepAlways
+    add(screenshot)
+    try app.performAccessibilityAudit(for: [.textClipped, .sufficientElementDescription])
+    // The last source can scroll out of the viewport when text grows.
+    // Measure its actual rendered size after bringing it back into view.
+    let source = app.staticTexts["example.org"]
+    let originalHeight = source.frame.height
+    XCTAssertGreaterThan(originalHeight, 0)
+    app.terminate()
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "-server", "http://localhost:9",
+                           "-automatic", "NO", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+    app.launch()
+    app.tabBars.buttons["All stories"].tap()
+    XCTAssertTrue(app.staticTexts["Your stories"].waitForExistence(timeout: 5))
+    for _ in 0..<5 where !source.isHittable { app.swipeUp() }
+    XCTAssertTrue(source.isHittable)
+    XCTAssertGreaterThan(source.frame.height, originalHeight * 1.3)
+    try app.performAccessibilityAudit(for: [.textClipped, .sufficientElementDescription])
   }
+
+  func testHackerNewsBackfillsReadSlotsAndOpensItsOwnOverflow() {
+    let app = XCUIApplication()
+    let server = "http://localhost:3068/reading-test/" + UUID().uuidString + "/hn-coverage"
+    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "NO",
+                           "-showReadStories", "NO", "-readWhenPassed", "NO"]
+    app.launch()
+    let more = app.buttons["more-hacker-news"]
+    XCTAssertTrue(more.waitForExistence(timeout: 30))
+    XCTAssertFalse(app.staticTexts["HN headline 4"].exists)
+    for number in 5...12 { XCTAssertTrue(app.staticTexts["HN headline " + String(number)].exists) }
+    more.tap()
+    let next = app.staticTexts["HN headline 13"]
+    XCTAssertTrue(next.isHittable)
+    XCTAssertFalse(app.staticTexts["HN headline 12"].exists)
+    XCTAssertFalse(app.staticTexts["Older technology report"].isHittable)
+    next.tap()
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(next.waitForExistence(timeout: 5))
+    XCUIDevice.shared.press(.home)
+    app.activate()
+    XCTAssertTrue(next.waitForNonExistence(timeout: 8))
+    XCTAssertTrue(app.staticTexts["HN headline 14"].isHittable)
+  }
+
+  func testLatestScrollGreysHeadlinesUntilPullToRefresh() {
+    let app = XCUIApplication()
+    let server = "http://localhost:3068/reading-test/" + UUID().uuidString + "/hn-coverage"
+    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "NO",
+                           "-showReadStories", "NO", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL"]
+    app.launch()
+    let first = app.buttons.containing(.staticText, identifier: "HN headline 5").firstMatch
+    XCTAssertTrue(first.waitForExistence(timeout: 30))
+    let scroll = app.scrollViews.firstMatch
+    scroll.swipeUp(velocity: .fast)
+    scroll.swipeDown(velocity: .fast)
+    XCTAssertEqual(first.value as? String, "Read")
+    scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25))
+      .press(forDuration: 0.1, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92)))
+    XCTAssertTrue(first.waitForNonExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["HN headline 13"].exists)
+  }
+
+  func testCommentsStayUnreadAndSummaryCompletesLatest() {
+    let app = XCUIApplication()
+    let server = "http://localhost:3068/reading-test/" + UUID().uuidString
+    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "NO"]
+    app.launch()
+    XCTAssertTrue(app.buttons["Filter stories"].waitForExistence(timeout: 15))
+    app.buttons["Filter stories"].tap()
+    app.buttons["Unread only"].tap()
+    let comments = app.buttons["1 comment"].firstMatch
+    XCTAssertTrue(comments.waitForExistence(timeout: 30))
+    comments.tap()
+    XCTAssertTrue(app.segmentedControls.buttons["Comments"].isSelected)
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    XCTAssertTrue(comments.waitForExistence(timeout: 5))
+    app.buttons["Summary"].firstMatch.tap()
+    XCTAssertTrue(app.segmentedControls.buttons["Summary"].isSelected)
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    let more = app.buttons["Read more in All stories"]
+    XCTAssertTrue(more.waitForExistence(timeout: 5))
+    XCTAssertTrue(comments.exists)
+    XCTAssertEqual(app.buttons.containing(.staticText, identifier: "A story ready for the journey").firstMatch.value as? String, "Read")
+    more.tap()
+    XCTAssertTrue(app.tabBars.buttons["All stories"].isSelected)
+    XCTAssertTrue(app.staticTexts["Journey story 1"].waitForExistence(timeout: 5))
+    app.tabBars.buttons["Latest"].tap()
+    XCTAssertFalse(comments.exists)
+    XCTAssertTrue(app.staticTexts["Journey story 1"].exists)
+    app.buttons["Filter stories"].tap()
+    app.buttons["Read and unread"].tap()
+    XCTAssertTrue(comments.waitForExistence(timeout: 5))
+  }
+  @MainActor func testScrollMarksPassedArchiveStoriesAndFilterRestoresThem() async throws {
+    let app = XCUIApplication()
+    let server = "http://localhost:3068/reading-test/" + UUID().uuidString + "/tiny-batches"
+    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "NO",
+                           "-AppleInterfaceStyle", "Dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityL"]
+    app.launch()
+    XCTAssertTrue(app.buttons["more-fixture"].waitForExistence(timeout: 30))
+    app.buttons["Filter stories"].tap()
+    app.buttons["Unread only"].tap()
+    app.buttons["more-fixture"].tap()
+    let first = app.staticTexts["Journey story 1"]
+    XCTAssertTrue(first.waitForExistence(timeout: 5))
+    app.scrollViews.firstMatch.swipeUp()
+    app.scrollViews.firstMatch.swipeDown(velocity: .fast)
+    XCTAssertTrue(first.isHittable)
+    XCTAssertEqual(app.buttons.containing(.staticText, identifier: "Journey story 1").firstMatch.value as? String, "Read")
+    struct State: Decodable {
+      struct Item: Decodable { let read: Bool }
+      let reading: [String: Item]
+    }
+    let sync = URL(string: server + "/api/companion/sync")!
+    var read = Set<String>()
+    for _ in 0..<20 {
+      let (data, _) = try await URLSession.shared.data(from: sync)
+      read = Set(try JSONDecoder().decode(State.self, from: data).reading.filter { $0.value.read }.keys)
+      if read.contains("https://example.org/journey/0") { break }
+      try await Task.sleep(for: .milliseconds(200))
+    }
+    XCTAssertTrue(read.contains("https://example.org/journey/0"))
+    XCTAssertFalse(read.contains("https://example.org/journey/54"))
+    let scroll = app.scrollViews.firstMatch
+    scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25))
+      .press(forDuration: 0.1, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92)))
+    XCTAssertTrue(first.waitForNonExistence(timeout: 5))
+    app.buttons["Filter stories"].tap()
+    app.buttons["Read and unread"].tap()
+    app.scrollViews.firstMatch.swipeDown(velocity: .fast)
+    XCTAssertTrue(first.isHittable)
+  }
+
+  func testScrollingDisabledKeepsPassedHeadlinesUnread() {
+    let app = XCUIApplication()
+    let server = "http://localhost:3068/reading-test/" + UUID().uuidString
+    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "NO",
+                           "-readWhenPassed", "NO", "-showReadStories", "NO"]
+    app.launch()
+    let more = app.buttons["more-fixture"]
+    XCTAssertTrue(more.waitForExistence(timeout: 30))
+    more.tap()
+    let first = app.staticTexts["Journey story 1"]
+    XCTAssertTrue(first.isHittable)
+    app.scrollViews.firstMatch.swipeUp()
+    XCTAssertFalse(first.isHittable)
+    app.scrollViews.firstMatch.swipeDown(velocity: .fast)
+    XCTAssertTrue(first.isHittable)
+  }
+
+  func testReadingSettingsAndOfflineHistory() {
+    let app = XCUIApplication()
+    let server = "http://localhost:3068/reading-test/" + UUID().uuidString
+    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "NO"]
+    app.launch()
+    let article = app.staticTexts["A story ready for the journey"].firstMatch
+    XCTAssertTrue(article.waitForExistence(timeout: 30))
+    app.buttons["Filter stories"].tap()
+    app.buttons["Unread only"].tap()
+
+    func changeOpeningSetting(to enabled: Bool) {
+      app.tabBars.buttons["Settings"].tap()
+      let toggle = app.switches["Mark as read when opened"]
+      for _ in 0..<5 where !toggle.isHittable { app.swipeUp() }
+      XCTAssertTrue(toggle.isHittable)
+      if toggle.value as? String != (enabled ? "1" : "0") {
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+      }
+      app.tabBars.buttons["Latest"].tap()
+    }
+
+    changeOpeningSetting(to: false)
+    article.tap()
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    XCTAssertTrue(article.waitForExistence(timeout: 5))
+    changeOpeningSetting(to: true)
+    article.tap()
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    XCTAssertTrue(app.buttons["Read more in All stories"].waitForExistence(timeout: 5))
+    app.terminate()
+    app.launchArguments = ["--ui-testing", "-server", "http://localhost:9", "-automatic", "NO"]
+    app.launch()
+    XCTAssertTrue(app.staticTexts["Journey story 1"].waitForExistence(timeout: 10))
+    XCTAssertFalse(article.exists)
+    app.buttons["Filter stories"].tap()
+    app.buttons["Read and unread"].tap()
+    XCTAssertTrue(article.waitForExistence(timeout: 5))
+  }
+
   func testCommentsLinkRefreshAndOfflineRelaunch() {
     let app = XCUIApplication()
     let server = ProcessInfo.processInfo.environment["TAB1_FIXTURE_SERVER"] ?? "http://localhost:3068"
-    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", "NO",
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server", server, "-automatic", "NO",
                            "-AppleInterfaceStyle", "Dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXXL"]
     app.launch()
     let comments = app.buttons["1 comment"].firstMatch
@@ -395,7 +606,7 @@ final class OfflineTests: XCTestCase {
     let updated = app.staticTexts["A freshly updated reply."]
     XCTAssertTrue(updated.waitForExistence(timeout: 30))
     app.terminate()
-    app.launchArguments = ["--ui-testing", "-server", "http://localhost:9", "-automatic", "NO"]
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "-server", "http://localhost:9", "-automatic", "NO"]
     app.launch()
     XCTAssertTrue(comments.waitForExistence(timeout: 15))
     comments.tap()
@@ -412,7 +623,7 @@ final class OfflineTests: XCTestCase {
   func testInteractionsDuringAutomaticDownloads() throws {
     try configureDownloads(failures: 0, status: 503)
     let app = XCUIApplication()
-    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server",
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server",
                            "http://localhost:3068/busy-library", "-automatic", "YES"]
     app.launch()
     let progress = app.descendants(matching: .any)["download-progress"].firstMatch
@@ -430,7 +641,8 @@ final class OfflineTests: XCTestCase {
     field.typeText("Section 4 story 2")
     XCTAssertTrue(app.staticTexts["Section 4 story 2"].exists)
     app.buttons["Cancel"].tap()
-    app.tabBars.buttons["Downloads"].tap()
+    app.tabBars.buttons["All stories"].tap()
+    app.buttons["Download details"].tap()
     let finished = XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "label == %@", "Downloads complete"), object: progress)
     XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 150), .completed)
@@ -439,15 +651,17 @@ final class OfflineTests: XCTestCase {
   func testDownloadThenColdLaunchOffline() throws {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--reset-ui-library", "-server", "http://localhost:3068", "-automatic", "YES",
+      "--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server", "http://localhost:3068", "-automatic", "YES",
     ]
     app.launch()
     let headline = app.staticTexts["A story ready for the journey"]
     XCTAssertTrue(headline.waitForExistence(timeout: 45))
-    app.tabBars.buttons["Downloads"].tap()
-    let ready = app.staticTexts["Ready offline"].firstMatch
-    XCTAssertTrue(ready.waitForExistence(timeout: 60))
-    app.tabBars.buttons["Home"].tap()
+    app.tabBars.buttons["All stories"].tap()
+    app.buttons["Download details"].tap()
+    let progress = app.descendants(matching: .any)["download-progress"].firstMatch
+    let complete = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Downloads complete"), object: progress)
+    XCTAssertEqual(XCTWaiter.wait(for: [complete], timeout: 60), .completed)
+    app.tabBars.buttons["Latest"].tap()
     headline.firstMatch.tap()
     XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 15))
     XCTAssertTrue(
@@ -456,7 +670,7 @@ final class OfflineTests: XCTestCase {
     if app.buttons["Unsave"].exists { app.buttons["Unsave"].tap() }
     app.buttons["Save"].tap()
     app.terminate()
-    app.launchArguments = ["--ui-testing", "-server", "http://localhost:9", "-automatic", "NO"]
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "-server", "http://localhost:9", "-automatic", "NO"]
     app.launch()
     XCTAssertTrue(headline.waitForExistence(timeout: 15))
     headline.firstMatch.tap()
@@ -503,7 +717,7 @@ final class OfflineTests: XCTestCase {
     if refreshInProgress { _ = try await fixture("holdFirst") }
     if failFirstArticle { _ = try await fixture("failFirstArticle") }
     if cachedBeforeExit { _ = try await fixture("publish") }
-    app.launchArguments = ["--ui-testing", "--reset-ui-library", "-server", server, "-automatic", cachedBeforeExit ? "NO" : "YES"]
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "--reset-ui-library", "-server", server, "-automatic", cachedBeforeExit ? "NO" : "YES"]
     app.launch()
     let status = refreshInProgress ? "Updating stories…" : "cards-updated"
     XCTAssertTrue(app.staticTexts[status].waitForExistence(timeout: 30))
@@ -511,7 +725,7 @@ final class OfflineTests: XCTestCase {
       XCTAssertTrue(app.staticTexts["Afternoon edition"].exists)
       app.terminate()
       _ = try await fixture("failSync")
-      app.launchArguments = ["--ui-testing", "-server", server, "-automatic", "YES"]
+      app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "-server", server, "-automatic", "YES"]
       app.launch()
       XCTAssertTrue(app.staticTexts["Couldn’t update stories. Retrying automatically…"].waitForExistence(timeout: 15))
       let servedBeforeExit = try await fixture()
@@ -538,10 +752,28 @@ final class OfflineTests: XCTestCase {
     XCTAssertTrue(body.waitForExistence(timeout: 15))
 
     app.terminate()
-    app.launchArguments = ["--ui-testing", "-server", "http://localhost:9", "-automatic", "NO"]
+    app.launchArguments = ["--ui-testing", "-showReadStories", "YES", "-server", "http://localhost:9", "-automatic", "NO"]
     app.launch()
     XCTAssertTrue(headline.waitForExistence(timeout: 10))
     headline.tap()
     XCTAssertTrue(body.waitForExistence(timeout: 10))
+    if failFirstArticle {
+      app.tabBars.buttons["All stories"].tap()
+      app.buttons["Download details"].tap()
+      let log = app.buttons["Background download log"]
+      if !log.isHittable { app.swipeUp() }
+      log.tap()
+      let report = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "last 48 hourly periods")).firstMatch
+      XCTAssertTrue(report.waitForExistence(timeout: 5))
+      for evidence in ["Entered background", "newly discovered stories", "article · HTTP 502",
+                       "article · retry submitted", "article · completed", "System queue (background check ended)",
+                       "System queue (activation)", "article attempt 1 timing sample: request=",
+                       "article attempt 2 timing sample: request=", "article · attempt 1 network timing:",
+                       "article · attempt 2 network timing:", "last byte=", "article retry causes:"] {
+        XCTAssertTrue(report.label.contains(evidence), "Missing diagnostic: \(evidence)")
+      }
+      XCTAssertFalse(report.label.contains("example.org"))
+      XCTAssertTrue(app.buttons["Share log"].exists)
+    }
   }
 }

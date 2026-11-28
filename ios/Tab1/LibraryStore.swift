@@ -12,6 +12,43 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
 @MainActor @Observable final class LiveLibrary {
   var cards: [Card] = []
   var entries: [String: Entry] = [:]
+  struct FeedItem: Equatable {
+    let date: Date
+    let group: FeedGroup
+    init(_ entry: Entry) {
+      date = entry.story.published ?? entry.collected
+      group = entry.feedGroup ?? FeedGroup(source: entry.story)
+    }
+  }
+  // Article and image transfers don't invalidate the lightweight feed index.
+  private(set) var feedItems: [String: FeedItem] = [:]
+  private(set) var hiddenThisVisit: Set<String> = []
+  private(set) var excludedFromLatest: Set<String> = []
+
+  func beginFeedVisit(latest: Bool) {
+    hiddenThisVisit = Set(reading.compactMap { $0.value.read ? $0.key : nil })
+    // Keep Latest's allocation while the reader browses its overflow.
+    if latest { excludedFromLatest = hiddenThisVisit }
+  }
+  func showUnread(_ id: String) {
+    hiddenThisVisit.remove(id)
+  }
+  func reconcileUnread() {
+    let stillHidden = hiddenThisVisit.filter { reading[$0]?.read == true }
+    if stillHidden != hiddenThisVisit { hiddenThisVisit = stillHidden }
+  }
+  func collect(_ story: Story, group: FeedGroup? = nil) {
+    var entry = entries[story.id] ?? Entry(story: story)
+    entry.story = story
+    if let group { entry.feedGroup = group }
+    entries[story.id] = entry
+    let item = FeedItem(entry)
+    if feedItems[story.id] != item { feedItems[story.id] = item }
+  }
+  func removeEntry(_ id: String) {
+    entries.removeValue(forKey: id)
+    feedItems.removeValue(forKey: id)
+  }
   var settings: JSONValue = .object([:])
   var baseline: JSONValue = .object([:])
   var catalogue: JSONValue = .object([:])
@@ -26,6 +63,12 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
   init(_ value: Library = Library()) {
     cards = value.cards
     entries = value.entries
+    for card in cards {
+      for story in card.items where entries[story.id]?.feedGroup == nil {
+        entries[story.id]?.feedGroup = FeedGroup(card: card)
+      }
+    }
+    feedItems = entries.mapValues(FeedItem.init)
     settings = value.settings
     baseline = value.baseline
     catalogue = value.catalogue
@@ -37,6 +80,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     revision = value.revision
     updated = value.updated
     lastArticleDownload = value.lastArticleDownload
+    beginFeedVisit(latest: true)
   }
   var snapshot: Library {
     Library(cards: cards, entries: entries, settings: settings, baseline: baseline,
@@ -61,6 +105,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
   }
   private var transfersByStory: [String: StoryTransfers] = [:]
   private var schedulingDepth = 0
+  private(set) var savedFirstAttemptArticles = 0
   private(set) var finishedFiles = 0
   private(set) var failedFiles = 0
   var hasActiveDownloads: Bool { schedulingDepth > 0 || !downloadActivity.isEmpty }
@@ -86,8 +131,12 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     let retrying = (descriptor.retryAttempt ?? 0) > 0
     let previous = downloadActivity[descriptor.key]
     guard previous?.retrying != retrying else { return }
+    if descriptor.kind == "article", !retrying, savedFirstAttemptArticles > 0,
+       firstAttemptStoryDownloads == 0 {
+      savedFirstAttemptArticles = 0
+    }
     downloadActivity[descriptor.key] = DownloadActivity(
-      story: descriptor.story, isArticle: descriptor.kind == "article", retrying: retrying)
+      story: descriptor.story, kind: descriptor.kind, retrying: retrying)
     var counts = transfersByStory[descriptor.story] ?? StoryTransfers()
     if previous == nil { counts.active += 1 }
     if previous?.retrying == true { counts.retrying -= 1 }
@@ -121,6 +170,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
 
   private func connectivityChanged(connected: Bool) {
     guard online != connected else { return }
+    DownloadDiagnostics.shared.event("Network path connected=\(connected)")
     online = connected
     offlineNotice?.cancel()
     retryTask?.cancel()
@@ -154,6 +204,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
   var automatic = true {
     didSet {
       UserDefaults.standard.set(automatic, forKey: "automatic")
+      pushPreferencesChanged()
       BackgroundRefresh.schedule(online: online)
     }
   }
@@ -265,7 +316,8 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     pendingDownloadSave?.cancel()
     pendingDownloadSave = nil
     guard ready else { return }
-    persistence.save(library.snapshot, to: root.appending(path: "library.json")) { [weak self] message in
+    persistence.save(library.snapshot, to: root.appending(path: "library.json"),
+                     onSaved: StoryPush.shared.saveObserver(entries: library.entries)) { [weak self] message in
       Task { @MainActor in self?.lastError = "Could not save the offline library: \(message)" }
     }
   }
@@ -327,13 +379,18 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
   }
   private func performSync() async throws {
     try await ensureProfile()
-    for _ in 0..<3 {
+    // Offline scrolling can queue hundreds of changes. Send bounded batches
+    // and acknowledge each before draining the next, including new edits.
+    var batchLimit = 64
+    var conflicts = 0
+    while conflicts < 3 {
+      try Task.checkCancellation()
       let remote: SyncResponse = try await request("sync")
       let merged = mergePreferences(
         base: library.baseline, local: library.settings, remote: remote.settings ?? .object([:])
       ).object
       let localAtStart = library.settings
-      let pendingAtStart = library.pending
+      let pendingAtStart = Dictionary(uniqueKeysWithValues: library.pending.prefix(batchLimit).map { ($0.key, $0.value) })
       do {
         let result: SyncResponse
         if pendingAtStart.isEmpty, remote.settings == .object(merged) {
@@ -352,7 +409,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
         library.baseline = result.settings ?? library.settings
         library.reading = result.reading
         for (id, value) in result.reading where value.saved && library.entries[id] == nil {
-          if let story = value.story { library.entries[id] = Entry(story: story) }
+          if let story = value.story { library.collect(story) }
         }
         for (key, value) in pendingAtStart {
           if library.pending[key]?.read == value.read { library.pending[key]?.read = nil }
@@ -365,12 +422,23 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
           var value = library.reading[key] ?? Reading()
           if let read = patch.read { value.read = read }
           if let saved = patch.saved { value.saved = saved }
+          if let story = patch.story { value.story = story }
           library.reading[key] = value
+        }
+        if library.cards.isEmpty {
+          library.beginFeedVisit(latest: true)
+        } else {
+          library.reconcileUnread()
         }
         library.revision = result.revision
         persist()
-        return
-      } catch let error as NSError where error.code == 409 { continue }
+        if library.pending.isEmpty { return }
+        conflicts = 0
+      } catch let error as NSError where error.code == 409 {
+        conflicts += 1
+      } catch let error as NSError where error.code == 413 && pendingAtStart.count > 1 {
+        batchLimit = max(1, pendingAtStart.count / 2)
+      }
     }
     throw NSError(
       domain: "tab1", code: 409,
@@ -398,15 +466,17 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     library.baseline = library.settings
     library.revision = response.revision
     library.reading = response.reading
+    library.beginFeedVisit(latest: true)
     library.pending = [:]
     for (key, state) in response.reading where state.saved && library.entries[key] == nil {
-      if let story = state.story { library.entries[key] = Entry(story: story) }
+      if let story = state.story { library.collect(story) }
     }
     persist()
     if busy { refreshAfterCurrent = true } else { requestHomeRefresh() }
   }
 
   private func switchLibrary(to folder: String) async {
+    StoryPush.shared.accountChanged()
     switchingLibrary = true
     lastExitCheck = nil
     defer { switchingLibrary = false }
@@ -422,6 +492,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     UserDefaults.standard.set(folder, forKey: "tab1.libraryFolder")
     let (cached, _, bytes) = await disk.open(root, reset:false)
     library = LiveLibrary(cached)
+    savedFirstAttemptArticles = 0
     downloadActivity = [:]
     transfersByStory = [:]
     usedBytes = bytes
@@ -478,8 +549,9 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
         library.settings = result.settings ?? .object([:])
         library.baseline = library.settings
         library.reading = result.reading
+        library.beginFeedVisit(latest: true)
         for (id, value) in result.reading where value.saved && library.entries[id] == nil {
-          if let story = value.story { library.entries[id] = Entry(story: story) }
+          if let story = value.story { library.collect(story) }
         }
         library.pending = [:]
         library.revision = result.revision
@@ -492,8 +564,33 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     } catch { lastError = error.localizedDescription }
   }
   func setReading(_ story: Story, read: Bool? = nil, saved: Bool? = nil) {
+    updateReading(story, read: read, saved: saved)
+    persist()
+    Task { try? await sync() }
+  }
+  private var scrollSync: Task<Void, Never>?
+  func markScrolledRead(_ ids: Set<String>) {
+    guard recordRead(ids) else { return }
+    scrollSync?.cancel()
+    scrollSync = Task {
+      do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+      if online { try? await sync() }
+    }
+  }
+  func markRead(_ ids: Set<String>) {
+    if recordRead(ids), online { Task { try? await sync() } }
+  }
+  private func recordRead(_ ids: Set<String>) -> Bool {
+    let stories = ids.compactMap { library.reading[$0]?.read == true ? nil : library.entries[$0]?.story }
+    guard !stories.isEmpty else { return false }
+    for story in stories { updateReading(story, read: true, saved: nil) }
+    persist()
+    return true
+  }
+  private func updateReading(_ story: Story, read: Bool?, saved: Bool?) {
     var value = library.reading[story.link] ?? Reading()
     if let read { value.read = read }
+    if read == false { library.showUnread(story.id) }
     if let saved { value.saved = saved }
     var metadata = story
     metadata.excerpt = nil
@@ -505,8 +602,6 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     if let saved { patch.saved = saved }
     patch.story = metadata
     library.pending[story.link] = patch
-    persist()
-    Task { try? await sync() }
   }
   func refreshAccountPreferences() async {
     guard accountActive, online, !busy else { return }
@@ -518,6 +613,10 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
         await refresh(download: automatic)
       }
     } catch { /* The cached homepage stays usable until the next refresh. */ }
+  }
+  func pushPreferencesChanged() {
+    guard server == "https://tab1.net", !switchingLibrary else { return }
+    if busy { refreshAfterCurrent = true } else { requestHomeRefresh() }
   }
   func requestHomeRefresh() {
     // SwiftUI owns the gesture lifetime. Keep the library update alive across navigation.
@@ -532,11 +631,13 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     async let cached: Void = queueCachedArticles()
     let updated = await refreshBackgroundCards(leavingApp: leavingApp)
     await cached
+    if !Task.isCancelled { await BackgroundDownloads.shared.logQueue("background check ended") }
     return updated && !Task.isCancelled
   }
 
   private func refreshBackgroundCards(leavingApp: Bool) async -> Bool {
     if let currentRefresh {
+      DownloadDiagnostics.shared.event("Background check joined an existing refresh")
       if leavingApp { lastExitCheck = .now }
       let needsDownloads = automatic && !currentRefreshDownloads
       let epoch = connectionEpoch
@@ -545,12 +646,21 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
       if needsDownloads && automatic { await downloadEntries() }
       return !Task.isCancelled
     }
-    guard automatic || needsRefreshRetry else { return true }
-    guard online else { return false }
+    guard automatic || needsRefreshRetry else {
+      DownloadDiagnostics.shared.event("Skipped card check: automatic downloads off, no refresh retry")
+      return true
+    }
+    guard online else {
+      DownloadDiagnostics.shared.event("Skipped card check: offline")
+      return false
+    }
     if leavingApp {
       // Rapid app switches should share a check, even when no new stories arrive.
       if !needsRefreshRetry, let lastExitCheck,
-         Date.now.timeIntervalSince(lastExitCheck) < BackgroundRefreshSchedule.interval { return true }
+         Date.now.timeIntervalSince(lastExitCheck) < BackgroundRefreshSchedule.interval {
+        DownloadDiagnostics.shared.event("Skipped repeat exit check within 15 minutes")
+        return true
+      }
       lastExitCheck = .now
     }
     return await refresh(download: automatic, refreshWeather: false)
@@ -580,6 +690,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     }
     var stage = "sync"
     let started = ContinuousClock.now
+    DownloadDiagnostics.shared.event("Refresh started: download=\(download), online=\(online), last cards=\(library.updated?.ISO8601Format() ?? "never"), pending articles=\(pendingStoryDownloads)")
     homeLog.notice("Refresh started cachedCards=\(self.library.cards.count) online=\(self.online)")
     do {
       try Task.checkCancellation()
@@ -587,15 +698,22 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
       try await sync()
       try Task.checkCancellation()
       stage = "cards"
+      DownloadDiagnostics.shared.event("Sync finished; requesting cards")
       message = "Updating stories…"
       let requestedSettings = library.settings
-      let snapshot: Snapshot = try await request(
-        "cards",
-        body: .object([
-          "settings": library.settings, "appTopics": .array(appTopics.sorted().map { .string($0) }),
-        ]))
+      var cardRequest: [String: JSONValue] = [
+        "settings": requestedSettings, "appTopics": .array(appTopics.sorted().map { .string($0) })]
+      if server == "https://tab1.net" { cardRequest["storyPush"] = StoryPush.shared.configuration(enabled: automatic) }
+      let snapshot: Snapshot = try await request("cards", body: .object(cardRequest))
+      if cardRequest["storyPush"] != nil {
+        DownloadDiagnostics.shared.event("Story push registration confirmed=\(snapshot.pushRegistered == true), automatic=\(automatic)")
+        if let last = snapshot.lastStoryPush {
+          DownloadDiagnostics.shared.event("Server APNs acceptance batch=\(last.batch), accepted=\(last.accepted)")
+        }
+      }
       try Task.checkCancellation()
       homeLog.notice("Cards received cards=\(snapshot.cards.count) stories=\(snapshot.cards.reduce(0) { $0 + $1.items.count }) elapsed=\(String(describing: started.duration(to: .now)), privacy: .public)")
+      var newlyDiscovered = 0
       var cards = snapshot.cards
       for index in cards.indices {
         for item in cards[index].items.indices {
@@ -605,11 +723,15 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
             story.summary = existing?.story.summary
           }
           cards[index].items[item] = story
-          if existing == nil {
-            library.entries[story.id] = Entry(story: story)
-          } else {
-            library.entries[story.id]?.story = story
-          }
+          if existing == nil { newlyDiscovered += 1 }
+          library.collect(story, group: FeedGroup(card: cards[index]))
+        }
+      }
+      DownloadDiagnostics.shared.event("Cards received: \(cards.count) cards, \(newlyDiscovered) newly discovered stories")
+      if let pending = snapshot.pendingStories, automatic {
+        StoryPush.shared.pendingLinks = Set(pending.map(\.id))
+        for story in pending where library.entries[story.id] == nil {
+          library.collect(story)
         }
       }
       library.cards = cards
@@ -631,12 +753,17 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
       persist()
       message = "Cards updated"
       async let weather: Void = refreshWeather ? LocalWeather.shared.refresh() : ()
-      if download { await downloadEntries() }
+      if download {
+        stage = "queueing files"
+        await downloadEntries()
+        DownloadDiagnostics.shared.event("Card download pass ended: pending articles=\(pendingStoryDownloads), cancelled=\(Task.isCancelled)")
+      }
       await weather
       try Task.checkCancellation()
       return true
     } catch {
       let failure = error as NSError
+      DownloadDiagnostics.shared.event("Refresh interrupted at \(stage): \(failure.domain) \(failure.code)")
       if error is CancellationError || (failure.domain == NSURLErrorDomain && failure.code == NSURLErrorCancelled) {
         if automatic && !switchingLibrary { needsRefreshRetry = true }
         message = library.cards.isEmpty ? "Pull to refresh" : "Showing your saved library"
@@ -666,13 +793,17 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     let upgrades = library.entries.values.filter { $0.article?.needsImageUpgrade == true }.map(\.id)
     let cutoff = Date.now.addingTimeInterval(-7 * 86400)
     let repairs = library.entries.values.filter { ($0.error != nil || $0.article == nil) && $0.collected > cutoff }.map(\.id)
-    return Array(NSOrderedSet(array: current + saved + upgrades + repairs)) as? [String] ?? current
+    return Array(NSOrderedSet(array: current + saved + Array(StoryPush.shared.pendingLinks) + upgrades + repairs)) as? [String] ?? current
   }
 
-  var pendingStoryDownloads: Int {
+  var pendingStoryDownloads: Int { pendingArticles(includeRetries: true) }
+  var firstAttemptStoryDownloads: Int { pendingArticles(includeRetries: false) }
+  var pendingImages: Int { downloadActivity.values.count { $0.kind == "image" } }
+
+  private func pendingArticles(includeRetries: Bool) -> Int {
     downloadActivity.values.count { activity in
-      guard activity.isArticle, let entry = library.entries[activity.story] else { return false }
-      return entry.article == nil
+      guard activity.kind == "article", includeRetries || !activity.retrying, let entry = library.entries[activity.story] else { return false }
+      return entry.article == nil && (includeRetries || entry.failures?["article"] == nil)
     }
   }
 
@@ -839,6 +970,10 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
       guard var entry = library.entries[descriptor.story] else { return }
       switch payload {
       case .article(let article):
+        if entry.article == nil, entry.failures?["article"] == nil, (descriptor.retryAttempt ?? 0) == 0 {
+          savedFirstAttemptArticles += 1
+        }
+        if entry.article == nil { StoryPush.shared.installed(entry.id) }
         entry.article = article
         library.lastArticleDownload = .now
         uncheckedPayloadBytes += bytes
@@ -886,7 +1021,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
       guard library.reading[entry.id]?.saved != true,
             !library.cards.contains(where: { $0.items.contains(where: { $0.id == entry.id }) })
       else { continue }
-      library.entries.removeValue(forKey: entry.id)
+      library.removeEntry(entry.id)
       let retained = Set(library.entries.values.flatMap { $0.assets.values })
       let files = Set(entry.assets.values).subtracting(retained).union([fileID(entry.id) + ".html"])
       await disk.remove(files, root: root)
@@ -904,7 +1039,7 @@ let homeLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "tab1", category
     var files = Set<String>()
     for (id, entry) in library.entries
     where !current.contains(id) && library.reading[id]?.saved != true && entry.collected < cutoff {
-      library.entries.removeValue(forKey: id)
+      library.removeEntry(id)
       files.insert(fileID(id) + ".html")
     }
     let retained = Set(library.entries.values.flatMap { $0.assets.values })
@@ -958,23 +1093,33 @@ enum Keychain {
   private static let processingID = "tab1.dev.skynolimit.processing"
   private static var scheduling: Task<Void, Never>?
 
+  static func logForegroundRequests() async {
+    let pending = await BGTaskScheduler.shared.pendingTaskRequests()
+    let requests = pending.map { "\($0.identifier) eligible \($0.earliestBeginDate?.ISO8601Format() ?? "immediately")" }.sorted()
+    DownloadDiagnostics.shared.event("Scheduler requests observed on activation: \(requests.isEmpty ? "none" : requests.joined(separator: ", "))")
+  }
+
   static func register() {
     for id in [refreshID, processingID] {
-      if !BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main, launchHandler: { task in
+      let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: .main, launchHandler: { task in
         MainActor.assumeIsolated { run(task) }
-      }) {
+      })
+      DownloadDiagnostics.shared.event("Register \(id): \(registered)")
+      if !registered {
         homeLog.error("Could not register background task \(id, privacy: .public)")
       }
     }
   }
   private static func run(_ task: BGTask) {
     let store = LibraryStore.shared
+    DownloadDiagnostics.shared.conditions("iOS granted \(task.identifier), online=\(store.online), automatic=\(store.automatic)")
     // Replace the consumed request even if iOS expires this grant during sync.
     let next = schedule(online: store.online, replacing: task.identifier)
     var completed = false
     func finish(_ success: Bool) {
       guard !completed else { return }
       completed = true
+      DownloadDiagnostics.shared.event("Completed \(task.identifier): success=\(success)")
       task.setTaskCompleted(success: success)
     }
     let work = Task {
@@ -985,7 +1130,10 @@ enum Keychain {
     }
     task.expirationHandler = { @Sendable in
       work.cancel()
-      Task { @MainActor in finish(false) }
+      Task { @MainActor in
+        DownloadDiagnostics.shared.event("Grant expired: \(task.identifier)")
+        finish(false)
+      }
     }
   }
   @discardableResult static func schedule(online: Bool, replacing consumed: String? = nil) -> Task<Void, Never> {
@@ -998,6 +1146,7 @@ enum Keychain {
       await previous?.value
       let scheduler = BGTaskScheduler.shared
       guard let plan else {
+        DownloadDiagnostics.shared.event("Cancelled pending scheduler requests: automatic downloads and refresh retry off")
         for id in [refreshID, processingID] { scheduler.cancel(taskRequestWithIdentifier: id) }
         return
       }
@@ -1011,12 +1160,16 @@ enum Keychain {
         if request.identifier != consumed,
            let existing = pending.first(where: { $0.identifier == request.identifier }),
            !BackgroundRefreshSchedule.shouldAdvance(pending: existing.earliestBeginDate, to: request.earliestBeginDate) {
+          DownloadDiagnostics.shared.event("Kept \(existing.identifier), eligible \(existing.earliestBeginDate?.ISO8601Format() ?? "immediately")")
           continue
         }
         do {
           if #available(iOS 27, *) { try await scheduler.submitTaskRequest(request) }
           else { try scheduler.submit(request) }
+          DownloadDiagnostics.shared.event("Submitted \(request.identifier), eligible \(request.earliestBeginDate?.ISO8601Format() ?? "immediately")")
         } catch {
+          let failure = error as NSError
+          DownloadDiagnostics.shared.event("Scheduler rejected \(request.identifier): \(failure.domain) \(failure.code)")
           homeLog.error("Could not schedule \(request.identifier, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
       }

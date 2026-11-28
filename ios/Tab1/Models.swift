@@ -114,7 +114,22 @@ struct ReadingPatch: Codable {
   var read: Bool?
   var saved: Bool?
 }
+struct FeedGroup: Codable, Hashable, Identifiable {
+  let id: String
+  let title: String
+
+  init(card: Card) {
+    id = card.id
+    title = card.title
+  }
+  init(source: Story) {
+    title = source.source ?? URL(string: source.link)?.host() ?? "Other stories"
+    id = "source:" + title.lowercased()
+  }
+}
+
 struct Entry: Codable, Identifiable {
+  var feedGroup: FeedGroup?
   var story: Story
   var collected: Date = .now
   var article: Article?
@@ -157,6 +172,10 @@ struct Library: Codable {
   var lastArticleDownload: Date?
 }
 struct Snapshot: Decodable {
+  struct PushAcceptance: Decodable { let batch: String; let accepted: String }
+  var pendingStories: [Story]?
+  var pushRegistered: Bool?
+  var lastStoryPush: PushAcceptance?
   var cards: [Card]
   var settings: JSONValue
   var catalogue: JSONValue

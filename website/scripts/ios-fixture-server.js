@@ -30,7 +30,8 @@ let pendingSummaryReady = false;
 let downloadFailures = 0, failureStatus = 503, articleAttempts = 0;
 let revision = 0,
   reading = {};
-createServer(async (req, res) => {
+const readingTests = new Map();
+async function handleRequest(req, res) {
   let body = "";
   for await (const chunk of req) body += chunk;
   const value = body ? JSON.parse(body) : {};
@@ -91,6 +92,7 @@ createServer(async (req, res) => {
   }
   if (route === "/slow-refresh/api/companion/cards") await new Promise(resolve => setTimeout(resolve, 9000));
   if (route === "/fixture-photo.png") {
+    if (req.url.endsWith("?slow")) await new Promise(resolve => setTimeout(resolve, 15000));
     res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "no-store" });
     res.end(readFileSync(new URL("../public/apple-touch-icon.png", import.meta.url)));
     return;
@@ -117,7 +119,27 @@ createServer(async (req, res) => {
   }
   if (route.startsWith("/pending-summary/") && route.endsWith("/cards")) pendingSummaryReady = false;
   let response;
-  if (route.endsWith("/create"))
+  const readingTest = route.match(/^\/reading-test\/([^/]+)\//)?.[1];
+  if (readingTest && (route.endsWith("/create") || route.endsWith("/sync"))) {
+    if (route.includes("/tiny-batches/") && Object.keys(value.reading ?? {}).length > 1) {
+      res.writeHead(413).end();
+      return;
+    }
+    const state = readingTests.get(readingTest) ?? {
+      settings: { ...settings, tabs: { home: { cards: [{ id: "fixture", limit: 1 }] } } },
+      reading: {}, revision: 0,
+    };
+    if (route.includes("/hn-coverage/") && !readingTests.has(readingTest)) {
+      state.settings.tabs.home.cards = [{ id: "tech", limit: 1 }, { id: "hacker-news", limit: 8 }];
+      for (let i = 1; i <= 4; i++) state.reading["https://example.org/hn/" + i] = { read: true };
+    }
+    for (const [id, patch] of Object.entries(value.reading ?? {})) {
+      state.reading[id] = { ...state.reading[id], ...patch };
+    }
+    if (req.method === "POST") state.revision++;
+    readingTests.set(readingTest, state);
+    response = { ...state, token: "fixture-token" };
+  } else if (route.endsWith("/create"))
     response = { token: "fixture-token", revision, settings, reading };
   else if (route.endsWith("/sync")) {
     if (req.method === "POST") {
@@ -187,6 +209,39 @@ createServer(async (req, res) => {
     res.end();
     return;
   }
+  if (route.startsWith("/dated-stories/") && route.endsWith("/cards")) {
+    const items = response.cards[0].items;
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    Object.assign(items[9], {
+      date: yesterday.toISOString(), source: "Hacker News", image: photoURL, summary,
+      comments: 1, commentsUrl: "https://news.ycombinator.com/item?id=1",
+    });
+    items.push({ title: "Earlier report", link: "https://example.org/earlier", date: "2025-11-25T12:00:00Z" });
+    items.push(items[0]);
+  }
+  if (readingTest && route.endsWith("/cards")) {
+    response.settings = readingTests.get(readingTest).settings;
+    const stories = response.cards[0].items;
+    for (let i = 10; i < 55; i++) stories.push({
+      title: `Journey story ${i}`, link: `https://example.org/journey/${i}`, source: "Test newspaper",
+    });
+    stories.forEach((story, i) => { story.date = new Date(Date.now() - i * 60000).toISOString(); });
+  }
+  if (route.includes("/hn-coverage/") && route.endsWith("/cards")) {
+    const items = Array.from({ length: 24 }, (_, i) => ({
+      title: "HN headline " + (i + 1), link: "https://example.org/hn/" + (i + 1),
+      date: new Date(Date.now() - i * 1000).toISOString(), source: "Hacker News",
+    }));
+    response.cards = [
+      { id: "tech", title: "Technology", items: [
+        { title: "Tech latest", link: "https://example.org/tech/latest" },
+        { title: "Older technology report", link: "https://example.org/tech/old" },
+      ] },
+      { id: "hacker-news", title: "Hacker News", items },
+    ];
+  }
+  if (route.startsWith("/slow-image/") && route.endsWith("/article")) response.images = [photoURL + "?slow"];
   if (route.startsWith("/busy-library/")) {
     if (route.endsWith("/cards")) {
       response.cards = Array.from({ length: 10 }, (_, card) => ({
@@ -209,4 +264,7 @@ createServer(async (req, res) => {
   }
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify(response));
-}).listen(port, "127.0.0.1", () => console.log("iOS fixtures on " + port));
+}
+for (const host of ["127.0.0.1", "::1"]) {
+  createServer(handleRequest).listen(port, host, () => console.log("iOS fixtures on " + host + " port " + port));
+}

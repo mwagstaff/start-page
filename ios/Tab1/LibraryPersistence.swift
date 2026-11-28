@@ -5,12 +5,12 @@ import Foundation
 final class LibraryPersistence: @unchecked Sendable {
   private let queue = DispatchQueue(label: "tab1.library-writes", qos: .utility)
   private let lock = NSLock()
-  private var pending: (Library, URL, @Sendable (String) -> Void)?
+  private var pending: (Library, URL, @Sendable (String) -> Void, (@Sendable (Date) -> Void)?)?
   private var running = false
 
-  func save(_ library: Library, to file: URL, onError: @escaping @Sendable (String) -> Void) {
+  func save(_ library: Library, to file: URL, onSaved: (@Sendable (Date) -> Void)? = nil, onError: @escaping @Sendable (String) -> Void) {
     lock.lock()
-    pending = (library, file, onError)
+    pending = (library, file, onError, onSaved)
     let start = !running
     running = true
     lock.unlock()
@@ -26,7 +26,10 @@ final class LibraryPersistence: @unchecked Sendable {
       }
       pending = nil
       lock.unlock()
-      do { try JSONEncoder().encode(next.0).write(to: next.1, options: .atomic) } catch {
+      do {
+        try JSONEncoder().encode(next.0).write(to: next.1, options: .atomic)
+        next.3?(.now)
+      } catch {
         next.2(error.localizedDescription)
       }
     }

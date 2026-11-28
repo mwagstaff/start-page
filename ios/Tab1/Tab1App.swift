@@ -3,7 +3,6 @@ import AuthenticationServices
 import AVFoundation
 import SwiftUI
 import WebKit
-import ImageIO
 
 @main struct Tab1App: App {
   @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -30,6 +29,12 @@ import ImageIO
           }
         }
       }.onChange(of: phase) { _, value in
+        if value == .active {
+          DownloadDiagnostics.shared.activated()
+          StoryPush.shared.activated()
+          Task { await BackgroundRefresh.logForegroundRequests() }
+          Task { await BackgroundDownloads.shared.logQueue("activation") }
+        }
         if value == .active && store.online
           && (store.needsRefreshRetry || Date.now.timeIntervalSince(store.library.updated ?? .distantPast) > 900)
         {
@@ -46,398 +51,35 @@ import ImageIO
 }
 struct RootView: View {
   @Environment(LibraryStore.self) private var store
-  var body: some View {
-    TabView {
-      Tab("Home", systemImage: "rectangle.grid.1x2") { HomeView() }
-      Tab("Saved", systemImage: "bookmark") { SavedView() }
-      Tab("Downloads", systemImage: "arrow.down.circle") { DownloadsView() }
-      Tab("Settings", systemImage: "slider.horizontal.3") { SettingsView() }
-    }.tint(.indigo)
-  }
-}
-struct HomeView: View {
-  @Environment(LibraryStore.self) private var store
-  @Environment(\.openURL) private var openURL
-  @State private var search = ""
-  @State private var weather = false
-  @State private var showingSearch = false
-  @State private var showAccountSettings = false
-  @State private var showingSignIn = false
-  @State private var accountInitial = ""
-  @FocusState private var searchFocused: Bool
-  @State private var expandedCards: Set<String> = []
-  var body: some View {
-    NavigationStack {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 12) {
-          HomeStatus()
-          if !search.isEmpty {
-            Button("Search the web", systemImage: "magnifyingglass") {
-              if let url = webSearchURL(store.library.settings["search"], query: search) {
-                openURL(url)
-              }
-            }.disabled(!store.online)
-          }
-          if let error = store.lastError { Text(error).font(.footnote).foregroundStyle(.orange) }
-          if store.library.cards.isEmpty {
-            ContentUnavailableView(
-              "Your day, in one place", systemImage: "newspaper",
-              description: Text("Pull to refresh, or connect your website settings in Settings."))
-          }
-          LazyVStack(
-            alignment: .leading,
-            spacing: store.library.settings["density"].string == "compact" ? 12 : 22
-          ) {
-            ForEach(store.library.cards) { card in
-              let savedLimit = store.library.settings["tabs"]["home"]["cards"].array
-                .first { $0["id"].string == card.id }?["limit"].number
-              let visibleCount = savedLimit.flatMap { Int(exactly: $0) }.flatMap { $0 > 0 ? $0 : nil } ?? 8
-              VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                  Text(card.title).font(.title3.bold())
-                  if card.id.hasPrefix("app-") {
-                    Text("App only").font(.caption).foregroundStyle(.secondary)
-                  }
-                  Spacer()
-                  Text("\(card.items.count)").font(.caption).foregroundStyle(.secondary)
-                }
-                ForEach(
-                  Array(
-                    card.items.filter {
-                      search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)
-                    }.prefix(
-                      !search.isEmpty || expandedCards.contains(card.id) ? card.items.count : visibleCount))
-                ) { story in
-                  NavigationLink(value: story) { StoryRow(story: story) }.buttonStyle(.plain)
-                    .contextMenu {
-                      Button(
-                        store.library.reading[story.id]?.read == true ? "Mark unread" : "Mark read"
-                      ) {
-                        store.setReading(story, read: store.library.reading[story.id]?.read != true)
-                      }
-                      Button(store.library.reading[story.id]?.saved == true ? "Unsave" : "Save") {
-                        store.setReading(story, saved: store.library.reading[story.id]?.saved != true)
-                      }
-                      Button("Download for offline") { Task { await store.download(story.id) } }
-                    }
-                  StoryActions(story: story)
-                  if story.id != card.items.last?.id { Divider() }
-                }
-                if search.isEmpty && card.items.count > visibleCount {
-                  Button {
-                    if expandedCards.contains(card.id) {
-                      expandedCards.remove(card.id)
-                    } else {
-                      expandedCards.insert(card.id)
-                    }
-                  } label: {
-                    Label(
-                      expandedCards.contains(card.id) ? "Fewer stories" : "More stories",
-                      systemImage: expandedCards.contains(card.id) ? "chevron.up" : "chevron.down"
-                    )
-                    .frame(maxWidth: .infinity).padding(.vertical, 8)
-                  }
-                  .accessibilityIdentifier("expand-" + card.id)
-                  .accessibilityValue(expandedCards.contains(card.id) ? "Expanded" : "Collapsed")
-                }
-                if let sources = card.failedSources, !sources.isEmpty {
-                  let names = sources.formatted(.list(type: .and))
-                  let hasOlderStories = card.items.contains { sources.contains($0.source ?? "") }
-                  Text("Couldn’t update \(names)." + (hasOlderStories ? " Showing previously fetched stories." : "")).font(.caption).foregroundStyle(
-                    .orange)
-                }
-              }.padding(store.library.settings["density"].string == "compact" ? 10 : 16).background(
-                .regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-              .onAppear {
-                if card.id == store.library.cards.first?.id {
-                  homeLog.notice("First Home card appeared stories=\(card.items.count)")
-                }
-              }
-            }
-          }
-        }.padding()
-          .onAppear {
-            homeLog.notice("Home content appeared cards=\(store.library.cards.count) cachedBackdrop=\(store.library.backdropFile != nil)")
-          }
-      }
-      .scrollBounceBehavior(.always, axes: .vertical)
-      .refreshable { store.requestHomeRefresh() }
-      .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
-        homeLog.notice("Home viewport width=\(Int(size.width)) height=\(Int(size.height)) cards=\(store.library.cards.count)")
-      }
-      .background { HomeBackdrop().allowsHitTesting(false) }
-        .navigationTitle("tab1")
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top, spacing: 0) {
-          if showingSearch {
-            HStack(spacing: 12) {
-              HStack {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                  .accessibilityHidden(true)
-                TextField("Search downloaded headlines", text: $search)
-                  .focused($searchFocused)
-                  .submitLabel(.search)
-                  .accessibilityIdentifier("home-search-field")
-                if !search.isEmpty {
-                  Button("Clear search", systemImage: "xmark.circle.fill") { search = "" }
-                    .labelStyle(.iconOnly)
-                }
-              }
-              .padding(12)
-              .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-              Button("Cancel") {
-                searchFocused = false
-                search = ""
-                showingSearch = false
-              }
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .task { searchFocused = true }
-          }
-        }
-        .toolbar {
-          ToolbarItemGroup(placement: .topBarTrailing) {
-            Button("Search", systemImage: "magnifyingglass") {
-              showingSearch = true
-              searchFocused = true
-            }
-            .accessibilityIdentifier("home-search-button")
-            if store.library.settings["profile"]["weather"] != .bool(false) {
-              Button("Weather", systemImage: "cloud.sun") { weather = true }
-            }
-          }
-          ToolbarItem(placement: .topBarTrailing) {
-            if store.accountActive {
-              Menu {
-                Button("Account settings", systemImage: "person.crop.circle") { showAccountSettings = true }
-                Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") {
-                  Task {
-                    do { try await store.signOut() } catch { store.lastError = error.localizedDescription }
-                  }
-                }
-              } label: {
-                Group {
-                  if store.signInProvider == "apple" && accountInitial.isEmpty { Image(systemName: "apple.logo").font(.headline) }
-                  else if store.signInProvider == "google" { Text(accountInitial.isEmpty ? "G" : accountInitial).font(.headline) }
-                  else if accountInitial.isEmpty { Image(systemName: "checkmark").font(.headline.bold()) }
-                  else { Text(accountInitial).font(.headline) }
-                }
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(store.signInProvider == "apple" ? Color.black : store.signInProvider == "google" ? Color.brown : Color.indigo, in: Circle())
-                .overlay { Circle().strokeBorder(store.signInProvider == "google" ? Color.blue : Color.white.opacity(0.8), lineWidth: 1.5) }
-              }
-              .accessibilityLabel("Account menu")
-              .accessibilityValue(store.signInProvider.map { "Signed in with " + $0.capitalized } ?? "Signed in")
-              .id("signed-in-profile")
-            } else {
-              Button("Sign in or create an account", systemImage: "person.crop.circle") {
-                showingSignIn = true
-              }
-              .popover(isPresented: $showingSignIn) { AccountView(compact: true) }
-            }
-          }
-        }
-        .task(id: store.accountActive) {
-          accountInitial = ""
-          guard store.accountActive else { return }
-          showingSignIn = false
-          let status: JSONValue? = try? await store.request("account/status")
-          if !Task.isCancelled, let status, store.accountActive {
-            accountInitial = status["initial"].string
-            store.setSignInProvider(status["signInProvider"].string)
-          }
-        }
-        .navigationDestination(isPresented: $showAccountSettings) { AccountView() }
-        .sheet(isPresented: $weather) { ForecastScreen() }
-        .navigationDestination(for: Story.self) { story in ReaderView(story: story) }
-    }
-  }
-}
-private struct HomeStatus: View {
-  @Environment(LibraryStore.self) private var store
-  var body: some View {
-    if store.showOfflineBanner {
-      Label("Offline mode", systemImage: "wifi.slash").font(.caption).foregroundStyle(.secondary)
-    } else {
-      if store.message == "Cards updated" || !store.showsDownloadProgress {
-        Label {
-          CardRefreshMessage()
-        } icon: {
-          Image(systemName: store.needsRefreshRetry ? "arrow.clockwise" : "checkmark.circle")
-        }.font(.caption).foregroundStyle(.secondary)
-      }
-      if store.showsDownloadProgress { DownloadProgressView(compact: true) }
-    }
-  }
-}
-
-private struct CardRefreshMessage: View {
-  @Environment(LibraryStore.self) private var store
-
-  var body: some View {
-    if store.message == "Cards updated" {
-      let pending = store.pendingStoryDownloads
-      let counts = "Cards updated · \(store.downloadedStoryCount) downloaded"
-        + (pending > 0 ? " · \(pending) pending" : "")
-      TimelineView(.everyMinute) { clock in
-        if let last = store.library.lastArticleDownload {
-          let age = clock.date.timeIntervalSince(last) < 60
-            ? "just now" : last.formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated))
-          Text("\(counts) · last \(age)")
-        } else {
-          Text(counts)
-        }
-      }
-      .accessibilityIdentifier("cards-updated")
-    } else {
-      Text(store.message)
-    }
-  }
-}
-
-private actor StoryThumbnails {
-  static let shared = StoryThumbnails()
-  private let cache = NSCache<NSURL, UIImage>()
-  init() { cache.totalCostLimit = 16 * 1024 * 1024 }
-
-  func image(at url: URL) -> UIImage? {
-    guard !Task.isCancelled else { return nil }
-    if let image = cache.object(forKey: url as NSURL) { return image }
-    guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
-          let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: 216,
-          ] as CFDictionary) else { return nil }
-    let image = UIImage(cgImage: thumbnail)
-    cache.setObject(image, forKey: url as NSURL, cost: thumbnail.bytesPerRow * thumbnail.height)
-    return image
-  }
-}
-
-private struct StoryThumbnail: View {
-  let url: URL
-  @State private var image: UIImage?
-  var body: some View {
-    Color.clear.overlay {
-      if let image { Image(uiImage: image).resizable().scaledToFill() }
-    }.frame(width: 72, height: 56).clipShape(RoundedRectangle(cornerRadius: 8))
-      .accessibilityHidden(true)
-      .task(id: url) {
-        let result = await StoryThumbnails.shared.image(at: url)
-        if !Task.isCancelled { image = result }
-      }
-  }
-}
-struct StoryRow: View {
-  @Environment(LibraryStore.self) private var store
-  @ScaledMetric(relativeTo: .caption) private var downloadIconSize = 12.0 * 1.15
-  let story: Story
-  var body: some View {
-    HStack(alignment: .top, spacing: 12) {
-      if store.library.settings["profile"]["pictures"] != .bool(false), let remote = story.image,
-        let file = store.library.entries[story.id]?.assets[remote]
-      {
-        StoryThumbnail(url: store.root.appending(path: file))
-      }
-      VStack(alignment: .leading, spacing: 5) {
-        Text(story.title).font(
-          .body.weight(store.library.reading[story.id]?.read == true ? .regular : .semibold)
-        ).foregroundStyle(store.library.reading[story.id]?.read == true ? .secondary : .primary)
-          .fixedSize(horizontal: false, vertical: true)
-        HStack {
-          Text(story.source ?? URL(string: story.link)?.host() ?? "")
-          if let date = story.published { StoryAge(date: date) }
-          Spacer()
-          if store.library.entries[story.id]?.article != nil {
-            Image(systemName: "arrow.down.circle.fill")
-              .font(.system(size: downloadIconSize))
-              .accessibilityLabel("Downloaded")
-          }
-          if store.library.reading[story.id]?.saved == true { Image(systemName: "bookmark.fill") }
-        }
-        .font(.caption).foregroundStyle(.secondary)
-      }
-    }.padding(.vertical, 7).contentShape(Rectangle())
-  }
-}
-private struct StoryAge: View {
-  let date: Date
-  var body: some View {
-    TimelineView(.everyMinute) { context in
-      Text(label(at: context.date))
-        .accessibilityIdentifier("story-age-" + label(at: context.date))
-        .accessibilityLabel(Text("Published \(date.formatted(date: .long, time: .shortened))"))
-    }
-  }
-  private func label(at now: Date) -> String {
-    let minutes = Int((now.timeIntervalSince(date) / 60).rounded())
-    if minutes < 1 { return "now" }
-    if minutes < 60 { return "\(minutes)m" }
-    let hours = Int((Double(minutes) / 60).rounded())
-    if hours < 24 { return "\(hours)h" }
-    let days = Int((Double(hours) / 24).rounded())
-    if days < 7 { return "\(days)d" }
-    return date.formatted(.dateTime.day().month(.abbreviated))
-  }
-}
-
-private struct PendingSummary: View {
-  @Environment(LibraryStore.self) private var store
   @Environment(\.scenePhase) private var phase
-  let story: Story
+  @State private var archiveGroup: String?
+  @State private var archiveVisit = UUID()
+  @State private var selected = FeedTab.latest
+  @State private var archivePath = NavigationPath()
   var body: some View {
-    let summary = store.library.entries[story.id]?.story.summary ?? story.summary
-    let pending = summary?.pending != false && store.online
-    Button {} label: {
-      HStack(spacing: 4) {
-        Text("Summary")
-        if pending { ProgressView().controlSize(.mini).accessibilityHidden(true) }
+    TabView(selection: $selected) {
+      Tab("Latest", systemImage: "rectangle.grid.1x2", value: FeedTab.latest) {
+        HomeView { group in
+          archiveGroup = group
+          archiveVisit = UUID()
+          archivePath = NavigationPath()
+          selected = .archive
+        }
       }
-    }
-    .disabled(true)
-    .accessibilityValue(pending ? "Preparing automatically" : "Unavailable")
-    .task(id: pending && phase == .active) {
-      guard pending && phase == .active else { return }
-      while !Task.isCancelled {
-        do { try await Task.sleep(for: .seconds(15)) } catch { return }
-        if let latest = try? await store.refreshSummary(story, background: true),
-          latest.isReady || !latest.pending { return }
+      Tab("All stories", systemImage: "newspaper", value: FeedTab.archive) {
+        AllStoriesView(path: $archivePath, firstGroup: archiveGroup).id(archiveVisit)
       }
-    }
+      Tab("Saved", systemImage: "bookmark", value: FeedTab.saved) { SavedView() }
+      Tab("Settings", systemImage: "slider.horizontal.3", value: FeedTab.settings) { SettingsView() }
+    }.tint(.indigo)
+      .onChange(of: selected) { _, tab in store.library.beginFeedVisit(latest: tab == .latest) }
+      .onChange(of: phase) { _, phase in
+        if phase == .background { store.library.beginFeedVisit(latest: selected == .latest) }
+      }
   }
 }
-private struct StoryActions: View {
-  @Environment(LibraryStore.self) private var store
-  let story: Story
-  var body: some View {
-    HStack {
-      if story.commentsUrl != nil { CommentsLink(story: story) }
-      if (store.library.entries[story.id]?.story.summary ?? story.summary)?.isReady == true {
-        NavigationLink { ReaderView(story: story, selection: .summary) } label: {
-          Label("Summary", systemImage: "text.alignleft").font(.caption)
-        }.buttonStyle(.borderless).accessibilityHint("Open summary for " + story.title)
-      } else { PendingSummary(story: story).font(.caption).buttonStyle(.borderless) }
-    }
-  }
-}
-private struct CommentsLink: View {
-  let story: Story
-  var body: some View {
-    NavigationLink {
-      ReaderView(story: story, selection: .comments)
-    } label: {
-      Label(story.comments.map { $0 == 1 ? "1 comment" : "\($0) comments" } ?? "Comments",
-            systemImage: "bubble.left")
-        .font(.caption)
-    }
-    .buttonStyle(.borderless)
-    .accessibilityHint(Text("Open discussion for \(story.title)"))
-  }
-}
+private enum FeedTab { case latest, archive, saved, settings }
+
 private struct SummaryReader: View {
   @Environment(LibraryStore.self) private var store
   @State private var summaryError: String?
@@ -482,7 +124,8 @@ private struct SummaryReader: View {
 struct ReaderView: View {
   @Environment(LibraryStore.self) private var store
   let story: Story
-  enum Section { case article, comments, summary }
+  enum Section: Hashable { case article, comments, summary }
+  @AppStorage("readWhenOpened") private var readWhenOpened = true
   @State var selection = Section.article
   var discussion: Bool { selection == .comments }
   var entry: Entry? { store.library.entries[story.id] }
@@ -575,7 +218,9 @@ struct ReaderView: View {
         if discussion && store.online && entry?.discussion == nil {
           await store.downloadComments(story.id)
         }
-      }.onAppear { store.setReading(story, read: true) }
+      }.onChange(of: selection, initial: true) { _, section in
+        if readWhenOpened && section != .comments { store.markRead([story.id]) }
+      }
       .task(id: story.id) {
         if store.online && store.automatic && (entry?.article == nil || entry?.article?.needsImageUpgrade == true) {
           await store.download(story.id, automaticRetry: true)
@@ -734,16 +379,17 @@ struct SavedView: View {
             "Keep something good", systemImage: "bookmark",
             description: Text("Save articles to keep them beyond seven days."))
         }
-      }.navigationTitle("Saved").navigationDestination(for: Story.self) { ReaderView(story: $0) }
+      }.navigationTitle("Saved").navigationDestination(for: ReaderRoute.self) { $0.reader }.navigationDestination(for: Story.self) { ReaderView(story: $0) }
     }
   }
 }
-private struct DownloadProgressView: View {
+struct DownloadProgressView: View {
   @Environment(LibraryStore.self) private var store
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   let compact: Bool
 
   private var title: String {
+    if compact { return "Downloading articles" }
     if store.hasActiveDownloads {
       return store.totalFiles == 0 ? "Preparing downloads…" : "Downloading"
     }
@@ -751,9 +397,11 @@ private struct DownloadProgressView: View {
   }
 
   var body: some View {
-    let total = store.totalFiles - store.queuedRetryCount
-    let processed = store.finishedFiles + store.failedFiles
-    let count = "\(store.finishedFiles) of \(total) downloaded"
+    let saved = compact ? store.savedFirstAttemptArticles : store.finishedFiles
+    let failed = compact ? 0 : store.failedFiles
+    let processed = saved + failed
+    let total = compact ? saved + store.firstAttemptStoryDownloads : store.totalFiles - store.queuedRetryCount
+    let count = "\(saved) of \(total) downloaded"
     VStack(alignment: .leading, spacing: compact ? 3 : 8) {
       ViewThatFits(in: .horizontal) {
         HStack {
@@ -780,21 +428,26 @@ private struct DownloadProgressView: View {
     .padding(.vertical, compact ? 0 : 6)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(title))
-    .accessibilityValue(Text(total == 0 ? "" : count + (store.failedFiles > 0 ? ", \(store.failedFiles) failed" : "")))
+    .accessibilityValue(Text(total == 0 ? "" : count + (failed > 0 ? ", \(failed) failed" : "")))
     .accessibilityIdentifier("download-progress")
   }
 }
 
-struct DownloadsView: View {
+struct DownloadDetails: View {
   @Environment(LibraryStore.self) private var store
   var body: some View {
-    NavigationStack {
-      List {
+    List {
         Section {
           if store.showsDownloadProgress || (!store.hasActiveDownloads && store.totalFiles > 0 && !store.busy) {
             DownloadProgressView(compact: false)
           } else {
             CardRefreshMessage()
+          }
+          let images = store.pendingImages
+          if images > 0 {
+            Text(images == 1 ? "1 image pending" : "\(images) images pending")
+              .font(.subheadline).foregroundStyle(.secondary)
+              .accessibilityIdentifier("pending-images")
           }
           let retries = store.queuedRetryCount
           if retries > 0 {
@@ -808,7 +461,7 @@ struct DownloadsView: View {
             store.busy ? "Downloading…" : "Download for offline", systemImage: "arrow.down.circle"
           ) { Task { await store.refresh() } }.disabled(store.busy || store.hasActiveDownloads)
           if !store.failedDownloadIDs.isEmpty {
-            DisclosureGroup("Download details") {
+            DisclosureGroup("Download failures") {
               if store.automatic {
                 Text("Recent and saved stories are checked again automatically.")
                   .font(.footnote).foregroundStyle(.secondary)
@@ -848,29 +501,32 @@ struct DownloadsView: View {
             "Current cards and seven days of stories. Saved favourites are retained. Background updates run when iOS permits."
           ).font(.footnote).foregroundStyle(.secondary)
         }
-        Section("Library") {
-          ForEach(store.library.entries.values.sorted { $0.collected > $1.collected }) { entry in
-            NavigationLink(value: entry.story) {
-              VStack(alignment: .leading) {
-                Text(entry.story.title).lineLimit(2)
-                HStack {
-                  Text(store.downloadStatus(entry.id) ?? entry.status)
-                    .foregroundStyle(entry.error == nil ? Color.secondary : Color.orange)
-                  Spacer()
-                  if let date = entry.story.published { StoryAge(date: date) }
-                }.font(.caption)
-              }
-            }
-          }
+        Section {
+          NavigationLink("Background download log") { DownloadLogView() }
         }
-      }.navigationTitle("Downloads").navigationDestination(for: Story.self) {
-        ReaderView(story: $0)
-      }
-    }
+    }.navigationTitle("Download details")
   }
 }
+private struct DownloadLogView: View {
+  @State private var report = ""
+  var body: some View {
+    ScrollView {
+      Text(verbatim: report)
+        .font(.system(.footnote, design: .monospaced))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled).padding()
+    }
+    .navigationTitle("Background download log")
+    .navigationBarTitleDisplayMode(.inline)
+    .onAppear { report = DownloadDiagnostics.shared.report() }
+    .toolbar { ShareLink(item: report) { Label("Share log", systemImage: "square.and.arrow.up") } }
+  }
+}
+
 struct SettingsView: View {
   @Environment(LibraryStore.self) private var store
+  @AppStorage("readWhenOpened") private var readWhenOpened = true
+  @AppStorage("readWhenPassed") private var readWhenPassed = true
   @State private var scan = false
   @State private var pairing = ""
   @State private var showAdvanced = false
@@ -920,6 +576,10 @@ struct SettingsView: View {
           }
         }
         Section { NavigationLink("Cards, display and custom feeds") { PreferencesView() } }
+        Section("Reading") {
+          Toggle("Mark as read when opened", isOn: $readWhenOpened)
+          Toggle("Scroll to mark as read", isOn: $readWhenPassed)
+        }
         Section("Offline reading") {
           Toggle("Automatic downloads", isOn: $store.automatic)
           Picker("Storage limit", selection: $store.budgetGB) {
